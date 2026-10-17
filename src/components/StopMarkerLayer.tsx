@@ -262,10 +262,15 @@ export default function StopMarkerLayer() {
     const canvas = renderer.canvas();
     let viewWidth = canvas?.clientWidth ?? 0;
     let viewHeight = canvas?.clientHeight ?? 0;
+    // The fixed nav covers the canvas's top edge, so a day badge clamped to the canvas alone tucked
+    // under it at short widths. Measured with the canvas, on the same resize, for the same reason.
+    const navBottom = () => Math.max(0, (document.querySelector("nav")?.getBoundingClientRect().bottom ?? 0) - (canvas?.getBoundingClientRect().top ?? 0));
+    let topEdge = navBottom();
     const resizeObserver = canvas
       ? new ResizeObserver(() => {
           viewWidth = canvas.clientWidth;
           viewHeight = canvas.clientHeight;
+          topEdge = navBottom();
         })
       : null;
     if (canvas) resizeObserver?.observe(canvas);
@@ -309,7 +314,7 @@ export default function StopMarkerLayer() {
             viewWidth - CLUSTER_EDGE_MARGIN_PX
           );
           projected.y = Math.min(
-            Math.max(projected.y, CLUSTER_EDGE_MARGIN_PX),
+            Math.max(projected.y, topEdge + CLUSTER_EDGE_MARGIN_PX),
             viewHeight - CLUSTER_EDGE_MARGIN_PX
           );
         }

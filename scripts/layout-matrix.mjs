@@ -2,7 +2,7 @@
 //
 //   npm run build && npm start -- -p 3200
 //   npm run verify-layout [-- --base http://localhost:3200] [--only landing,planner,writing,trip,secondary]
-//                         [--trip <id>] [--vp 390x844,...] [--out .layout-matrix] [--headed]
+//                         [--trip <id>] [--long-trip <id>] [--vp 390x844,...] [--out .layout-matrix] [--headed]
 //
 // Exits 1 and prints one `FAIL <surface> <WxH> <assertion>: <detail>` line per failing assertion
 // per checkpoint, 0 when every assertion holds. Screenshots land in --out.
@@ -20,6 +20,10 @@
 // sharing a context across surfaces would turn a layout check into a 404. The writing surface
 // stalls /api/itinerary on purpose, so it never spends a model call and writes no trip.
 //
+// --long-trip names a saved trip of many days (30 is what it was written against) for the one check
+// that needs it: the selected day's tab scrolled into view. Without it that check does not run; the
+// gate seeds nothing, and writes to no database.
+//
 // Playwright is a devDependency here but drives the system Chrome (`channel: "chrome"`), so no
 // browser download is needed. It needs network if Clerk dev keys are set (see CLAUDE.md).
 
@@ -27,10 +31,10 @@ import { chromium } from "playwright";
 import fs from "node:fs";
 
 const usage = (msg) => {
-  console.error(`layout-matrix: ${msg}\nusage: node scripts/layout-matrix.mjs [--base URL] [--only landing,planner,writing,trip,secondary] [--trip ID] [--vp 390x844,...] [--out DIR] [--headed]`);
+  console.error(`layout-matrix: ${msg}\nusage: node scripts/layout-matrix.mjs [--base URL] [--only landing,planner,writing,trip,secondary] [--trip ID] [--long-trip ID] [--vp 390x844,...] [--out DIR] [--headed]`);
   process.exit(2);
 };
-const FLAGS = ["base", "only", "trip", "vp", "out"];
+const FLAGS = ["base", "only", "trip", "long-trip", "vp", "out"];
 process.argv.slice(2).forEach((a) => { if (a.startsWith("--") && a !== "--headed" && !FLAGS.includes(a.slice(2))) usage(`unknown flag ${a}`); });
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -42,6 +46,7 @@ const arg = (name, fallback) => {
 const BASE = arg("base", "http://localhost:3200").replace(/\/$/, "");
 const OUT = arg("out", ".layout-matrix");
 const TRIP = arg("trip", "095b4bb9-4fa1-4c6a-8959-81230e3996fd");
+const LONG_TRIP = arg("long-trip", null);
 const ONLY = arg("only", "")?.split(",");
 const VPS = arg("vp", "")?.split(","); // e.g. --vp 390x844,375x667; "" when absent
 const CASE_MS = 150000; // one checkpoint of one surface, launch to close
@@ -270,13 +275,14 @@ async function checkWriting(page, w) {
   return fails;
 }
 
-async function checkTrip(page, w, h, shot) {
+// Where the camera put the day's stops, against the map left free by `occluders`. `when` names the
+// moment in the failure ("" for the first load).
+async function checkMarkers(page, occluders, when = "") {
   const fails = [];
-  const m = await page.evaluate(() => {
-    const free = window.freeMapRect(".trip-board");
-    // The per-day badge is left out: StopMarkerLayer clamps it to the canvas edge (CLUSTER_EDGE_MARGIN),
-    // so it sits under the nav whatever the camera does. That is a defect for Task 3 (the clamp should
-    // respect the nav), not an F1 framing failure.
+  const m = await page.evaluate((occluders) => {
+    const free = window.freeMapRect(occluders);
+    // The per-day badge is left out: StopMarkerLayer clamps it into the canvas (below the nav, inside
+    // CLUSTER_EDGE_MARGIN of the other edges), so where it sits says nothing about the framing.
     const anchors = [...document.querySelectorAll(".stop-marker-layer .marker-anchor")].filter((a) => !a.querySelector(".marker-day-label"));
     const outside = [], offscreen = [];
     for (const a of anchors) {
@@ -296,12 +302,57 @@ async function checkTrip(page, w, h, shot) {
       if (x < free.l || x > free.r || y < free.t || y > free.b) outside.push(`(${Math.round(x)},${Math.round(y)})`);
     }
     return { free, n: anchors.length, outside, offscreen };
-  });
-  if (!m.n) fails.push(["markers-offscreen", "no stop .marker-anchor rendered"]);
-  if (m.offscreen.length) fails.push(["markers-offscreen", `${m.offscreen.length}/${m.n} stop markers project off-screen: ${m.offscreen.slice(0, 4).join(" ")}`]);
+  }, occluders);
+  const at = when ? ` ${when}` : "";
+  if (!m.n) fails.push(["markers-offscreen", `no stop .marker-anchor rendered${at}`]);
+  if (m.offscreen.length) fails.push(["markers-offscreen", `${m.offscreen.length}/${m.n} stop markers project off-screen${at}: ${m.offscreen.slice(0, 4).join(" ")}`]);
   if (m.outside.length) {
     const f = m.free;
-    fails.push(["markers-outside-free-map", `${m.outside.length}/${m.n} outside free rect ${Math.round(f.l)},${Math.round(f.t)}..${Math.round(f.r)},${Math.round(f.b)}: ${m.outside.slice(0, 4).join(" ")}`]);
+    fails.push(["markers-outside-free-map", `${m.outside.length}/${m.n} outside free rect ${Math.round(f.l)},${Math.round(f.t)}..${Math.round(f.r)},${Math.round(f.b)}${at}: ${m.outside.slice(0, 4).join(" ")}`]);
+  }
+  return fails;
+}
+
+// The selected day's tab lies inside its own tab row, in whichever shape the board is in now.
+const activeTabInView = (page) => page.evaluate(() => {
+  const tab = document.querySelector('.tb-days [role="tab"][aria-selected="true"]');
+  const row = tab?.closest(".tb-days");
+  if (!tab || !row) return "no selected tab";
+  const t = tab.getBoundingClientRect(), r = row.getBoundingClientRect();
+  return t.left >= r.left - 1 && t.right <= r.right + 1 ? null : `tab ${Math.round(t.left)}..${Math.round(t.right)} outside its row ${Math.round(r.left)}..${Math.round(r.right)}`;
+});
+
+async function checkTrip(page, w, h, shot) {
+  const fails = [];
+  // The zoom checkpoint asserts reflow (nothing clipped, nothing hidden but focusable), not map framing.
+  if (!(w === 735 && h === 415)) fails.push(...(await checkMarkers(page, ".trip-board")));
+  if (w === 1470 && h === 830) {
+    // Review Focus 1: crossing 961px swaps the column for the bottom board and back, and each time the
+    // day must be framed for the layout now on screen, not the one it was framed for.
+    for (const [rw, rh] of [[900, 830], [1470, 830]]) {
+      await page.setViewportSize({ width: rw, height: rh });
+      await page.waitForTimeout(4500);
+      fails.push(...(await checkMarkers(page, ".trip-board", `after resizing to ${rw}x${rh}`)));
+    }
+    // Review Focus 2: a stop opened from the column folds it to the strip; the stop it flew to stands
+    // left of the drawer, clear of the strip along the foot.
+    const name = (await page.locator(".tb-card-name").first().textContent())?.trim();
+    await page.locator(".tb-card").first().click({ timeout: 8000 });
+    await page.waitForTimeout(4500);
+    await shot("stop");
+    const s = await page.evaluate((name) => {
+      const free = window.freeMapRect(".trip-board, .trip-drawer");
+      const card = [...document.querySelectorAll(".stop-marker-layer .marker-title-card")].find((c) => c.textContent.trim() === name);
+      const a = card?.closest(".marker-anchor");
+      if (!document.querySelector(".trip-drawer")) return "no .trip-drawer opened";
+      if (!a) return `no marker named "${name}"`;
+      const px = +a.dataset.px, py = +a.dataset.py;
+      return px >= free.l && px <= free.r && py >= free.t && py <= free.b ? null : `"${name}" at (${px},${py}), free rect ${Math.round(free.l)},${Math.round(free.t)}..${Math.round(free.r)},${Math.round(free.b)}`;
+    }, name);
+    if (s) fails.push(["stop-behind-drawer", s]);
+    await page.keyboard.press("Escape");
+    await page.goto(page.url(), { waitUntil: "load", timeout: 30000 });
+    await page.waitForTimeout(6000);
   }
   if (w >= 961) {
     const left = await page.evaluate(() => { const r = document.querySelector(".trip-board")?.getBoundingClientRect(); return r && r.width ? r.left : null; });
@@ -318,6 +369,24 @@ async function checkTrip(page, w, h, shot) {
     const s = await page.evaluate(() => (document.querySelector(".trip-spotlight") ? window.freeMapRect(".trip-board, .trip-spotlight") : null));
     if (!s) fails.push(["spotlight-map-small", "spotlight did not open"]);
     else if (s.area < 0.55 * w * h) fails.push(["spotlight-map-small", `free map ${Math.round(s.r - s.l)}x${Math.round(s.b - s.t)} is ${Math.round((100 * s.area) / (w * h))}% of ${w}x${h}, wants >= 55%`]);
+  }
+  if (LONG_TRIP && w === 1470 && h === 830) {
+    // Review Focus 4: a long trip's last day, chosen without moving focus (a click on the map or a beat
+    // can choose a day; focus would scroll the tab in by itself), then the board folded to the strip,
+    // which mounts a tab row of its own.
+    await page.goto(`${BASE}/trip/${LONG_TRIP}`, { waitUntil: "load", timeout: 30000 });
+    await page.waitForTimeout(8000);
+    await page.evaluate(() => [...document.querySelectorAll('.tb-days [role="tab"]')].at(-1)?.click());
+    await page.waitForTimeout(1500);
+    const board = await activeTabInView(page);
+    if (board) fails.push(["long-trip-tab-hidden", `board: ${board}`]);
+    await page.evaluate(() => document.querySelector(".tb-card")?.click());
+    await page.waitForTimeout(2500);
+    await shot("long-strip");
+    const strip = await activeTabInView(page);
+    if (strip) fails.push(["long-trip-tab-hidden", `strip: ${strip}`]);
+    // Thirty tabs are what overflow a strip; what overflows has to scroll, not run under its clip.
+    for (const f of await page.evaluate(scan, { checkMonuments: false })) fails.push([`long-trip-strip-${f.kind}`, f.detail]);
   }
   return fails;
 }

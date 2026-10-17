@@ -8,7 +8,7 @@ import SplitEditor from "@/components/SplitEditor";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import TripBoard, { type BoardShape } from "@/components/polar/trip/TripBoard";
+import TripBoard, { COLUMN_QUERY, type BoardShape } from "@/components/polar/trip/TripBoard";
 import TripSpotlight from "@/components/polar/trip/TripSpotlight";
 import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
@@ -288,27 +288,41 @@ export default function TripView({
   /**
    * Tell the map how much of the screen is the plan's. The board along the foot is a bottom inset
    * (`setViewPadding`, honoured by MapLibre; Cesium centres in the full view and draws the day
-   * partly behind the board, see docs/frontend.md), and the drawer is found by the camera itself
-   * through its `.docked-panel` class (`panelLeftEdgePx`). The same two numbers move the map's own
-   * controls clear of both, through `--trip-board-h` and `--trip-drawer-w` (globals.css).
+   * partly behind the board, see docs/frontend.md). A drawer, and the board when it is the column
+   * at 961px and wider, are found by the camera itself through their `.docked-panel` class
+   * (`panelLeftEdgePx`), so the column is no bottom inset at all. The same two numbers move the map's
+   * own controls clear of all three, through `--trip-board-h` and `--trip-drawer-w` (globals.css,
+   * TripBoard.css).
    */
-  const { setViewPadding } = useMapCamera();
+  const { setViewPadding, reframeRoute } = useMapCamera();
   useLayoutEffect(() => {
     const root = document.documentElement;
     let frame = 0;
+    /** Set when the window crossed 961px, for the measure to re-frame the day once it has the new
+     *  insets. TripBoard re-frames on the same crossing, but whether its effect or this frame runs
+     *  first is React's business, and the one that runs first frames with the other's stale half
+     *  (old padding, or the old `panelVisible`). Measured: the day left behind the bottom board after
+     *  1470 → 900. Either order ends right with both: the later one has both halves new. */
+    let reframe = false;
     const measure = () => {
       frame = 0;
-      const foot = document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
-      const side = document.querySelector<HTMLElement>(".trip-drawer, .split-editor");
+      const column = shape === "board" && window.matchMedia(COLUMN_QUERY).matches;
+      const foot = column ? null : document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
+      const side = document.querySelector<HTMLElement>(column ? ".trip-board" : ".trip-drawer, .split-editor");
       // Where the foot comes to rest, not where its entrance has it this frame: the board rises 2rem
       // into place over 0.5s (`tb-rise`), and a rect read mid-rise put the map's controls 32px short
       // until a re-measure jumped them up at 560ms. The transform's own offset is taken back out.
       const restTop = foot ? foot.getBoundingClientRect().top - new DOMMatrixReadOnly(getComputedStyle(foot).transform).m42 : 0;
       const bottom = foot ? Math.max(0, Math.round(window.innerHeight - restTop + 16)) : 0;
-      // The open map search covers the top; what it finds is framed below it.
-      const bar = document.querySelector<HTMLElement>(".trip-spotlight");
-      const top = bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;
+      // The fixed nav covers the top, and the open map search more of it; the day is framed below
+      // whichever reaches lower. Without the nav the day centred in a band that started at y = 0, and
+      // at 375x667 its first stop's name sat under the nav (the bar is 56px of a 254px map there).
+      // Story mode hides the nav, so its rect is empty and costs nothing then.
+      const bar = document.querySelector<HTMLElement>(".trip-spotlight") ?? document.querySelector<HTMLElement>("nav");
+      const top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0;
       setViewPadding({ left: 0, bottom, top });
+      if (reframe && !story.active) reframeRoute();
+      reframe = false;
       // With nothing along the foot (the map search open) the controls stand clear of the corner's
       // trace button (`LlmTraceFab`: 20px in, 48px tall) instead. `0px` would beat the CSS fallback
       // and put them on the screen's edge, partly off it.
@@ -320,6 +334,13 @@ export default function TripView({
     };
     schedule();
     window.addEventListener("resize", schedule);
+    // Crossing 961px swaps the bottom board for the column: one inset becomes the other.
+    const columnQuery = window.matchMedia(COLUMN_QUERY);
+    const crossed = () => {
+      reframe = true;
+      schedule();
+    };
+    columnQuery.addEventListener("change", crossed);
     // The search grows and shrinks with its results.
     const bar = document.querySelector<HTMLElement>(".trip-spotlight");
     const observer = new ResizeObserver(schedule);
@@ -327,9 +348,10 @@ export default function TripView({
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", schedule);
+      columnQuery.removeEventListener("change", crossed);
       observer.disconnect();
     };
-  }, [shape, drawer, story.active, spotlight, setViewPadding]);
+  }, [shape, drawer, story.active, spotlight, setViewPadding, reframeRoute]);
   useEffect(
     () => () => {
       setViewPadding(null);

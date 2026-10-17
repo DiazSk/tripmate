@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Bike, Car, Footprints } from "lucide-react";
 
 import type { DayPlan, Itinerary, Stop, Trip } from "@/lib/types";
@@ -21,10 +21,11 @@ import AnchorReceipt from "@/components/AnchorReceipt";
 import Meridian from "@/components/Meridian";
 
 /**
- * The trip page's plan, as a departure board along the foot of the map (canvas design "Trip page ·
- * B"): the trip and its actions at the head of a left column, the days below it like a departures
- * list, and the day's stops as cards in travel order with the way between each pair. The map above
- * it is the day's picture and nothing is set over it.
+ * The trip page's plan. At 961px and wider it is the right-hand column of the canvas design "Trip
+ * page · A", the map full height beside it and the day's stops first: the trip, Play, the days as
+ * tabs, the day, its stops down the column with the way between each pair, then the money. Narrower,
+ * it is the departure board along the foot of the map ("Trip page · B"). One markup for both; the
+ * column is TripBoard.css re-ordering it.
  *
  * Three shapes, one component, because the map has to be told about every one of them and only
  * this component knows the itinerary: the **board**; the **strip** (the board folded to its days
@@ -53,6 +54,14 @@ const longDate = (iso: string) => {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 };
 const city = (destination: string) => destination.split(",")[0].trim();
+
+/** Where the board becomes the column. TripView reads the same query to tell the map. */
+export const COLUMN_QUERY = "(min-width: 961px)";
+const subscribeColumn = (onChange: () => void) => {
+  const mql = window.matchMedia(COLUMN_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+};
 
 export default function TripBoard({
   trip,
@@ -100,6 +109,13 @@ export default function TripBoard({
   const story = useStoryControls();
   const { showTripRoute, showLegPaths, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
   const heroPhoto = usePlacePhoto(trip.destination, "thumb");
+  // The column's head is the city across its full width, so it takes the original rather than the
+  // ticket's thumbnail. One request either way: both variants share a cache entry.
+  const headPhoto = usePlacePhoto(trip.destination, "full");
+  /** The open board stands as a wall on the right rather than along the foot. `docked-panel` on it
+   *  is what `panelLeftEdgePx` measures, so the camera aims the day beside it, exactly as beside a
+   *  drawer — and only then: on the bottom board that class would read as a wall at x = 0. */
+  const column = useSyncExternalStore(subscribeColumn, () => window.matchMedia(COLUMN_QUERY).matches, () => false) && shape === "board";
 
   // ── The map ──────────────────────────────────────────────────────────────────────────────────
   const routeDays = useMemo(
@@ -113,10 +129,11 @@ export default function TripBoard({
   useEffect(() => {
     if (!day || story.active || shape === "hidden") return;
     // Shut is the overview: every day, each in its colour. Otherwise the day alone. The camera aims
-    // beside the drawer when one is open, and above the board through the view padding the page sets.
-    showTripRoute(routeDays, overview ? null : di, drawerOpen, true);
+    // beside the drawer or the column, and above the bottom board through the view padding the page
+    // sets. `column` is a dependency so a window crossing 961px re-frames the day for the new layout.
+    showTripRoute(routeDays, overview ? null : di, drawerOpen || column, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `routeShape`, not `routeDays`: see above
-  }, [routeShape, di, overview, drawerOpen, story.active, shape, showTripRoute]);
+  }, [routeShape, di, overview, drawerOpen, column, story.active, shape, showTripRoute]);
 
   const dayPoints = useMemo(() => day?.stops.map((st) => ({ lat: st.lat, lng: st.lng })) ?? null, [day?.stops]);
   const legs = useDayRoute(dayPoints);
@@ -146,6 +163,20 @@ export default function TripBoard({
     const el = cardsRef.current?.querySelector<HTMLElement>(`[data-row="${selectedRow}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [selectedRow]);
+
+  // The days are a row of tabs in every shape, and every shape mounts its own, scrolled to the start:
+  // without this a long trip opened on its 25th day, or folded to the strip and back, showed a tab row
+  // with the selected day off its end. Horizontal only, by hand, because `scrollIntoView` would also
+  // scroll the column itself up to the tabs.
+  useEffect(() => {
+    const tab = document.getElementById(`trip-day-${di}`);
+    const row = tab?.closest<HTMLElement>(".tb-days");
+    if (!tab || !row) return;
+    const t = tab.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    if (t.left < r.left) row.scrollLeft -= r.left - t.left;
+    else if (t.right > r.right) row.scrollLeft += t.right - r.right;
+  }, [di, shape]);
 
   // ── Feedback on edits, held back until there is an edit (see `ItineraryCard`'s findings) ─────
   const [asGenerated] = useState(itinerary);
@@ -264,7 +295,7 @@ export default function TripBoard({
   const segments = budgetSegments(days, trip.budget);
 
   return (
-    <section className="tm trip-board tb-board" data-appearance="light" aria-label="Your plan">
+    <section className={`tm trip-board tb-board${column ? " docked-panel" : ""}`} data-appearance="light" aria-label="Your plan">
       <button type="button" className="tb-grab" aria-label="Show the map" onClick={onShut}>
         <span />
       </button>
@@ -273,6 +304,14 @@ export default function TripBoard({
       <div className="tb-side">
         <div className="tb-trip">
           <div className="tb-trip-line">
+            {column && (
+              <span className="tb-trip-photo" aria-hidden="true">
+                {headPhoto && (
+                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary Wikipedia originals; next/image throws on an unconfigured host
+                  <img src={headPhoto} alt="" className="value-in" />
+                )}
+              </span>
+            )}
             <h1 className="tb-city">{city(trip.destination)}</h1>
             <p className="tb-meta">
               {days.length} {days.length === 1 ? "day" : "days"}

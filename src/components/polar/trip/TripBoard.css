@@ -1,8 +1,15 @@
-/* The trip page's plan as a departure board along the foot of the map (canvas "Trip page · B").
-   Polar ice and paper, under `.tm` for its tokens and `data-appearance="light"` so the app's own
-   components reused inside it (the weather badge, the must-see receipt) take their light values. */
+/* The trip page's plan. At 961px and wider, the right-hand column of canvas "Trip page · A" with the
+   day's stops first and the map full height beside it (the block at the foot of this file); narrower,
+   the departure board along the foot of the map (canvas "Trip page · B"). Polar ice and paper, under
+   `.tm` for its tokens and `data-appearance="light"` so the app's own components reused inside it
+   (the weather badge, the must-see receipt) take their light values.
 
-/* Open, the board runs edge to edge along the foot: the map above it, the plan the full width. */
+   Why A on a laptop: B's board took ~48vh of an 830px screen and clamped every stop's description to
+   three lines; A keeps ~62% of a 1470x830 viewport as map (a 928x772 rect, measured in the spike) and
+   the column scrolls, so nothing in it is cut. A's one weakness, the first stop ~190px below the fold
+   under its photo head, budget and day summary, is why the order here puts the stops before the money.
+
+   Narrower, the board along the foot runs edge to edge: the map above it, the plan the full width. */
 .tm.trip-board {
   position: fixed;
   left: 0;
@@ -665,6 +672,9 @@
 }
 .tb-strip .tb-days {
   display: flex;
+  /* A flex item will not shrink below its content without this, so a long trip's tabs ran out of
+     the strip under its clip instead of scrolling. */
+  min-width: 0;
   overflow-x: auto;
   border-top: 0;
 }
@@ -803,6 +813,251 @@
   border-left-color: var(--wd-signal);
 }
 
+/* ── Trip page · A, stops first ─────────────────────────────────────────────────────────────────
+   The open board as a column on the right, the map full height beside it. The column's box is A's
+   logbook (`.ta-panel`, TripPageA.css:19-33): `top: calc(3.5rem + 1rem)` (3.5rem is the nav),
+   `right`/`bottom: 1.25rem`, `width: min(40%, 520px)`, the card radius and A's shadow. The markup is
+   the board's own: `.tb-side`, `.tb-trip` and `.tb-main` stand aside (`display: contents`) and
+   `order` re-deals their children into one column — the trip, Play, the days, the day, its stops,
+   their total, then the draft notice and the budget, which in A came before the stops and pushed the
+   first one below the fold. The column scrolls; nothing in it clamps or clips. `docked-panel` (set
+   by TripBoard while this applies) is what the camera aims beside and what the map's chrome below
+   stands clear of. The strip, the ticket and the film's hidden board are untouched at every width. */
+@media (min-width: 961px) {
+  .tm.trip-board:not(.is-strip) {
+    top: calc(var(--nav-h) + 1rem);
+    right: 1.25rem;
+    bottom: 1.25rem;
+    left: auto;
+    width: min(40%, 520px);
+    height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    /* Every row its content's height. With auto rows a fixed-height grid shrinks any row whose item
+       may be 0 tall (`.tb-cards` sets `min-height: 0` for the bottom board), and the stops ran under
+       the budget instead of the column scrolling. */
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 0.9em;
+    padding-bottom: var(--wd-pad);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--wd-radius-card);
+    box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.7);
+  }
+  /* The handle stays, white on the photo as A draws it (`.ta-grab`): it is the only way to shut the
+     plan to its ticket and see the whole trip on the map, and the ticket is kept at every width. */
+  .tm.trip-board:not(.is-strip) .tb-grab {
+    top: 0.4em;
+    height: 1.6em;
+  }
+  .tm.trip-board:not(.is-strip) .tb-grab span {
+    height: 0.25em;
+    background: rgba(255, 255, 255, 0.85);
+  }
+  /* `overflow` back to visible too: a box that is not drawn still reports `overflow: hidden`, and
+     reads to anything walking the ancestors (the layout gate among them) as a 0x0 clip. */
+  .tm.trip-board:not(.is-strip) :is(.tb-side, .tb-trip, .tb-main) {
+    display: contents;
+    overflow: visible;
+  }
+  /* Anything not dealt below (the must-see receipt, the findings, an empty day) sits with the day. */
+  .tm.trip-board:not(.is-strip) .tb-main > * {
+    order: 5;
+    margin-inline: var(--wd-pad);
+  }
+
+  /* 1 · The trip: the city over its photo, A's head (`.ta-head`) cut down to a strip. */
+  .tm.trip-board:not(.is-strip) .tb-trip-line {
+    order: 1;
+    position: relative;
+    height: min(9rem, 18svh);
+    padding: 0 var(--wd-pad) 0.7em;
+    overflow: hidden;
+    color: #fff;
+    background: var(--wd-deep);
+  }
+  .tb-trip-photo {
+    position: absolute;
+    inset: 0;
+  }
+  .tb-trip-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 40%;
+  }
+  /* A's scrim (`.ta-head-scrim`), so white type holds on a bright sky. */
+  .tb-trip-photo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(9, 11, 16, 0.45) 0%, rgba(9, 11, 16, 0) 30%, rgba(9, 11, 16, 0.25) 55%, rgba(9, 11, 16, 0.78) 100%);
+  }
+  .tm.trip-board:not(.is-strip) .tb-trip-line > :not(.tb-trip-photo) {
+    position: relative;
+  }
+  .tm.trip-board:not(.is-strip) .tb-meta {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  /* 2 · Play, Share, Download */
+  .tm.trip-board:not(.is-strip) .tb-actions {
+    order: 2;
+    padding: 0 var(--wd-pad);
+  }
+
+  /* 3 · The days, as a row of tabs (the strip's, above) */
+  .tm.trip-board:not(.is-strip) .tb-days {
+    order: 3;
+    display: flex;
+    overflow-x: auto;
+    padding: 0 var(--wd-pad);
+    border-top: 0;
+    border-bottom: 1px solid var(--wd-rule);
+  }
+  .tm.trip-board:not(.is-strip) .tb-days button {
+    grid-template-columns: auto auto;
+    width: auto;
+    padding: 0.45em 0.7em;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+  }
+  .tm.trip-board:not(.is-strip) .tb-days button[aria-selected='true'] {
+    background: transparent;
+    border-bottom-color: var(--c);
+  }
+  .tm.trip-board:not(.is-strip) .tb-day-what {
+    display: none;
+  }
+
+  /* 4 · The day, and its tools under the title */
+  .tm.trip-board:not(.is-strip) .tb-day-head {
+    order: 4;
+    flex-direction: column;
+    align-items: flex-start;
+    padding-right: 0;
+  }
+  .tm.trip-board:not(.is-strip) .tb-day-titles {
+    max-width: 100%;
+  }
+  .tm.trip-board:not(.is-strip) .tb-tools {
+    justify-content: flex-start;
+  }
+
+  /* 5 · An overspend: one row in the flow, the words wrapping beside the two buttons */
+  .tm.trip-board:not(.is-strip) .tb-alert {
+    flex-wrap: nowrap;
+  }
+  .tm.trip-board:not(.is-strip) .tb-alert span {
+    min-width: 0;
+  }
+  .tm.trip-board:not(.is-strip) .tb-alert button {
+    flex-shrink: 0;
+  }
+
+  /* 6 · The stops, down the column: A's row (`.ta-stop`, TripPageA.css:359-414), the picture on
+     the left and the words on the right, the description whole. */
+  .tm.trip-board:not(.is-strip) .tb-cards {
+    order: 6;
+    flex-direction: column;
+    padding: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card-slot {
+    flex-direction: column;
+    flex-shrink: 1;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card {
+    width: auto;
+    grid-template-columns: 4.5em minmax(0, 1fr);
+    grid-template-rows: none;
+    column-gap: 0.8em;
+    row-gap: 0.15em;
+    padding: 0.55em 0.4em;
+    border-radius: var(--wd-radius-sm);
+  }
+  .tm.trip-board:not(.is-strip) .tb-card > :not(.tb-card-photo) {
+    grid-column: 2;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card-photo {
+    grid-row: 1 / span 3;
+    align-self: start;
+    aspect-ratio: 1;
+    margin: 0;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card-photo > b {
+    font-size: 1.6em;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card-time {
+    left: 0.25em;
+    bottom: 0.25em;
+    padding: 0.1em 0.3em;
+    font-size: 0.72em;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card-n {
+    top: 0.25em;
+    right: 0.25em;
+  }
+  .tm.trip-board:not(.is-strip) .tb-card-why {
+    display: block;
+    overflow: visible;
+    font-size: 0.85em;
+    line-height: 1.45;
+  }
+  /* The way to the next stop, written along a dashed rail under the pictures (A's `.ta-leg`). */
+  .tm.trip-board:not(.is-strip) .tb-leg {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    width: auto;
+    min-height: 1.2em;
+    padding: 0.2em 0 0.2em 5.7em;
+  }
+  .tm.trip-board:not(.is-strip) .tb-leg::before {
+    top: -0.1em;
+    bottom: -0.1em;
+    left: 2.65em;
+    right: auto;
+    border-top: 0;
+    border-left: 1.5px dashed var(--wd-veil-20);
+  }
+
+  /* 7 · The day's total, at the foot of its stops */
+  .tm.trip-board:not(.is-strip) .tb-total {
+    width: auto;
+    margin: 0.6em 0 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* 8 · The draft notice, 9 · the budget */
+  .tm.trip-board:not(.is-strip) .tb-draft {
+    order: 8;
+    margin: 0 var(--wd-pad);
+  }
+  .tm.trip-board:not(.is-strip) .tb-budget {
+    order: 9;
+    padding: 0 var(--wd-pad);
+  }
+
+  /* The map's own chrome stands clear of the column, as of a drawer (globals.css), and the closed
+     map search centres over the map that is left rather than over the column's head — or, with a
+     drawer open, over the Map/Satellite toggle beside it. TripView sets `--trip-drawer-w` to the
+     column's width, or the drawer's. */
+  .app-shell:has(.trip-board.docked-panel) .map-engine-toggle,
+  .app-shell:has(.trip-board.docked-panel) .map-controls {
+    right: calc(var(--trip-drawer-w, 0px) + 2.25rem);
+  }
+  .app-shell:has(.trip-board.docked-panel) .tm.tsl-closed,
+  .app-shell:has(.trip-page.has-drawer) .tm.tsl-closed {
+    left: calc((100% - var(--trip-drawer-w, 0px) - 1.25rem) / 2);
+    width: min(32rem, calc(100% - var(--trip-drawer-w, 0px) - 1.25rem - 24rem));
+  }
+}
+
 @media (max-width: 960px) {
   .tm.trip-board {
     left: 0;
@@ -810,8 +1065,19 @@
     bottom: 0;
     height: var(--trip-board-full, min(30rem, 62vh));
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    /* The board scrolls as a whole rather than clipping the day: at 735x415 (200% zoom on a
+       1470x830 Air) its 257px clipped the travel modes and hid Dismiss and Rebalance below its
+       edge while they could still be tabbed to. `max-content`, not `auto`: a fixed-height grid
+       shrinks an auto row whose item may be 0 tall (`.tb-side` is `min-height: 0`), and the day ran
+       up over the tabs instead of the board scrolling. */
+    grid-template-rows: max-content max-content;
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     border-radius: var(--wd-radius-card) var(--wd-radius-card) 0 0;
+  }
+  .tb-main {
+    overflow: visible;
   }
   .trip-page.has-drawer .tm.trip-board {
     right: 0;
