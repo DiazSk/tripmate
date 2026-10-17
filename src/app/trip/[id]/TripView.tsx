@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState } from "react";
+import { preload } from "react-dom";
 import { fitMessage } from "@/components/AnchorReceipt";
 import { useStoryControls } from "@/lib/storyMode";
 import FocusEditMode from "@/components/FocusEditMode";
@@ -13,6 +14,7 @@ import TripSpotlight from "@/components/polar/trip/TripSpotlight";
 import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
+import { DEFAULT_MAP_ENGINE, MAPLIBRE_STYLE_URL } from "@/lib/mapEngine";
 import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
@@ -44,6 +46,14 @@ export default function TripView({
    *  fixture is not in the database and is loaded below instead. */
   initialTrip: Trip | null;
 }) {
+  // The map's base style, requested from the HTML instead of at the end of the chain that reaches
+  // it (hydration, then the dynamic MapLibre chunk, then `buildStyle`'s fetch). Measured on throttled
+  // mobile, the map's first drawn stop arrives ~0.6s sooner. Gated on the build default because
+  // the server cannot see a visitor's stored engine choice; a Cesium session wastes ~6KB.
+  // `crossOrigin: "anonymous"` matches `buildStyle`'s plain `fetch()`, so the preload is reused.
+  if (DEFAULT_MAP_ENGINE === "maplibre") {
+    preload(MAPLIBRE_STYLE_URL, { as: "fetch", crossOrigin: "anonymous" });
+  }
   const [trip, setTrip] = useState<Trip | null>(initialTrip);
   const [itinerary, setItinerary] = useState<Itinerary | null>(initialTrip?.itinerary ?? null);
   const [error, setError] = useState<string | null>(null);

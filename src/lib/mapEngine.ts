@@ -41,6 +41,16 @@ export const MAP_ENGINES: readonly MapEngine[] = ["cesium", "maplibre"];
 export const DEFAULT_MAP_ENGINE: MapEngine =
   process.env.NEXT_PUBLIC_MAP_ENGINE === "cesium" ? "cesium" : "maplibre";
 
+/**
+ * MapLibre's base style: vector tiles, free and keyless — the same bar every other data source in
+ * this app clears (see CLAUDE.md's "Data sources"). Liberty is OpenMapTiles' full-detail street
+ * style, which is what carries the `building` layer `maplibreRenderer`'s 3D extrusion is built from.
+ *
+ * Here rather than in `maplibreRenderer.ts` so the trip page can preload it without importing the
+ * renderer (see TripView).
+ */
+export const MAPLIBRE_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+
 const STORAGE_KEY = "tripmateMapEngine";
 
 function parse(value: string | null | undefined): MapEngine | null {

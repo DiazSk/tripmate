@@ -357,7 +357,11 @@
   font-weight: 500;
   font-size: 1.375em;
   line-height: 1.2;
-  max-width: 17ch;
+  /* 17ch measured in Cormorant italic 500 (its `0` is 0.4414em). Written in em because `ch` follows
+     whichever face is painted: the size-adjusted fallback's `0` is ~10% wider, so with `ch` the box
+     itself changed width when the web font swapped in, on top of the text re-wrapping. `em` is the
+     computed font-size, which neither the swap nor `size-adjust` changes. */
+  max-width: 7.5038em;
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
 }
 .tm-hero-foot {
@@ -532,7 +536,7 @@
   font-weight: 500;
   font-size: clamp(2em, 3.6vw, 2.9em);
   line-height: 1;
-  max-width: 11ch;
+  max-width: 4.8554em; /* 11ch in Cormorant italic 500, in em for the reason on .tm-hero-lead */
 }
 .tm-strip-foot {
   display: grid;

@@ -46,13 +46,7 @@ import {
   visibleMapWidthPx,
   ZoomStepOptions,
 } from "@/lib/mapRenderer";
-
-/**
- * Vector tiles, free and keyless — the same bar every other data source in this app clears (see
- * CLAUDE.md's "Data sources"). Liberty is OpenMapTiles' full-detail street style, which is what
- * carries the `building` layer the 3D extrusion below is built from.
- */
-export const MAPLIBRE_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+import { MAPLIBRE_STYLE_URL } from "@/lib/mapEngine";
 
 /**
  * Elevation, as a terrarium-encoded DEM from the AWS Open Data terrain-tiles bucket. Also keyless.
