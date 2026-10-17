@@ -174,7 +174,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
             <p className="tm-hero-lead">Be there before the day arrives. Imagine it first and TripMate plans the rest.</p>
             {/* No "Plan a trip" here: the navbar carries the page's one, above the fold. */}
             <button type="button" className="tm-ghost" onClick={() => scrollToTarget(document.getElementById("day"))}>
-              Picture a day in {dest.word} <span aria-hidden="true">↓</span>
+              Picture a day <span aria-hidden="true">↓</span>
             </button>
           </div>
 

@@ -1388,7 +1388,8 @@ screens, the trip map framing a hill town off screen) are tracked in
 6. **The mark's stop is still Kiln jade** (`#28b981` in `LogoMark.tsx`), the one Kiln colour left in the
    interface.
 7. ~~**The landing's only `h1` rotates.**~~ Fixed: the hero carries one stable visually-hidden `h1`,
-   the rotating place name is `aria-hidden`, and the ghost CTA names the destination on screen.
+   the rotating place name is `aria-hidden`, and the ghost CTA reads "Picture a day ↓" — it names no place,
+   because `#day` is always the Petra story.
 8. **Breakpoints are not shared** (see Layout).
 9. **Radius drift on the older glass surfaces.** `.glass-itinerary` and the confirm dialog keep 16px
    (`{rounded.panel}`) from before Polar; recorded so the frontmatter tells the truth, not as doctrine.

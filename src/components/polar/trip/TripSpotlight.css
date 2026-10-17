@@ -167,7 +167,7 @@
   letter-spacing: 0.04em;
   color: var(--wd-ember);
   background: rgba(255, 126, 21, 0.12);
-  border-color: rgba(180, 83, 10, 0.35);
+  border-color: color-mix(in srgb, var(--wd-ember) 35%, transparent);
 }
 .tsl-spin {
   width: 1rem;
