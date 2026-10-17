@@ -274,18 +274,31 @@ async function checkTrip(page, w, h, shot) {
   const fails = [];
   const m = await page.evaluate(() => {
     const free = window.freeMapRect(".trip-board");
-    const anchors = [...document.querySelectorAll(".stop-marker-layer .marker-anchor")];
-    const outside = [];
-    let hidden = 0;
+    // The per-day badge is left out: StopMarkerLayer clamps it to the canvas edge (CLUSTER_EDGE_MARGIN),
+    // so it sits under the nav whatever the camera does. That is a defect for Task 3 (the clamp should
+    // respect the nav), not an F1 framing failure.
+    const anchors = [...document.querySelectorAll(".stop-marker-layer .marker-anchor")].filter((a) => !a.querySelector(".marker-day-label"));
+    const outside = [], offscreen = [];
     for (const a of anchors) {
-      if (getComputedStyle(a).visibility !== "visible") { hidden++; continue; }
+      // OFF-SCREEN is judged on where StopMarkerLayer says the camera projects each stop
+      // (`data-px`/`data-py`), written for every projected stop BEFORE it can be rejected, so a card
+      // that was dropped for being far off-screen, or declutter-hidden, is still measured. Reading the
+      // anchor's own rect would not do: a rejected card gets no `transform` write, so it reads as
+      // unplaced or still holds a position from an earlier camera. A stop with no projection at all
+      // (behind the camera, or never run) counts as off-screen.
+      const px = a.dataset.px, py = a.dataset.py;
+      const pos = px === undefined || py === undefined ? "(unprojected)" : `(${px},${py})`;
+      if (px === undefined || py === undefined || +px < 0 || +px > innerWidth || +py < 0 || +py > innerHeight) { offscreen.push(pos); continue; }
+      // FREE RECT is judged on the cards actually drawn. Declutter and reveal hides are not framing
+      // defects (two stops at one coordinate always clash), so a hidden card is not held to it.
+      if (getComputedStyle(a).visibility !== "visible") continue;
       const r = a.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
       if (x < free.l || x > free.r || y < free.t || y > free.b) outside.push(`(${Math.round(x)},${Math.round(y)})`);
     }
-    return { free, n: anchors.length, hidden, outside };
+    return { free, n: anchors.length, outside, offscreen };
   });
-  if (!m.n) fails.push(["markers-hidden", "no .marker-anchor rendered"]);
-  else if (m.hidden) fails.push(["markers-hidden", `${m.hidden}/${m.n} .marker-anchor are visibility:hidden after 8s`]);
+  if (!m.n) fails.push(["markers-offscreen", "no stop .marker-anchor rendered"]);
+  if (m.offscreen.length) fails.push(["markers-offscreen", `${m.offscreen.length}/${m.n} stop markers project off-screen: ${m.offscreen.slice(0, 4).join(" ")}`]);
   if (m.outside.length) {
     const f = m.free;
     fails.push(["markers-outside-free-map", `${m.outside.length}/${m.n} outside free rect ${Math.round(f.l)},${Math.round(f.t)}..${Math.round(f.r)},${Math.round(f.b)}: ${m.outside.slice(0, 4).join(" ")}`]);

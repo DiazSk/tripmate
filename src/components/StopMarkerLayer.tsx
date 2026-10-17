@@ -314,6 +314,17 @@ export default function StopMarkerLayer() {
           );
         }
 
+        // Where this stop projects, recorded before anything below can reject it. A card that is
+        // off-screen, declutter-hidden or not yet revealed gets no `transform` write, so the DOM
+        // alone cannot say where the camera put it: it reads as unplaced, or still holds the
+        // position from an earlier camera. The layout gate (scripts/layout-matrix.mjs) reads these
+        // to catch a day framed off the top of the screen. Attributes only; nothing reads them here.
+        // Whole pixels, written only on change, so a still camera costs no DOM writes.
+        const px = String(Math.round(projected.x));
+        const py = String(Math.round(projected.y));
+        if (node.dataset.px !== px) node.dataset.px = px;
+        if (node.dataset.py !== py) node.dataset.py = py;
+
         // Reject anything projected off-screen. The layer's `overflow-hidden` already clips
         // these, so the visible result looks the same either way — but an off-screen card still
         // claimed a slot in the separation scan below and silently suppressed an on-screen one,

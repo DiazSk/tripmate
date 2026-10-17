@@ -817,6 +817,15 @@ export class MapLibreRenderer implements MapRenderer {
     map.once("remove", () => {
       this.alive = false;
     });
+    // Counts every camera command, ours and the traveller's. MapLibre fires `movestart` for each
+    // one, a drag or wheel as well as a `flyTo`/`easeTo`/`fitBounds` (which `stop()` the move in
+    // progress first, so a command mid-flight fires it too), and that is the only hook that sees
+    // all of them without wrapping every call site. `frameRoute`'s late re-frame uses it to tell
+    // "the camera is where I left it" from "someone moved it": comparing zoom, pitch and bearing
+    // missed a pan, which changes only the centre.
+    map.on("movestart", () => {
+      this.cameraSeq++;
+    });
     // The arcs' radius is derived from the camera (see ARC_WIDTH_PX), so the mesh has to be
     // rebuilt as the camera moves or the width it was built for stops being true. `zoom` fires
     // per frame during a pinch, so this coalesces to one rebuild per frame and skips deltas below
@@ -838,6 +847,11 @@ export class MapLibreRenderer implements MapRenderer {
 
   /** Screen furniture to frame around (`setViewPadding`), added to every camera command's padding. */
   private viewInsets = { left: 0, bottom: 0, top: 0 };
+
+  /** Bumped by every camera command (`movestart`); see the constructor. */
+  private cameraSeq = 0;
+  /** `frameRoute`'s one late re-frame, if one is waiting for the map to settle. */
+  private pendingReframe: (() => void) | null = null;
 
   setViewPadding(insets: ViewInsets | null) {
     // Stored, not applied. Every camera command here passes its own `padding` (`panelPadding`, or
@@ -1402,6 +1416,7 @@ export class MapLibreRenderer implements MapRenderer {
 
   flyToPoint(options: FlyToPointOptions) {
     if (!this.isAlive()) return;
+    this.landOn(options.lat, options.lng);
     const padding = this.panelPadding();
     const bearing = ((options.headingRad ?? 0) * 180) / Math.PI;
     const pitch = toMapLibrePitch(options.pitchDeg);
@@ -1551,7 +1566,8 @@ export class MapLibreRenderer implements MapRenderer {
     return this.rangeToZoom(Math.max(MIN_RANGE_M, Math.min(MAX_RANGE_M, rangeM)), lat);
   }
 
-  frameRoute({ days, focusDay, panelVisible, durationS }: FrameRouteOptions) {
+  frameRoute(options: FrameRouteOptions) {
+    const { days, focusDay, panelVisible, durationS } = options;
     if (!this.isAlive()) return;
     const drawnStops = drawnDaysOf(days, focusDay).flat();
     if (drawnStops.length === 0) return;
@@ -1597,22 +1613,97 @@ export class MapLibreRenderer implements MapRenderer {
       Math.max(viewWidth / Math.max(1, viewWidth - insetLeft), viewHeight / Math.max(1, viewHeight - insetBottom - insetTop))
     );
 
+    const frameRangeM = Math.max(MIN_RANGE_M, rangeM * insetFit);
+    const zoom = this.rangeToZoom(frameRangeM, centreLat);
+    const bearing = headingDeg;
+    const pitch = toMapLibrePitch(ROUTE_FRAME_PITCH_DEG);
+
+    // Aim at the day as it is drawn: the ground it stands on and halfway up the stems that carry
+    // the names.
+    //
+    // The ground is the camera's centre *elevation* (`landOn`), not a screen offset. MapLibre
+    // measures the camera's range from the centre point and leaves that point at sea level unless
+    // told otherwise, so over hills the day lands that far up the screen: at Val d'Orcia's ~490m and
+    // this 45 degree pitch the stops' marker tops sat at y=56, 13, -105, -107 at 1470x830. A pixel
+    // lift for it was tried first (`centreHeightOffsetPx` with the ground height, magnified by the
+    // ground being nearer the camera: 28% at 493m, which matched Val d'Orcia to a few pixels) and
+    // it does not survive mountains: at Cusco's 3400m the camera ends up inside the terrain, MapLibre
+    // raises it to zoom 14.7 when 15.85 was asked, and the markers projected 4000px above the screen
+    // whatever the offset. Centred on the ground, the same call frames both.
+    //
+    // Half a stem. The names stand `STEM_HEIGHT_M` above their stops, so centring the ground leaves
+    // the cards of the northernmost stops above the free area on a close frame; centring halfway up
+    // puts the stops and their names in the area together, as a pixel `offset`, the same arithmetic
+    // the stop flights use. At a city's zoom half a stem is a few pixels, so a whole-trip frame does
+    // not move. Half is a tuned constant, not a derivation: at 1470x830 it took the stops' cards
+    // from tops at y=102 and -7 (ground centred, the northern ones under the nav) to y=181 and 126,
+    // inside the free area. A full stem was not tried.
+    const groundM = this.groundElevationM(centre[1], centre[0]);
+    this.centreElevation(groundM);
+    const lift = centreHeightOffsetPx(STEM_HEIGHT_M / 2, zoom, centre[1], pitch);
     this.map.flyTo({
       center: centre as LngLatLike,
-      zoom: this.rangeToZoom(Math.max(MIN_RANGE_M, rangeM * insetFit), centreLat),
-      bearing: headingDeg,
-      pitch: toMapLibrePitch(ROUTE_FRAME_PITCH_DEG),
+      zoom,
+      bearing,
+      pitch,
       // Zero but for the screen furniture, not omitted. `flyTo` *retains* whatever padding the last
       // camera command set, so a stop flight's right-padding would otherwise still be in force here
       // and compound with the metre bias this function already applied — biasing the route twice.
       padding: { top: insetTop, bottom: insetBottom, left: insetLeft, right: 0 },
+      // Spread conditionally: an explicit `offset: undefined` throws inside `flyTo` (see
+      // `flyToPoint`), and `centreHeightOffsetPx` returns `undefined` for "no lift".
+      ...(lift ? { offset: lift } : {}),
       duration: (durationS ?? 2.0) * 1000,
       essential: true,
     });
+
+    // The first framing of a day usually runs before the DEM under it has loaded, so `groundM` was
+    // 0. Once the map settles, ask again; if the ground is now more than 20m from the elevation
+    // this frame was centred on and no camera command has run since (`cameraSeq`: a pan, a zoom, a
+    // flight to a stop or another frame all bump it), frame once more, quickly. One listener at a
+    // time: a later frame replaces the pending one, so two calls in a row cannot both re-frame. The
+    // second call reads a real elevation, so it cannot chain a third; at sea level the ground is
+    // still 0 and nothing happens.
+    if (this.pendingReframe) {
+      this.map.off("idle", this.pendingReframe);
+      this.pendingReframe = null;
+    }
+    if (this.map.getTerrain()) {
+      const seq = this.cameraSeq;
+      const reframe = () => {
+        this.pendingReframe = null;
+        if (!this.isAlive() || this.cameraSeq !== seq) return;
+        if (Math.abs(this.groundElevationM(centre[1], centre[0]) - groundM) > 20) {
+          this.frameRoute({ ...options, durationS: 0.6 });
+        }
+      };
+      this.pendingReframe = reframe;
+      this.map.once("idle", reframe);
+    }
+  }
+
+  /**
+   * Make the camera's centre sit on the ground at `m` metres, which is what its range and every
+   * later flight are measured from. MapLibre never sets this by itself after a flight here (its
+   * `centerClampedToGround` was measured leaving it at 0 over a 3406m DEM), and it is retained from
+   * one camera command to the next, so every command that lands somewhere new goes through
+   * `landOn`: a frame on high ground must not leave a destination flight to sea level floating
+   * `m` metres up. A jump, not a tween: `flyTo` ignores its own `elevation` option (measured), so
+   * the camera moves by `m` metres vertically at the start of the flight, which at the ranges
+   * these flights begin from, or end on, is a few percent of the view.
+   */
+  private centreElevation(m: number) {
+    if (Math.abs(this.map.getCenterElevation() - m) < 1) return;
+    this.map.setCenterElevation(m);
+  }
+
+  private landOn(lat: number, lng: number) {
+    this.centreElevation(this.groundElevationM(lat, lng));
   }
 
   flyHome(durationS = 2.0) {
     if (!this.isAlive()) return;
+    this.centreElevation(0);
     this.map.flyTo({
       center: [HERO_VIEW.lng, HERO_VIEW.lat],
       zoom: this.rangeToZoom(HERO_VIEW.heightM, HERO_VIEW.lat),
@@ -1637,6 +1728,7 @@ export class MapLibreRenderer implements MapRenderer {
 
   restoreCamera(state: CameraState) {
     if (!this.isAlive()) return;
+    this.landOn(state.lat, state.lng);
     this.map.jumpTo({
       center: [state.lng, state.lat],
       zoom: this.rangeToZoom(
@@ -1666,6 +1758,7 @@ export class MapLibreRenderer implements MapRenderer {
   flyToPose(pose: CameraPose, durationS: number, onArrive?: () => void) {
     if (!this.isAlive()) return;
     const p = pose as MapLibrePose;
+    this.landOn(p.center[1], p.center[0]);
     if (onArrive) this.map.once("moveend", onArrive);
     this.map.flyTo({
       center: p.center,
