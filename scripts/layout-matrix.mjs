@@ -265,10 +265,20 @@ async function checkWriting(page, w) {
   const m = await page.evaluate(() => {
     const rect = (q) => { const r = document.querySelector(q)?.getBoundingClientRect(); return r && r.height ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null; };
     const seen = (q) => [...document.querySelectorAll(q)].some((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && e.checkVisibility({ opacityProperty: true, visibilityProperty: true }); });
-    return { lede: rect(".wtp-lede"), foot: rect(".wtp-foot"), panel: seen(".docked-panel-collapsed"), controls: seen(".map-controls") };
+    const lede = document.querySelector(".wtp-lede");
+    // The day list's box against one row: a wrapping column always seats its first row, so a box
+    // shorter than a row shows it cut (its border and fill; the text, centred, can still sit inside).
+    const days = document.querySelector(".wtp-days")?.getBoundingClientRect().height ?? 0;
+    const row = document.querySelector(".wtp-day")?.getBoundingClientRect().height ?? 0;
+    return { days, row, ledeSpill: lede ? lede.scrollHeight - lede.clientHeight : 0, footBottom: document.querySelector(".wtp-foot")?.getBoundingClientRect().bottom, vh: innerHeight, lede: rect(".wtp-lede"), foot: rect(".wtp-foot"), panel: seen(".docked-panel-collapsed"), controls: seen(".map-controls") };
   });
   if (!m.lede || !m.foot) fails.push(["lede-foot-overlap", `.wtp-lede or .wtp-foot not found (lede ${!!m.lede}, foot ${!!m.foot}): not on the writing screen`]);
   else if (hits(m.lede, m.foot)) fails.push(["lede-foot-overlap", `.wtp-lede bottom ${Math.round(m.lede.bottom)} runs into .wtp-foot top ${Math.round(m.foot.top)}`]);
+  // The lede's own content (header, fact) cannot shrink; when it is taller than its box it spills over
+  // the foot and pushes the foot off the screen, where the root's `overflow: hidden` clips the monument.
+  if (m.ledeSpill > 0) fails.push(["lede-content-overflow", `.wtp-lede content is ${m.ledeSpill}px taller than its box`]);
+  if (m.footBottom > m.vh + 1) fails.push(["foot-off-screen", `.wtp-foot bottom ${Math.round(m.footBottom)} is below the ${m.vh}px viewport: the monument is clipped`]);
+  if (m.days > 0 && m.row > 0 && m.days < m.row - 1) fails.push(["days-row-sliced", `.wtp-days is ${Math.round(m.days)}px tall, shorter than its ${Math.round(m.row)}px rows: the first is cut`]);
   // A regression guard that cannot fail here: the docked panel's capsule appears only once stops
   // stream, and this request never resolves. Task 5 verifies the phone case with a real generation.
   if (w <= 760 && (m.panel || m.controls)) fails.push(["map-chrome-over-writing", `${[m.panel && ".docked-panel-collapsed", m.controls && ".map-controls"].filter(Boolean).join(" and ")} visible while writing`]);
@@ -410,13 +420,18 @@ async function checkTrip(page, w, h, shot) {
 const SURFACES = {
   landing: { paths: [["landing", "/"]], scroll: true, check: checkLanding },
   planner: { paths: [["planner", "/"]], enter: enterPlanner, check: checkPlanner },
-  writing: { paths: [["writing", "/"]], enter: enterWriting, check: checkWriting, monuments: false },
+  // The extra checkpoints are landscape phones, just above the 760px width at which the phone rules
+  // (the day list and the capsule hidden) start: 844x390, 932x430 and 844x440, where the day list's box
+  // lands between zero and one row tall (a wrapping column puts one row in however short). They have the laptop layout in
+  // a very short window, which is where the lede and the foot compete for height. Other surfaces'
+  // landscape behaviour is not sampled here.
+  writing: { paths: [["writing", "/"]], enter: enterWriting, check: checkWriting, monuments: false, extra: [[844, 390, 3], [844, 440, 3], [932, 430, 3]] },
   trip: { paths: [["trip", `/trip/${TRIP}`]], settle: 8000, check: checkTrip },
   secondary: { paths: [["trips", "/trips"], ["profile", "/profile"], ["signin", "/signin"], ["offline", "/offline"]], scroll: true },
 };
 
 if (ONLY[0] !== "" || ONLY.length > 1) ONLY.forEach((o) => !SURFACES[o] && usage(`--only: unknown surface "${o}" (have ${Object.keys(SURFACES).join(", ")})`));
-const KNOWN_VPS = CHECKPOINTS.map(([w, h]) => `${w}x${h}`);
+const KNOWN_VPS = [...CHECKPOINTS, ...Object.values(SURFACES).flatMap((s) => s.extra ?? [])].map(([w, h]) => `${w}x${h}`);
 if (VPS[0] !== "" || VPS.length > 1) VPS.forEach((v) => !KNOWN_VPS.includes(v) && usage(`--vp: unknown checkpoint "${v}" (have ${KNOWN_VPS.join(", ")})`));
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -426,7 +441,7 @@ let cases = 0;
 for (const [group, s] of Object.entries(SURFACES)) {
   if (ONLY[0] !== "" && !ONLY.includes(group)) continue;
   for (const [surface, path] of s.paths) {
-    for (const [w, h, dpr] of CHECKPOINTS) {
+    for (const [w, h, dpr] of [...CHECKPOINTS, ...(s.extra ?? [])]) {
       const vp = `${w}x${h}`;
       if (VPS[0] !== "" && !VPS.includes(vp)) continue;
       const fail = (kind, detail) => { const line = `FAIL ${surface} ${vp} ${kind}: ${detail}`; failures.push(line); console.log(line); };

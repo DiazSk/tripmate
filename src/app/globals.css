@@ -601,6 +601,17 @@ html[data-writing-plan] .map-search-panel,
 html[data-writing-plan] .map-engine-toggle {
   display: none;
 }
+/* On a phone the plan's capsule ("Jaipur, India · Day 1") spans the width once stops stream in, and
+   lands on "Planning {city}" at the top of the lede; the writing screen says the same thing. Its
+   controls come back with it (`:has(.docked-panel-collapsed)`, above, outranks the rule that hides
+   them) and sat on the progress rail. Hiding the capsule leaves it in the tree, so that selector
+   still matches: the controls are named here with the same `:has()` to win. */
+@media (max-width: 760px) {
+  html[data-writing-plan] .docked-panel-collapsed,
+  html[data-writing-plan] .app-shell:has(.docked-panel-collapsed) .map-controls {
+    display: none;
+  }
+}
 
 /* --- Day and night on the globe ----------------------------------------------------------
 

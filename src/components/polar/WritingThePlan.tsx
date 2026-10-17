@@ -268,7 +268,7 @@ export default function WritingThePlan({
         <p
           className="tm-monument wtp-monument"
           aria-hidden
-          style={{ fontSize: `min(calc((100vw - 2 * var(--wd-pad)) / ${monumentEms(word).toFixed(3)}), 26vh, 15em)` }}
+          style={{ fontSize: `min(calc((100vw - 2 * var(--wd-pad)) / ${monumentEms(word).toFixed(3)}), var(--wtp-monument-vh, 26vh), 15em)` }}
         >
           {word}
         </p>

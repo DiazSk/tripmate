@@ -10,6 +10,12 @@
   background: transparent;
   color: #fff;
   overflow: hidden;
+  /* A column under the nav: the lede from the top, the foot at the bottom, and whatever is left
+     between them is slack. The two used to be positioned from opposite edges with nothing linking
+     them, so on a short screen the day list ran into the progress rail. */
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--nav-h);
 }
 .wtp-vignette {
   position: absolute;
@@ -23,11 +29,13 @@
 /* The hero's standfirst, over the map. `.tm.wtp` in front of each panel: the landing's
    `.tm > section { position: relative }` would otherwise win. */
 .tm.wtp .wtp-lede {
-  position: absolute;
-  top: calc(var(--nav-h) + 2em);
-  left: var(--wd-pad);
+  margin: 2em 0 auto var(--wd-pad);
   width: min(30em, calc(100% - 2 * var(--wd-pad)));
-  display: grid;
+  /* May shrink, never below the foot: it is the day list that gives, so rows hide, not collide. */
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 1em;
 }
 .wtp-fact {
@@ -44,8 +52,15 @@
   list-style: none;
   margin: 0.4em 0 0;
   padding: 0;
-  display: grid;
+  /* Rows are whole or hidden, never sliced: a column that wraps puts the rows that do not fit in a
+     second column, which `overflow: hidden` then clips away entirely (a bare max-height cut one
+     through the middle). Their width is the list's, so the second column starts past its edge. */
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
   gap: 0.3em;
+  flex: 0 1 auto;
+  min-height: 0;
   max-height: 16.5em;
   overflow: hidden;
 }
@@ -55,6 +70,7 @@
   grid-template-columns: 1.8em minmax(0, 1fr) 1.4em;
   align-items: center;
   gap: 0.6em;
+  width: 100%;
   height: 2.3em;
   padding: 0 0.8em;
   font-size: 0.82em;
@@ -145,10 +161,7 @@
    both: `--wd-pad` is 1.25em, and on the monument an em is the word's own size, so the gutter there
    came to ~290px a side at 1440 and ~150px on a phone, clipping every city to its first letters. */
 .tm.wtp .wtp-foot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: none;
   padding: 0 var(--wd-pad);
 }
 .wtp-strip {
@@ -276,13 +289,39 @@
 
 @media (max-width: 760px) {
   .tm.wtp .wtp-lede {
-    top: calc(var(--nav-h) + 1em);
+    margin-top: 1em;
   }
   .wtp-days {
     display: none;
   }
   .wtp-forecast {
     margin-left: 0;
+  }
+}
+/* Short screens condense: the fact falls to its lower bound and the day list shortens (DESIGN.md,
+   "Short screens condense, then scroll"). The days still hide row by row below this. */
+@media (max-height: 860px) {
+  .wtp-fact {
+    font-size: 1.4em;
+  }
+  .wtp-days {
+    max-height: 11.5em;
+  }
+}
+/* Landscape phones and the like. The list is dropped here rather than left to shrink: a wrapping
+   column always seats its first row, so a box between 1px and one row tall (measured up to ~480px of
+   height across 761-1440px of width) showed a sliced row. The lede's other parts keep their type, but
+   the fact's reserved height goes (it is there so a changing fact does not move the list, and the list
+   is gone) and the monument, which is decoration, takes less of the screen, so lede and foot fit. */
+@media (max-height: 520px) {
+  .tm.wtp {
+    --wtp-monument-vh: 20vh;
+  }
+  .wtp-days {
+    display: none;
+  }
+  .wtp-fact {
+    min-height: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
