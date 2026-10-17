@@ -145,8 +145,17 @@
   background: var(--wd-snow);
   border: 1px solid var(--wd-veil-15);
 }
-.tsl-token span {
-  font-size: 1.1em;
+/* The sheet's drawn cross (close, a token's remove, a recent search's remove), measured against the
+   typed × it replaced: the box is that glyph's advance (0.625em) and the cross its ink, so nothing
+   around it moves. A token's × was set at 1.1em, so its box is 1.1 × 0.625em. */
+.tsl-cross {
+  flex-shrink: 0;
+  width: 0.625em;
+  height: 0.625em;
+}
+.tsl-token .tsl-cross {
+  width: 0.69em;
+  height: 0.69em;
   color: var(--wd-charcoal);
 }
 .tm .tsl-token:hover {
@@ -198,7 +207,9 @@
   margin-right: -0.6rem;
 }
 .tsl-kicker {
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
+  /* The line it had at 0.66rem (x 1.5), so the 11px floor does not move the sheet below it. */
+  line-height: 0.99rem;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -231,6 +242,11 @@
   color: var(--wd-charcoal);
   border-radius: 50%;
 }
+/* The ink of the ‹ › these replaced (about 5 x 9px at the buttons' 1.3rem). */
+.tsl-day-head button svg {
+  width: 0.66em;
+  height: 0.66em;
+}
 .tsl-day-head button:hover:not(:disabled) {
   background: var(--wd-veil-05);
 }
@@ -249,7 +265,7 @@
   top: -1.1rem;
   translate: -50% 0;
   font-family: var(--wd-font-condensed);
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
   color: var(--wd-stone-text);
   white-space: nowrap;
@@ -280,7 +296,7 @@
 }
 .tsl-gap span {
   font-family: var(--wd-font-condensed);
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
   color: var(--wd-charcoal);
   white-space: nowrap;
 }
@@ -343,7 +359,7 @@
 }
 .tsl-h {
   padding: 0.7rem 1rem 0.25rem;
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -712,5 +728,37 @@
   }
   .tsl-ghost {
     transition: none;
+  }
+}
+
+/* On touch (a tablet: the sheet is not drawn on phones) every small control in the sheet answers a
+   44px press without changing how it looks: a transparent box centred on it, at least 44px each way.
+   The gaps keep their own width, since they tile the day's timeline edge to edge. */
+@media (pointer: coarse) {
+  .tsl-day-head button,
+  .tsl-token,
+  .tsl-cats button,
+  .tsl-add,
+  .tsl-rm,
+  .tsl-recent > span > button:first-child {
+    position: relative;
+  }
+  .tsl-day-head button::after,
+  .tsl-token::after,
+  .tsl-cats button::after,
+  .tsl-add::after,
+  .tsl-rm::after,
+  .tsl-recent > span > button:first-child::after,
+  .tsl-gap::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    translate: -50% -50%;
+  }
+  .tsl-gap::after {
+    width: 100%;
   }
 }

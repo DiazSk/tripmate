@@ -177,12 +177,22 @@ export default function TripSpotlight({
 
   // ⌘K / Ctrl+K opens it from anywhere on the page.
   const inputRef = useRef<HTMLInputElement>(null);
+  /** What had focus when the sheet opened, so closing it can hand focus back (WAI-ARIA dialog
+   *  practice) instead of dropping it to <body>. The closed bar is the fallback: it is the control
+   *  the sheet opens from, and pressing it unmounts it, so it is never the element recorded here; it
+   *  also stands in for a control the sheet put away (the board unmounts while the sheet is open). */
+  const openerRef = useRef<HTMLElement | null>(null);
+  const closedRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!shown) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (!open) setHistory(recentSearches());
+        if (!open) {
+          setHistory(recentSearches());
+          const from = document.activeElement;
+          openerRef.current = from instanceof HTMLElement && from !== document.body ? from : null;
+        }
         onOpenChange(true);
         requestAnimationFrame(() => inputRef.current?.focus());
       }
@@ -190,6 +200,22 @@ export default function TripSpotlight({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [shown, open, onOpenChange, setHistory]);
+
+  // Closing hands focus back to where it came from. Only when it has nowhere else to be: the sheet
+  // that held it has just unmounted, so it is on <body>; if something else took it, it stays there.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (isOpen) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const opener = openerRef.current;
+    openerRef.current = null;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    (opener?.isConnected && opener.getClientRects().length ? opener : closedRef.current)?.focus();
+  }, [isOpen]);
 
   // The tag beside the highlighted pin and the reach ring around the gap's stop, kept on the map by
   // writing their styles each frame the camera moves (the `useAnchoredToMap` discipline: no React
@@ -337,6 +363,7 @@ export default function TripSpotlight({
   if (!isOpen) {
     return (
       <button
+        ref={closedRef}
         type="button"
         className="tm tsl-closed"
         data-appearance="light"
@@ -397,7 +424,20 @@ export default function TripSpotlight({
         </div>
       )}
 
-      <section ref={barRef} className="tm trip-spotlight" data-appearance="light" aria-label="Search the map">
+      <section
+        ref={barRef}
+        className="tm trip-spotlight"
+        data-appearance="light"
+        aria-label="Search the map"
+        // Esc closes from anywhere in the sheet (a chip, a gap, a row's Add), not only the field. The
+        // field handles its own Esc first (clear, then close), so its presses are left to it.
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && e.target !== inputRef.current) {
+            e.preventDefault();
+            close();
+          }
+        }}
+      >
         {/* The day, at the head of the sheet: stops as blocks, gaps as what you press, the highlighted place as a ghost. */}
         <header className="tsl-day">
           <div className="tsl-day-top">
@@ -405,18 +445,18 @@ export default function TripSpotlight({
               <p className="tsl-kicker">Fill the day</p>
               <div className="tsl-day-head">
                 <button type="button" aria-label="Previous day" disabled={dayIndex === 0} onClick={() => changeDay(dayIndex - 1)}>
-                  ‹
+                  <ChevronIcon dir="left" />
                 </button>
                 <span>
                   <b>Day {dayIndex + 1}</b> {date ? `· ${weekdayName(date)}` : ""}
                 </span>
                 <button type="button" aria-label="Next day" disabled={dayIndex >= itinerary.days.length - 1} onClick={() => changeDay(dayIndex + 1)}>
-                  ›
+                  <ChevronIcon dir="right" />
                 </button>
               </div>
             </div>
             <button type="button" className="tsl-x" onClick={close} aria-label="Close search" title="Close (Esc)">
-              ×
+              <CrossIcon />
             </button>
           </div>
           <div className="tsl-track" role="group" aria-label={`Day ${dayIndex + 1}, 9 AM to 10 PM`}>
@@ -465,7 +505,7 @@ export default function TripSpotlight({
           {gap && (
             <button type="button" className="tsl-token is-gap" onClick={() => setGapStart(null)} aria-label="Search any time of the day">
               {formatClock(gap.start)} gap
-              <span aria-hidden="true">×</span>
+              <CrossIcon />
             </button>
           )}
           {categories.map((c) => (
@@ -479,7 +519,7 @@ export default function TripSpotlight({
             >
               <i className="tsl-swatch" />
               {CHIP_LABELS[c]}
-              <span aria-hidden="true">×</span>
+              <CrossIcon />
             </button>
           ))}
           <input
@@ -545,7 +585,7 @@ export default function TripSpotlight({
                         {entry}
                       </button>
                       <button type="button" className="tsl-rm" aria-label={`Remove "${entry}" from recent searches`} onClick={() => setHistory(forgetSearch(entry))}>
-                        ×
+                        <CrossIcon />
                       </button>
                     </span>
                   ))}
@@ -715,6 +755,24 @@ function Detail({
         </a>
       )}
     </div>
+  );
+}
+
+/** The sheet's small marks, drawn as the board's icons are (inline SVG, stroked at the type's
+ *  colour, sized in em so each tracks the step it sits in) rather than typed as ‹ › ×. */
+function ChevronIcon({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true">
+      <path d={dir === "left" ? "M10 3.5L5.5 8l4.5 4.5" : "M6 3.5L10.5 8 6 12.5"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CrossIcon() {
+  return (
+    <svg className="tsl-cross" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true">
+      <path d="M2.7 2.7l10.6 10.6M13.3 2.7L2.7 13.3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   );
 }
 

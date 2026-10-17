@@ -87,8 +87,8 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
           </div>
 
           <div className="py-10 lg:py-[22svh]">
-            {/* The sky behind it: it sticks over the beats scrolling under it, and without a ground they read through its labels. Its box is unchanged: the ground is a background only. */}
-            <ol className="pl-ticks sticky top-8 z-10 mb-10 hidden grid-cols-5 gap-1.5 lg:grid" style={{ backgroundColor: sky.bg }} aria-hidden>
+            {/* The sky behind it: it sticks over the beats scrolling under it, and without a ground they read through its labels. The ground runs from the top of the screen to 12px under the labels (pt-8 with -mt-8, pb-3 out of the old mb-10), so a beat's label and heading pass under it rather than showing in the 32px band above the ticks; where the ticks sit at rest is unchanged. */}
+            <ol className="pl-ticks sticky top-0 z-10 -mt-8 mb-7 hidden grid-cols-5 gap-1.5 pb-3 pt-8 lg:grid" style={{ backgroundColor: sky.bg }} aria-hidden>
               {PETRA_BEATS.map((b, i) => (
                 <li key={b.stop}>
                   <span className="pl-tick block h-[2px]" style={{ backgroundColor: i <= active ? sky.fg : sky.rule }} />

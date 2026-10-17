@@ -103,7 +103,7 @@
 .tb-meta {
   margin: 0 0 0.15em;
   flex-shrink: 0;
-  font-size: 0.68em;
+  font-size: max(0.6875rem, 0.68em);
   font-weight: 600;
   line-height: 1.35;
   text-align: right;
@@ -1130,5 +1130,34 @@
   .tm.trip-board,
   .tm.tb-shut {
     animation: none;
+  }
+}
+
+/* On touch, the board's small controls answer a 44px press without changing how they look: a
+   transparent box centred on each, at least 44px each way (the handle is already positioned). Where
+   two sit closer than that, the later one takes the overlap, which is the one drawn on top. */
+@media (pointer: coarse) {
+  .tb-play,
+  .tb-share,
+  .tb-ibtn,
+  .tb-draft button,
+  .tb-tools button,
+  .tb-alert button {
+    position: relative;
+  }
+  .tb-grab::after,
+  .tb-play::after,
+  .tb-share::after,
+  .tb-ibtn::after,
+  .tb-draft button::after,
+  .tb-tools button::after,
+  .tb-alert button::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    translate: -50% -50%;
   }
 }

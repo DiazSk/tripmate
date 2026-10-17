@@ -1272,7 +1272,11 @@ grammar is drawn with lines and circles, not silhouette.
 - **Do** keep targets at 44px, and reach it with `min-h-11` plus horizontal padding rather than by
   growing type. Where the layout genuinely cannot — the floating marker cards are map labels pinned to
   world coordinates — the affordance has a 44px equivalent elsewhere, and those cards are `aria-hidden`
-  with `tabIndex={-1}` because they duplicate the panel's focusable rows.
+  with `tabIndex={-1}` because they duplicate the panel's focusable rows. Where a canvas draws a
+  control smaller than 44px (the trip board's tools, the map search's chips and gaps), the press
+  reaches 44px on a coarse pointer through a transparent `::after` centred on it, at least 44px each
+  way (`@media (pointer: coarse)` at the foot of `TripBoard.css` and `TripSpotlight.css`), so the
+  drawn size stays the canvas's.
 - **Do** keep any field the user types into at 16px, including the small "Actual" spend inputs.
 - **Do** call `resetToHome()` on mount on every route that shows the globe but doesn't itself fly the
   camera anywhere specific. The globe never unmounts, so a flight from any prior route survives until
@@ -1368,7 +1372,8 @@ screens, the trip map framing a hill town off screen) are tracked in
 1. ~~**Muted text below AA on light surfaces.**~~ Fixed: stone as text is `--wd-stone-text`, ember is
    `#a64c09`, and the spotlight's category counts are ember rather than signal.
 2. ~~**Labels under the 11px floor.**~~ Fixed: `.tb-label`, `.tb-day-when`, the leg tags and the budget unit
-   are `max(0.6875rem, 0.6875em)`, 11px at the smallest base; `src/lib/contrast.test.mjs` fails on a bare em below 0.786.
+   are `max(0.6875rem, 0.6875em)`, 11px at the smallest base, and the map search's and the drawer's
+   labels follow (2026-10-17); `src/lib/contrast.test.mjs` fails on a bare em below 0.786.
 3. **Faces named by family.** The time picker asks for `'Cormorant Garamond'` and `'Oswald'` by name
    (`PlanningFlow.css` `.tmp-read input`, `.tmp-k`); `next/font` registers neither, so they render in
    Georgia and Arial Narrow.
