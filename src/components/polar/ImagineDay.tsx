@@ -43,11 +43,11 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
     // One id over both bands, so the navbar's "A day in Petra" stays lit through the whole story.
     <div id="day">
       <section className="bg-white" data-nav-theme="light">
-        <div className="mx-auto grid max-w-[1440px] gap-8 px-4 pb-16 pt-28 md:grid-cols-12 md:pb-24 md:pl-8 md:pr-20 md:pt-40">
-          <p className="pl-eyebrow text-[var(--signal-text)] md:col-span-3" data-reveal>
+        <div className="mx-auto grid max-w-[1440px] gap-8 px-4 pb-16 pt-28 md:pb-24 lg:grid-cols-12 md:pl-8 md:pr-20 md:pt-40">
+          <p className="pl-eyebrow text-[var(--signal-text)] lg:col-span-3" data-reveal>
             Picture a day
           </p>
-          <div className="md:col-span-9">
+          <div className="lg:col-span-9">
             <h2 className="pl-display max-w-[16ch] text-[clamp(40px,5.6vw,88px)]" data-reveal>
               What would a day here actually feel like?
             </h2>
@@ -66,8 +66,8 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
         aria-label="One day in Petra, morning to evening"
         data-nav-theme={active === LAST ? "dark" : "light"}
       >
-        <div className="mx-auto grid max-w-[1440px] gap-10 px-4 md:grid-cols-[1.08fr_.92fr] md:gap-16 md:pl-8 md:pr-20">
-          <div className="sticky top-0 hidden h-[100svh] items-center md:flex">
+        <div className="mx-auto grid max-w-[1440px] gap-10 px-4 md:pl-8 md:pr-20 lg:grid-cols-[1.08fr_.92fr] lg:gap-16">
+          <div className="sticky top-0 hidden h-[100svh] items-center lg:flex">
             <figure className="relative h-[calc(100svh-4rem)] w-full overflow-hidden rounded-[4px] bg-[var(--night)]">
               {PETRA_BEATS.map((b, i) => (
                 <Image key={b.stop} src={photo(b.photo)} alt="" fill sizes="55vw" className={`pl-frame-img object-cover ${i === active ? "is-on" : ""}`} />
@@ -86,8 +86,9 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
             </figure>
           </div>
 
-          <div className="py-10 md:py-[22svh]">
-            <ol className="sticky top-8 z-10 mb-10 hidden grid-cols-5 gap-1.5 md:grid" aria-hidden>
+          <div className="py-10 lg:py-[22svh]">
+            {/* The sky behind it: it sticks over the beats scrolling under it, and without a ground they read through its labels. Its box is unchanged: the ground is a background only. */}
+            <ol className="pl-ticks sticky top-8 z-10 mb-10 hidden grid-cols-5 gap-1.5 lg:grid" style={{ backgroundColor: sky.bg }} aria-hidden>
               {PETRA_BEATS.map((b, i) => (
                 <li key={b.stop}>
                   <span className="pl-tick block h-[2px]" style={{ backgroundColor: i <= active ? sky.fg : sky.rule }} />
@@ -104,9 +105,9 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
                   refs.current[i] = el;
                 }}
                 data-i={i}
-                className={`pl-beat flex flex-col justify-center py-10 md:min-h-[78svh] ${i === active ? "is-on" : ""}`}
+                className={`pl-beat flex flex-col justify-center py-10 lg:min-h-[78svh] ${i === active ? "is-on" : ""}`}
               >
-                <div className="relative mb-6 aspect-[4/5] w-full overflow-hidden rounded-[4px] md:hidden">
+                <div className="relative mb-6 aspect-[4/5] w-full overflow-hidden rounded-[4px] lg:hidden">
                   <Image src={photo(b.photo)} alt="" fill sizes="100vw" className="object-cover" />
                 </div>
                 <p className="pl-label text-[14px]" style={{ color: sky.fg2 }}>

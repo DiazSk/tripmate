@@ -92,7 +92,7 @@
 [data-reveal].is-in { opacity: 1; transform: none; }
 
 /* ---- the day ---- */
-.pl-sky { transition: background-color 1400ms var(--ease), color 1400ms var(--ease); }
+.pl-sky, .pl-ticks { transition: background-color 1400ms var(--ease), color 1400ms var(--ease); }
 .pl-frame-img {
   opacity: 0;
   transform: scale(1.07);
@@ -100,7 +100,7 @@
 }
 .pl-frame-img.is-on { opacity: 1; transform: scale(1); }
 .pl-beat { transition: opacity 700ms var(--ease); }
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .pl-beat { opacity: 0.32; }
   .pl-beat.is-on { opacity: 1; }
 }

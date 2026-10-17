@@ -142,6 +142,9 @@ function scan({ checkMonuments }) {
     // they are checked in the settled first and last positions and skipped in the steps between.
     if (!checkMonuments && /monument/.test(el.className)) continue;
     const r = el.getBoundingClientRect();
+    // A monument entirely off-screen is judged by nobody: at scroll 0 the footer's still sits 45%
+    // below its section (the scrub's start), and it is the settled last position that counts.
+    if (/monument/.test(el.className) && (r.bottom <= 0 || r.top >= innerHeight)) continue;
     for (const a of clippers(el)) {
       if (scrolls(a)) break;
       if (!/(hidden|clip)/.test(getComputedStyle(a).overflowY)) continue;

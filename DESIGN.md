@@ -88,11 +88,11 @@ typography:
     note: "`--tracking-*` in globals.css. Polar's uppercase labels still carry their own literals (0.12–0.175em, see Open Items), the condensed monuments run slightly negative (-0.005 / -0.01em), and map labels over imagery keep their own legibility values."
   monument:
     fontFamily: "Oswald, Arial Narrow, Arial, sans-serif"
-    fontSize: "clamp(5.5em, 21vw, 20em)"
+    fontSize: "clamp(5.5em, min(21vw, 37svh), 20em)"
     fontWeight: 400
     lineHeight: 1
     letterSpacing: "-0.005em"
-    note: "`.tm-monument` (the landing hero's place name) and `.tm-fb-monument` (22.5vw, the closing TRIPMATE). Always uppercase. Line height 1 with no negative margin, so Oswald's baseline sits ~0.05em above the box and an overflow-hidden parent never crops the word. The planner's and the writing screen's monuments are smaller cuts of the same rule."
+    note: "`.tm-monument` (the landing hero's place name) and `.tm-fb-monument` (`min(22.5vw, 37svh)`, the closing TRIPMATE). Always uppercase. Line height 1 with no negative margin, so Oswald's baseline sits ~0.05em above the box and an overflow-hidden parent never crops the word. The planner's and the writing screen's monuments are smaller cuts of the same rule."
   display:
     fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
     fontSize: "clamp(2.4em, 5.2vw, 3.75em)"
@@ -434,7 +434,7 @@ the family names, so a rule that asks for `'Oswald'` by name silently gets Arial
 
 ### Hierarchy
 Every Polar size is an em of `{typography.polar-base}` — `clamp(14px, 1.111vw, 18px)`, 16px at 1440.
-- **Monument** (Oswald 400, `clamp(5.5em, 21vw, 20em)`, line-height 1, uppercase): the place name
+- **Monument** (Oswald 400, `clamp(5.5em, min(21vw, 37svh), 20em)`, line-height 1, uppercase): the place name
   across the landing hero; TRIPMATE closing the page; smaller cuts on the planner and writing screen.
 - **Display** (Cormorant 400, `clamp(2.4em, 5.2vw, 3.75em)`, line-height 1, uppercase): section titles
   and mastheads; larger cuts close the landing and open the planner.
@@ -644,8 +644,8 @@ below `sm`; the 2026-10-16 ruling is that it stays visible on phones, as the des
 ### The Monument (signature)
 A place's name set in Oswald across the full width of its photograph — PETRA on the landing hero,
 TRIPMATE closing the page, the destination on the planner and the writing screen. Uppercase, line
-height 1, sized by the viewport; it rises and fades in once (1.4s) and never loops. It is a picture
-of a word; on the landing hero it is currently also the page's only `h1`, which changes as the hero rotates (Open Items).
+height 1, sized by the viewport's width and capped by its height; it rises and fades in once (1.4s) and never loops. It is a picture
+of a word, so it is `aria-hidden`; the landing's one `h1` is a stable visually-hidden line in the hero.
 
 ### The Night Map on the landing (signature)
 `PlanGlobe` — a MapLibre map in the night style, cyan route over dark ground, flying to the sample
@@ -1380,8 +1380,8 @@ screens, the trip map framing a hill town off screen) are tracked in
    them as off the ramp. Fold them onto `--wd-base` ems rather than widening the ramp to fit them.
 6. **The mark's stop is still Kiln jade** (`#28b981` in `LogoMark.tsx`), the one Kiln colour left in the
    interface.
-7. **The landing's only `h1` rotates.** The hero's heading is the place name, remounted every six
-   seconds, so a screen reader hears the page heading change; the ghost CTA keeps naming Petra.
+7. ~~**The landing's only `h1` rotates.**~~ Fixed: the hero carries one stable visually-hidden `h1`,
+   the rotating place name is `aria-hidden`, and the ghost CTA names the destination on screen.
 8. **Breakpoints are not shared** (see Layout).
 9. **Radius drift on the older glass surfaces.** `.glass-itinerary` and the confirm dialog keep 16px
    (`{rounded.panel}`) from before Polar; recorded so the frontmatter tells the truth, not as doctrine.

@@ -160,6 +160,8 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           onFocus={() => setHeroPaused(true)}
           onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setHeroPaused(false)}
         >
+          {/* The page's one heading, stable. The destination rotating below is decoration, not the title. */}
+          <h1 className="sr-only">TripMate — plan a day you can imagine</h1>
           <div className="tm-hero-media" aria-hidden="true">
             {DESTS.map((d) => (
               <Image key={d.id} src={d.img} alt="" fill sizes="100vw" priority={d.id === "petra"} className={`tm-hero-img${d.id === destId ? " is-on" : ""}`} />
@@ -172,7 +174,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
             <p className="tm-hero-lead">Be there before the day arrives. Imagine it first and TripMate plans the rest.</p>
             {/* No "Plan a trip" here: the navbar carries the page's one, above the fold. */}
             <button type="button" className="tm-ghost" onClick={() => scrollToTarget(document.getElementById("day"))}>
-              Picture a day in Petra <span aria-hidden="true">↓</span>
+              Picture a day in {dest.word} <span aria-hidden="true">↓</span>
             </button>
           </div>
 
@@ -188,9 +190,9 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           </div>
 
           <div className="tm-monument-wrap">
-            <h1 className="tm-monument" key={dest.id}>
+            <p className="tm-monument" key={dest.id} aria-hidden="true">
               {dest.word}
-            </h1>
+            </p>
           </div>
         </section>
 
