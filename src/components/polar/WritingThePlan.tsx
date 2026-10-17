@@ -10,6 +10,7 @@ import { STEP_GROUPS, TYPICAL_WAIT_PHRASE, generationProgress, isStepTerminal, s
 import { useMapCamera } from "@/lib/mapCamera";
 import { dayColorToken } from "@/lib/mapRoute";
 import { meriForGeneration } from "@/lib/meri";
+import { dayOfLabel, daysLabel, tripLength, writtenDays } from "@/lib/planProgress";
 import { monumentEms } from "@/lib/monumentFit";
 import type { Itinerary, RawFetch } from "@/lib/types";
 import { useAnchoredToMap } from "@/lib/useAnchoredToMap";
@@ -151,11 +152,11 @@ export default function WritingThePlan({
     };
   }, [setViewPadding]);
 
-  const days = draft?.days.length ? draft.days : Array.from({ length: Math.max(tripDays ?? 1, 1) }, () => null);
-  let latestDay = -1;
-  days.forEach((d, i) => {
-    if (d?.stops.length) latestDay = i;
-  });
+  // The trip's length is its dates', not however many days the stream has reached: rows for the days
+  // still to come are ghosts, so the list and "Day k of N" agree with the header from the first frame.
+  const total = tripLength(tripDays, draft?.days.length ?? 0);
+  const days = Array.from({ length: total }, (_, i) => draft?.days[i] ?? null);
+  const latestDay = writtenDays(draft?.days) - 1;
   const latest = latestDay >= 0 ? draft!.days[latestDay].stops[draft!.days[latestDay].stops.length - 1] : null;
   const point = latest ? { lat: latest.lat, lng: latest.lng } : null;
   useAnchoredToMap(card, rendererRef, point, ready, clearLeft);
@@ -163,11 +164,11 @@ export default function WritingThePlan({
   const weather = rawFetch?.weather.available ? rawFetch.weather.days : [];
   const calendar = rawFetch?.dateContext.days ?? [];
   const forecast = weather.slice(0, 3).map((d, i) => `${dayLabel(calendar[i]?.date ?? d.date)} ${Math.round(d.tempMinC)} to ${Math.round(d.tempMaxC)}º`);
-  const summary = [dateRange, tripDays ? `${tripDays} ${tripDays === 1 ? "day" : "days"}` : null, tierName, budget > 0 ? formatMoney(budget) : null].filter(Boolean).join(" · ");
+  const summary = [dateRange, tripDays ? daysLabel(tripDays) : null, tierName, budget > 0 ? formatMoney(budget) : null].filter(Boolean).join(" · ");
   const now = complete
     ? "Every day written"
     : latest
-      ? `Day ${latestDay + 1} of ${days.length}${days[latestDay]?.theme ? ` · ${days[latestDay]!.theme}` : ""}`
+      ? `${dayOfLabel(latestDay + 1, total)}${days[latestDay]?.theme ? ` · ${days[latestDay]!.theme}` : ""}`
       : draft?.days.some((d) => d.theme)
         ? "The days are sketched"
         : (active?.label ?? "Starting");

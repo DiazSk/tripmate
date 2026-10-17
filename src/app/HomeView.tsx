@@ -27,6 +27,7 @@ import { PlayIcon } from "@/components/icons";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
+import { capsuleDays } from "@/lib/planProgress";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, perPersonBudget, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
   AccessibilityNeeds,
@@ -1874,10 +1875,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
             destination
               ? {
                   title: destination,
-                  subtitle: shownItinerary?.days.length
-                    ? `${shownItinerary.days.length} ${shownItinerary.days.length === 1 ? "day" : "days"}`
-                    : undefined,
-                  step: shownItinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
+                  ...capsuleDays({ days: shownItinerary?.days, streaming: streamingPlan, tripDays: days, activeDayIndex }),
                 }
               : undefined
           }
