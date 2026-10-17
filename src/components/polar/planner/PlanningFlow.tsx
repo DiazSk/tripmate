@@ -401,7 +401,7 @@ function More({ title, hint, open: startOpen = false, children }: { title: strin
           +
         </span>
       </button>
-      <div className={`pp-reveal ${open ? "is-open" : ""}`}>
+      <div className={`pp-reveal ${open ? "is-open" : ""}`} inert={!open}>
         <div>
           <div className="grid gap-4 pt-5">{children}</div>
         </div>
@@ -864,7 +864,7 @@ function Group({ m }: { m: PlannerModel }) {
             </button>
           ))}
         </div>
-        <div className={`pp-reveal ${m.group === "other" ? "is-open" : ""}`}>
+        <div className={`pp-reveal ${m.group === "other" ? "is-open" : ""}`} inert={m.group !== "other"}>
           <div>
             <div className="pt-2">
               <Field label="Tell us a little">

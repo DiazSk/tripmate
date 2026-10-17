@@ -365,7 +365,7 @@
   grid-row: span 2;
   font-family: var(--wd-font-condensed);
   font-size: 1.05em;
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
   font-variant-numeric: tabular-nums;
 }
 .pb-index-t {

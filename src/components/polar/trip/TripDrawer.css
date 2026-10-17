@@ -439,7 +439,7 @@ html[data-story-mode="true"] .tm.trip-drawer {
   color: var(--wd-ink);
 }
 .td-compose textarea::placeholder {
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
 }
 .td-send {
   display: grid;
@@ -532,7 +532,7 @@ html[data-story-mode="true"] .tm.trip-drawer {
   place-items: center;
   cursor: grab;
   touch-action: none;
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
 }
 .td-grip:hover {
   color: var(--wd-ink);

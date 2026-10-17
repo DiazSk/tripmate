@@ -1,0 +1,59 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const css = readFileSync("src/components/polar/PolarLanding.css", "utf8");
+const token = (name) => {
+  const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
+  assert.ok(m, `--${name} is not defined in PolarLanding.css`);
+  return m[1];
+};
+const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const lum = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const ratio = (a, b) => {
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+test("muted and action-as-text colours reach AA (4.5:1) on both light surfaces", () => {
+  for (const fg of ["wd-stone-text", "wd-ember"]) {
+    for (const bg of ["wd-paper", "wd-ice"]) {
+      const r = ratio(token(fg), token(bg));
+      assert.ok(r >= 4.5, `--${fg} on --${bg} is ${r.toFixed(2)}:1`);
+    }
+  }
+});
+
+test("--wd-stone is for rules and fills, never text", () => {
+  const walk = (dir) =>
+    readdirSync(dir).flatMap((f) => {
+      const p = join(dir, f);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith(".css") ? [p] : [];
+    });
+  const offenders = [];
+  for (const file of [...walk("src/components/polar"), ...walk("src/app/offline")]) {
+    readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+      if (/(^|[\s;{])color:\s*var\(--wd-stone\)/.test(line)) offenders.push(`${file}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test("the trip board's labels and footnotes never render under the 11px floor", () => {
+  const board = readFileSync("src/components/polar/trip/TripBoard.css", "utf8");
+  // Inside .tm the em is --wd-base, which bottoms out at 14px: a bare em below 11/14 is under the floor on
+  // phones and small laptops. `max(0.6875rem, ...)` keeps the scaling above the floor and guarantees 11px.
+  for (const sel of [".tb-label", ".tb-day-when", ".tb-leg em", ".tb-budget em", ".tb-total p"]) {
+    const esc = sel.replace(/[.\s]/g, (c) => (c === "." ? "\\." : "\\s+"));
+    const m = board.match(new RegExp(`(?:^|\\n)${esc}\\s*\\{[^}]*?font-size:\\s*([^;]+);`));
+    assert.ok(m, `${sel} has no font-size`);
+    const v = m[1].trim();
+    const floor = v.match(/^max\(\s*([\d.]+)rem\b/);
+    const px = floor ? parseFloat(floor[1]) * 16 : v.endsWith("rem") ? parseFloat(v) * 16 : v.endsWith("em") ? parseFloat(v) * 14 : v.endsWith("px") ? parseFloat(v) : NaN;
+    assert.ok(px >= 11, `${sel} is "${v}": ${px}px at a 14px base`);
+  }
+});

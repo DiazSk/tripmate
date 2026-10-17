@@ -126,7 +126,7 @@
   outline: none;
 }
 .tsl-field input::placeholder {
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
 }
 .tsl-token {
   display: inline-flex;
@@ -251,7 +251,7 @@
   font-family: var(--wd-font-condensed);
   font-size: 0.66rem;
   letter-spacing: 0.04em;
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
   white-space: nowrap;
 }
 .tsl-hour:first-child {
@@ -330,7 +330,7 @@
 }
 .tsl-cats button em {
   font-style: normal;
-  color: var(--wd-signal);
+  color: var(--wd-ember);
 }
 .tm .tsl-cats button:hover {
   color: var(--wd-ink);
@@ -494,7 +494,7 @@
 .tm .tsl-rm {
   width: 1.9rem;
   height: 2rem;
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
 }
 .tm .tsl-rm:hover {
   color: var(--wd-ink);

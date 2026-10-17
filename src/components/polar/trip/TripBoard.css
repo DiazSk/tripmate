@@ -185,7 +185,7 @@
   opacity: 0.6;
 }
 .tb-label {
-  font-size: 0.66em;
+  font-size: max(0.6875rem, 0.6875em);
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -213,7 +213,7 @@
 .tb-budget em {
   font-family: var(--wd-font-sans);
   font-style: normal;
-  font-size: 0.62em;
+  font-size: max(0.6875rem, 0.6875em);
   color: var(--wd-charcoal);
 }
 /* One span a day, each its share of the budget; the room left is the hatch behind them. */
@@ -276,7 +276,7 @@
   line-height: 1;
 }
 .tb-day-when {
-  font-size: 0.66em;
+  font-size: max(0.6875rem, 0.6875em);
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -568,7 +568,7 @@
 }
 .tb-leg em {
   font-style: normal;
-  font-size: 0.66em;
+  font-size: max(0.6875rem, 0.6875em);
   font-weight: 600;
   text-align: center;
   line-height: 1.2;
@@ -654,9 +654,9 @@
 }
 .tb-total p {
   margin: 0;
-  font-size: 0.66em;
+  font-size: max(0.6875rem, 0.6875em);
   line-height: 1.4;
-  color: var(--wd-stone);
+  color: var(--wd-stone-text);
 }
 
 /* Folded, beside a drawer: the trip's name and the days in a row */

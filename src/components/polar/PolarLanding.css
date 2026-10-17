@@ -9,12 +9,13 @@
   --wd-ink: #1f2a44;
   --wd-ash: #2c374b;
   --wd-charcoal: #535353;
-  --wd-stone: #a4a29c;
+  --wd-stone: #a4a29c; /* rules, borders, fills only */
+  --wd-stone-text: #6e6c66; /* stone as text: 4.65:1 on paper, 5.25:1 on ice */
   --wd-deep: #0e1118;
   --wd-night: #090b10;
   --wd-signal: #ff7e15;
   --wd-signal-hover: #ff9440;
-  --wd-ember: #b4530a;
+  --wd-ember: #a64c09; /* light-surface text colour only (5.08:1 on paper, = --accent-text); never on night */
   --wd-route: #6af0ff;
   --wd-alert-text: #d10f0f;
   --wd-veil-05: rgba(31, 42, 68, 0.05);

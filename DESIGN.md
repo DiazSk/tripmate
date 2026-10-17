@@ -59,7 +59,8 @@ colors:
   ash: "#2c374b"
   charcoal: "#535353"
   stone: "#a4a29c"
-  ember: "#b4530a"
+  stone-text: "#6e6c66"
+  ember: "#a64c09"
   route: "#6af0ff"
   alert-text: "#d10f0f"
   accent-text-light: "#a64c09"
@@ -148,7 +149,7 @@ typography:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.6875rem"
     letterSpacing: "0.16em"
-    note: "Uppercase. The label floor: 11px. `.tb-label` and `.tb-day-when` sit at 0.66em today, under it (Open Items)."
+    note: "Uppercase. The label floor: 11px. `.tb-label`, `.tb-day-when`, the leg tags, the budget unit and the cost footnote are `max(0.6875rem, 0.6875em)`: it scales with the base above the floor and never renders under 11px (a bare em bottoms out near 9.6px on phones)."
   coord:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75em"
@@ -365,8 +366,8 @@ Night and ice, ink between them, one orange that acts, and a cyan that belongs t
 
 ### Secondary
 - **Ember** (`{colors.ember}`, `--wd-ember`): small type on light surfaces that belongs to an action or
-  a note of it — eyebrows on the trip drawer, the sign-in pass, "clears" on the memories wall. 5.02:1
-  on ice, but 4.45:1 on paper, which fails AA (Open Items); keep it on ice.
+  a note of it — eyebrows on the trip drawer, the sign-in pass, "clears" on the memories wall. 5.08:1
+  on paper and 5.74:1 on ice, the same value as `--accent-text` (it was `#b4530a`, 4.45:1 on paper).
 - **Route** (`{colors.route}`, `--wd-route`): the map's own colour — routes on the night map, the
   writing screen's live stop, the planner's pace bars, positive tags on night (14.55:1). Never a
   button, never interface chrome.
@@ -392,7 +393,10 @@ Night and ice, ink between them, one orange that acts, and a cyan that belongs t
 - **Ash** (`{colors.ash}`) and **Charcoal** (`{colors.charcoal}`): secondary text on light (charcoal
   6.81:1 on paper).
 - **Night text 2** (`{colors.night-text-2}`, `--muted` on night): secondary text on dark (8.64:1).
-- **Stone** (`{colors.stone}`): rules, disabled marks, fills. **Not text**: 2.26:1 on paper.
+- **Stone** (`{colors.stone}`): rules, disabled marks, fills. **Not text**: 2.26:1 on paper. Stone as
+  text is **Stone text** (`{colors.stone-text}`, `--wd-stone-text`): 4.65:1 on paper, 5.25:1 on ice, for
+  placeholders, hour labels, the cost footnote, index numbers, remove controls and drag grips.
+  `src/lib/contrast.test.mjs` fails if `color: var(--wd-stone)` returns.
 - **Lines**: `{colors.frost-20}` on night; `{colors.rule}` and `{colors.veil-15}` on light;
   `{colors.gridline}` for the landing's 12-column grid; the veils (`{colors.veil-05}` …
   `{colors.veil-50}`) are ink at an alpha for quiet fills and scrims on light.
@@ -414,7 +418,7 @@ total, not a selected tab, not a decoration. If it is orange and you cannot pres
 does not borrow them, so a coloured line always means "a way through the world".
 
 **The No-Grey-Text-On-Paper Rule.** Text on a light surface is ink, ash, charcoal, or a role colour that
-measures 4.5:1 on that exact surface. Stone, signal and ember-on-paper do not.
+measures 4.5:1 on that exact surface. Stone and signal do not (use stone-text and ember).
 
 ## Typography
 
@@ -1361,13 +1365,10 @@ layout and performance findings of the 2026-10-16 evaluation (sliced text, stack
 screens, the trip map framing a hill town off screen) are tracked in
 `docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`, not repeated here.
 
-1. **Muted text below AA on light surfaces.** Stone as text: `.tb-total p` (2.26:1 on paper), the
-   spotlight's placeholder, hour labels and remove control, the drawer's placeholder and grip, the
-   profile's index numbers. Signal as text on ice in the spotlight's category counts (2.55:1). Ember on
-   paper (4.45:1) on the memories wall's "clears"; `--wd-ember` was never deepened the way `--accent-text`
-   was (`#a64c09`).
-2. **Labels under the 11px floor.** `.tb-label`, `.tb-day-when` and the walk tags render at 0.66em
-   (10.8px at 1470 wide).
+1. ~~**Muted text below AA on light surfaces.**~~ Fixed: stone as text is `--wd-stone-text`, ember is
+   `#a64c09`, and the spotlight's category counts are ember rather than signal.
+2. ~~**Labels under the 11px floor.**~~ Fixed: `.tb-label`, `.tb-day-when`, the leg tags and the budget unit
+   are `max(0.6875rem, 0.6875em)`, 11px at the smallest base; `src/lib/contrast.test.mjs` fails on a bare em below 0.786.
 3. **Faces named by family.** The time picker asks for `'Cormorant Garamond'` and `'Oswald'` by name
    (`PlanningFlow.css` `.tmp-read input`, `.tmp-k`); `next/font` registers neither, so they render in
    Georgia and Arial Narrow.

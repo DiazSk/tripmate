@@ -131,13 +131,28 @@ export default function PlanGlobe({
     if (reduced()) m.easeTo({ ...opts, duration: 0 });
     else m.flyTo({ ...opts, duration: ms, curve: 1.5, essential: false });
   };
+  // A pin the camera has carried to (or past) the stage's edge is hidden, not left cut in half: at street
+  // zoom the other stops are off the map, and half a numbered disc on its border reads as a mistake.
+  // visibility, not display, so the pin keeps its box and returns as the camera does.
+  const cullPins = () => {
+    const m = map.current;
+    if (!m) return;
+    const c = m.getCanvas().getBoundingClientRect();
+    markers.current.forEach(({ el }) => {
+      const r = el.getBoundingClientRect();
+      el.style.visibility = r.left < c.left || r.right > c.right || r.top < c.top || r.bottom > c.bottom ? "hidden" : "";
+    });
+  };
   const overview = (ms = 3600) => {
     const m = map.current;
     const ml = engineRef.current;
     if (!m || !ml) return;
     const b = new ml.LngLatBounds();
     stops.forEach((s) => b.extend(s.at));
-    const cam = m.cameraForBounds(b, wide() ? { padding: { top: 110, bottom: 110, left: panelW() + 60, right: 120 }, maxZoom: 15 } : { padding: 50, maxZoom: 15 });
+    // The flight ends turned -18 degrees, and a box fitted unturned loses its corners past the edge
+    // once it is: fit the turned one, so the nearest and farthest pins keep their padding.
+    const fit = { bearing: -18, maxZoom: 15 };
+    const cam = m.cameraForBounds(b, wide() ? { ...fit, padding: { top: 110, bottom: 110, left: panelW() + 60, right: 120 } } : { ...fit, padding: 50 });
     if (cam) fly({ ...cam, pitch: 42, bearing: -18 }, ms);
   };
   const toPetra = () => {
@@ -166,8 +181,16 @@ export default function PlanGlobe({
       .then((ml) => {
         if (cancelled || !host.current) return;
         engineRef.current = ml;
-        const m = new ml.Map({ container: host.current, style: STYLE_URL, ...globeView(), attributionControl: { compact: true }, cooperativeGestures: true, maxPitch: 70 });
+        const m = new ml.Map({ container: host.current, style: STYLE_URL, ...globeView(), attributionControl: { compact: true }, cooperativeGestures: true, keyboard: false, maxPitch: 70 });
+        // The map is a picture of the plan (its canvas container is aria-hidden; the day card beside it carries every
+        // stop as a real row and Play), so nothing on it is a Tab stop. MapLibre makes the canvas one.
+        m.getCanvas().tabIndex = -1;
+        // Hide the picture, not the host: the attribution control is licence text a keyboard user may open.
+        m.getCanvasContainer().setAttribute("aria-hidden", "true");
         map.current = m;
+        // `render`, not `move`: the markers position themselves on `move`, so a handler there can read the
+        // previous frame. Maplibre only renders when something changed, so this costs nothing at rest.
+        m.on("render", cullPins);
         m.on("style.load", () => {
           try {
             m.setProjection({ type: "globe" });
@@ -199,6 +222,7 @@ export default function PlanGlobe({
           const el = document.createElement("button");
           el.type = "button";
           el.className = "nm-city-pin";
+          el.tabIndex = -1;
           el.setAttribute("aria-label", "Fly to Petra");
           el.innerHTML = '<span class="nm-city-dot"></span><span class="nm-city-name">Petra</span>';
           el.addEventListener("click", (e) => {
@@ -272,6 +296,7 @@ export default function PlanGlobe({
       const el = document.createElement("button");
       el.type = "button";
       el.className = "nm-stop-pin";
+      el.tabIndex = -1;
       el.setAttribute("aria-label", `${s.time} ${s.title}`);
       const n = document.createElement("span");
       n.className = "nm-stop-n";
@@ -290,6 +315,7 @@ export default function PlanGlobe({
       });
       return { id: s.id, el, m: new ml.Marker({ element: el, anchor: "center", offset: nudge(stops, i) }).setLngLat(s.at).addTo(m) };
     });
+    cullPins();
     if (arrived) overview(1600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, stops]);
@@ -345,7 +371,7 @@ export default function PlanGlobe({
       <div className="nm-stage">
         {/* Positioned inline: MapLibre's own `.maplibregl-map { position: relative }` lands on this
             element and outranks a class, which collapses the map to zero height. */}
-        <div ref={host} className={`nm-canvas${engine === "live" ? " is-live" : ""}`} style={{ position: "absolute", inset: 0 }} aria-hidden="true" />
+        <div ref={host} className={`nm-canvas${engine === "live" ? " is-live" : ""}`} style={{ position: "absolute", inset: 0 }} />
         {engine === "fallback" && <FallbackRoute stops={stops} hot={hot} onHot={setHot} />}
         <div className="nm-vignette" aria-hidden="true" />
         {engine === "loading" && (

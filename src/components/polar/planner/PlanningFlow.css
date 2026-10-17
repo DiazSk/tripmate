@@ -240,6 +240,8 @@
   color: var(--wd-ink);
 }
 .pp .tm-stepper {
+  /* Never shrunk below its three columns by the label beside it: that clipped the + by a pixel or two. */
+  flex: none;
   display: grid;
   grid-template-columns: 2.9em 3em 2.9em;
   height: 2.9em;
@@ -451,12 +453,19 @@
 }
 .pp-reveal > div {
   overflow: hidden;
+  /* A closed fold is not drawn, so nothing in it is reachable or read; the delay lets the close finish. */
+  visibility: hidden;
+  transition: visibility 0s 0.45s;
+}
+.pp-reveal.is-open > div {
+  visibility: visible;
+  transition-delay: 0s;
 }
 
 /* The trip, written as it is answered: the night map's panel glass */
 .pp-trip {
   position: sticky;
-  top: 1.5em;
+  top: calc(var(--nav-h) + 1.5em);
   display: grid;
   gap: 1.2em;
   padding: 1.5em;
