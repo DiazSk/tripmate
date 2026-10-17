@@ -167,7 +167,7 @@
   gap: 0.5em;
   margin: 0;
   padding: 0.35em 0.35em 0.35em 0.6em;
-  font-size: 0.72em;
+  font-size: max(0.6875rem, 0.72em);
   color: var(--wd-charcoal);
   background: var(--wd-ice);
   border-left: 2px solid var(--wd-signal);
@@ -823,7 +823,7 @@
    first one below the fold. The column scrolls; nothing in it clamps or clips. `docked-panel` (set
    by TripBoard while this applies) is what the camera aims beside and what the map's chrome below
    stands clear of. The strip, the ticket and the film's hidden board are untouched at every width. */
-@media (min-width: 961px) {
+@media (width > 960px) {
   .tm.trip-board:not(.is-strip) {
     top: calc(var(--nav-h) + 1rem);
     right: 1.25rem;
@@ -845,6 +845,9 @@
     overscroll-behavior: contain;
     border-radius: var(--wd-radius-card);
     box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.7);
+    /* globals.css gives `.docked-panel` a white thumb for the dark panels; on the ice card it is
+       invisible. */
+    scrollbar-color: var(--wd-veil-20) transparent;
   }
   /* The handle stays, white on the photo as A draws it (`.ta-grab`): it is the only way to shut the
      plan to its ticket and see the whole trip on the map, and the ticket is kept at every width. */
@@ -995,7 +998,7 @@
     left: 0.25em;
     bottom: 0.25em;
     padding: 0.1em 0.3em;
-    font-size: 0.72em;
+    font-size: max(0.6875rem, 0.72em);
   }
   .tm.trip-board:not(.is-strip) .tb-card-n {
     top: 0.25em;
@@ -1033,9 +1036,10 @@
     overflow: visible;
   }
 
-  /* 8 · The draft notice, 9 · the budget */
+  /* The draft notice, in the order it is in the DOM (right after the actions, which share order 2 so
+     Keep is read and tabbed to where it is painted), then 9 · the budget (nothing in it takes focus) */
   .tm.trip-board:not(.is-strip) .tb-draft {
-    order: 8;
+    order: 2;
     margin: 0 var(--wd-pad);
   }
   .tm.trip-board:not(.is-strip) .tb-budget {
@@ -1058,7 +1062,7 @@
   }
 }
 
-@media (max-width: 960px) {
+@media (width <= 960px) {
   .tm.trip-board {
     left: 0;
     right: 0;

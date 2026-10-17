@@ -1373,7 +1373,7 @@ screens, the trip map framing a hill town off screen) are tracked in
    `#a64c09`, and the spotlight's category counts are ember rather than signal.
 2. ~~**Labels under the 11px floor.**~~ Fixed: `.tb-label`, `.tb-day-when`, the leg tags and the budget unit
    are `max(0.6875rem, 0.6875em)`, 11px at the smallest base, and the map search's and the drawer's
-   labels follow (2026-10-17); `src/lib/contrast.test.mjs` fails on a bare em below 0.786.
+   labels follow (2026-10-17); `src/lib/contrast.test.mjs` fails on a bare em below 0.786 only for the selectors it lists, so a new label has to be added there.
 3. **Faces named by family.** The time picker asks for `'Cormorant Garamond'` and `'Oswald'` by name
    (`PlanningFlow.css` `.tmp-read input`, `.tmp-k`); `next/font` registers neither, so they render in
    Georgia and Arial Narrow.

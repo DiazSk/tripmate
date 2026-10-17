@@ -163,7 +163,7 @@ function scan({ checkMonuments }) {
 // once the nav and every element matching `selectors` are taken out, greedily: each occluder is
 // cut away on whichever side leaves the most.
 function freeMapRect(selectors) {
-  const nav = document.querySelector("nav");
+  const nav = document.querySelector(".polar-nav");
   let free = { l: 0, t: nav ? nav.offsetHeight : 0, r: innerWidth, b: innerHeight };
   const area = (f) => Math.max(0, f.r - f.l) * Math.max(0, f.b - f.t);
   for (const el of document.querySelectorAll(selectors)) {
@@ -253,7 +253,7 @@ async function checkPlanner(page, w) {
     document.querySelector(".content-overlay")?.scrollBy(0, 600);
     await new Promise((r) => setTimeout(r, 600));
     const r = document.querySelector(".pp-trip")?.getBoundingClientRect();
-    return { opened: true, trip: r && r.height ? { top: Math.round(r.top) } : null, nav: document.querySelector("nav")?.offsetHeight ?? 0 };
+    return { opened: true, trip: r && r.height ? { top: Math.round(r.top) } : null, nav: document.querySelector(".polar-nav")?.offsetHeight ?? 0 };
   });
   if (!m.opened) return [["setup", "the planner did not open (.pp-page missing)"]];
   // The sticky summary is the planner's two-column layout, from 1100px (`min-[1100px]:grid`,

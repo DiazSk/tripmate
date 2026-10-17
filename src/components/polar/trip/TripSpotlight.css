@@ -390,7 +390,7 @@
 .tsl-row.is-open {
   box-shadow: inset 0 0 0 1.5px var(--c);
 }
-.tsl-row.is-out {
+.tsl-row.is-out:not(.is-open) {
   opacity: 0.55;
 }
 /* Design 3's tile (searchKit.css `.sk-tile`), carrying the number its pin carries on the map, in the

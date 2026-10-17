@@ -57,7 +57,7 @@ const longDate = (iso: string) => {
 const city = (destination: string) => destination.split(",")[0].trim();
 
 /** Where the board becomes the column. TripView reads the same query to tell the map. */
-export const COLUMN_QUERY = "(min-width: 961px)";
+export const COLUMN_QUERY = "(width > 960px)";
 const subscribeColumn = (onChange: () => void) => {
   const mql = window.matchMedia(COLUMN_QUERY);
   mql.addEventListener("change", onChange);
@@ -314,7 +314,7 @@ export default function TripBoard({
                   // set cookies (`WMF-Uniq`, `NetworkProbeLimit`) that failed Lighthouse's
                   // third-party-cookies audit (best practices 100 -> 78) at any size, and the optimizer
                   // re-encodes the 1280px source to ~1080px WebP for this 520px box at 2x.
-                  <Image src={headPhoto} alt="" fill sizes="(max-width: 640px) 100vw, 520px" className="value-in" />
+                  <Image src={headPhoto} alt="" fill sizes="520px" className="value-in" />
                 )}
               </span>
             )}

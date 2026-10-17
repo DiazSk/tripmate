@@ -153,6 +153,8 @@ export default function TripSpotlight({
   /** The row opened to its address, hours and why, by result id. A click or ↑↓ opens it, not a
    *  hover: a row that grew under a passing pointer would move every row below it. */
   const [openId, setOpenId] = useState<string | null>(null);
+  /** An `openId` the results have since dropped opens nothing, so it must not freeze hover either. */
+  const openLive = rows.some((r) => r.place.id === openId);
 
   // The pins, numbered in the list's own order.
   useEffect(() => {
@@ -631,7 +633,7 @@ export default function TripSpotlight({
                       style={{ ["--c" as string]: searchColourFor(r.place.category) }}
                       // While a row is open the pointer passing over others leaves the selection on it,
                       // so the tag, the lit pin and the facts lookup stay with the row being read.
-                      onMouseEnter={() => !openId && highlight(r, false)}
+                      onMouseEnter={() => !openLive && highlight(r, false)}
                       onClick={(e) => {
                         // The open detail's own link and text are not a second press on the row.
                         if ((e.target as HTMLElement).closest(".tsl-detail")) return;

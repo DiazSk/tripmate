@@ -47,14 +47,14 @@ test("the trip page's labels and footnotes never render under the 11px floor", (
   // Inside .tm the em is --wd-base, which bottoms out at 14px: a bare em below 11/14 is under the floor on
   // phones and small laptops. `max(0.6875rem, ...)` keeps the scaling above the floor and guarantees 11px.
   const labels = {
-    "src/components/polar/trip/TripBoard.css": [".tb-label", ".tb-day-when", ".tb-leg em", ".tb-budget em", ".tb-total p", ".tb-meta"],
+    "src/components/polar/trip/TripBoard.css": [".tb-label", ".tb-day-when", ".tb-leg em", ".tb-budget em", ".tb-total p", ".tb-meta", ".tb-draft", ".tm.trip-board:not(.is-strip) .tb-card-time"],
     "src/components/polar/trip/TripDrawer.css": [".td-eyebrow", ".td-prov", ".td-pill"],
     "src/components/polar/trip/TripSpotlight.css": [".tsl-kicker", ".tsl-hour", ".tsl-gap span", ".tsl-h"],
   };
   for (const [file, sels] of Object.entries(labels)) for (const sel of sels) {
     const board = readFileSync(file, "utf8");
-    const esc = sel.replace(/[.\s]/g, (c) => (c === "." ? "\\." : "\\s+"));
-    const m = board.match(new RegExp(`(?:^|\\n)${esc}\\s*\\{[^}]*?font-size:\\s*([^;]+);`));
+    const esc = sel.replace(/[.\s():]/g, (c) => (/\s/.test(c) ? "\\s+" : "\\" + c));
+    const m = board.match(new RegExp(`(?:^|\\n)[ \\t]*${esc}\\s*\\{[^}]*?font-size:\\s*([^;]+);`));
     assert.ok(m, `${sel} has no font-size`);
     const v = m[1].trim();
     const floor = v.match(/^max\(\s*([\d.]+)rem\b/);
