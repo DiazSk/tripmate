@@ -167,7 +167,8 @@ export default function TripBoard({
   // The days are a row of tabs in every shape, and every shape mounts its own, scrolled to the start:
   // without this a long trip opened on its 25th day, or folded to the strip and back, showed a tab row
   // with the selected day off its end. Horizontal only, by hand, because `scrollIntoView` would also
-  // scroll the column itself up to the tabs.
+  // scroll the column itself up to the tabs. `column` too: crossing 961px lays the same tabs out the
+  // other way, and the row the selected tab sat in is not the row it sits in now.
   useEffect(() => {
     const tab = document.getElementById(`trip-day-${di}`);
     const row = tab?.closest<HTMLElement>(".tb-days");
@@ -176,7 +177,7 @@ export default function TripBoard({
     const r = row.getBoundingClientRect();
     if (t.left < r.left) row.scrollLeft -= r.left - t.left;
     else if (t.right > r.right) row.scrollLeft += t.right - r.right;
-  }, [di, shape]);
+  }, [di, shape, column]);
 
   // ── Feedback on edits, held back until there is an edit (see `ItineraryCard`'s findings) ─────
   const [asGenerated] = useState(itinerary);

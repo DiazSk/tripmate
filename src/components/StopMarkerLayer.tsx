@@ -264,7 +264,8 @@ export default function StopMarkerLayer() {
     let viewHeight = canvas?.clientHeight ?? 0;
     // The fixed nav covers the canvas's top edge, so a day badge clamped to the canvas alone tucked
     // under it at short widths. Measured with the canvas, on the same resize, for the same reason.
-    const navBottom = () => Math.max(0, (document.querySelector("nav")?.getBoundingClientRect().bottom ?? 0) - (canvas?.getBoundingClientRect().top ?? 0));
+    // `.polar-nav`, not the first `<nav>`: on `/` the landing's footer nav comes first in the DOM.
+    const navBottom = () => Math.max(0, (document.querySelector(".polar-nav")?.getBoundingClientRect().bottom ?? 0) - (canvas?.getBoundingClientRect().top ?? 0));
     let topEdge = navBottom();
     const resizeObserver = canvas
       ? new ResizeObserver(() => {

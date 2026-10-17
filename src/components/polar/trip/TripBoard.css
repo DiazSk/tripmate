@@ -1043,9 +1043,10 @@
     padding: 0 var(--wd-pad);
   }
 
-  /* The map's own chrome stands clear of the column, as of a drawer (globals.css), and the closed
-     map search centres over the map that is left rather than over the column's head — or, with a
-     drawer open, over the Map/Satellite toggle beside it. TripView sets `--trip-drawer-w` to the
+  /* The map's own chrome stands clear of the column, as of a drawer (globals.css). The closed map
+     search waits top-left (TripSpotlight.css) and only has to stop short of the Map/Satellite toggle
+     beside the column or drawer (2.25rem in from it, ~8rem wide, then a 1.25rem gap each side):
+     centred between them it was squeezed to ~173px at 961px. TripView sets `--trip-drawer-w` to the
      column's width, or the drawer's. */
   .app-shell:has(.trip-board.docked-panel) .map-engine-toggle,
   .app-shell:has(.trip-board.docked-panel) .map-controls {
@@ -1053,8 +1054,7 @@
   }
   .app-shell:has(.trip-board.docked-panel) .tm.tsl-closed,
   .app-shell:has(.trip-page.has-drawer) .tm.tsl-closed {
-    left: calc((100% - var(--trip-drawer-w, 0px) - 1.25rem) / 2);
-    width: min(32rem, calc(100% - var(--trip-drawer-w, 0px) - 1.25rem - 24rem));
+    width: min(24rem, calc(100% - var(--trip-drawer-w, 0px) - 12.75rem));
   }
 }
 

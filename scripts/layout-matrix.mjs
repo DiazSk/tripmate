@@ -358,7 +358,11 @@ async function checkTrip(page, w, h, shot) {
     const left = await page.evaluate(() => { const r = document.querySelector(".trip-board")?.getBoundingClientRect(); return r && r.width ? r.left : null; });
     if (left === null || left < w * 0.5) fails.push(["not-a-column", `.trip-board left edge ${left === null ? "missing" : Math.round(left)}px, wants >= ${w / 2}px`]);
   }
-  if (w >= 1280) {
+  // The open map search, wherever it exists (40rem and up; the zoom checkpoint asserts reflow only).
+  // Area alone never caught the defect: the old bar across the top middle hid the board, so ~59% of
+  // the screen stayed map while the bar sat on the very places the map was showing. So it is also
+  // held to its place: against the left edge, and clear of the band down the middle of the map.
+  if (w >= 640 && !(w === 735 && h === 415)) {
     await page.keyboard.press("Meta+k");
     await page.waitForTimeout(2500);
     if (!(await page.locator(".trip-spotlight").count())) {
@@ -366,9 +370,21 @@ async function checkTrip(page, w, h, shot) {
       await page.waitForTimeout(2500);
     }
     await shot("spotlight");
-    const s = await page.evaluate(() => (document.querySelector(".trip-spotlight") ? window.freeMapRect(".trip-board, .trip-spotlight") : null));
+    const s = await page.evaluate(() => {
+      const el = document.querySelector(".trip-spotlight");
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, free: window.freeMapRect(".trip-board, .trip-spotlight") };
+    });
     if (!s) fails.push(["spotlight-map-small", "spotlight did not open"]);
-    else if (s.area < 0.55 * w * h) fails.push(["spotlight-map-small", `free map ${Math.round(s.r - s.l)}x${Math.round(s.b - s.t)} is ${Math.round((100 * s.area) / (w * h))}% of ${w}x${h}, wants >= 55%`]);
+    else {
+      const f = s.free;
+      if (f.area < 0.55 * w * h) fails.push(["spotlight-map-small", `free map ${Math.round(f.r - f.l)}x${Math.round(f.b - f.t)} is ${Math.round((100 * f.area) / (w * h))}% of ${w}x${h}, wants >= 55%`]);
+      if (s.left > 32) fails.push(["spotlight-not-left", `.trip-spotlight left edge ${Math.round(s.left)}px, wants <= 32px (a sheet against the left edge)`]);
+      // The middle fifth of the window's width, where a framed day or a set of results lands.
+      const band = [0.4 * w, 0.6 * w];
+      if (s.right > band[0] && s.left < band[1]) fails.push(["spotlight-over-centre", `.trip-spotlight spans ${Math.round(s.left)}..${Math.round(s.right)}px, over the map's centre band ${Math.round(band[0])}..${Math.round(band[1])}px`]);
+    }
   }
   if (LONG_TRIP && w === 1470 && h === 830) {
     // Review Focus 4: a long trip's last day, chosen without moving focus (a click on the map or a beat

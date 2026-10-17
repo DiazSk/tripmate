@@ -314,14 +314,24 @@ export default function TripView({
       // until a re-measure jumped them up at 560ms. The transform's own offset is taken back out.
       const restTop = foot ? foot.getBoundingClientRect().top - new DOMMatrixReadOnly(getComputedStyle(foot).transform).m42 : 0;
       const bottom = foot ? Math.max(0, Math.round(window.innerHeight - restTop + 16)) : 0;
-      // The fixed nav covers the top, and the open map search more of it; the day is framed below
-      // whichever reaches lower. Without the nav the day centred in a band that started at y = 0, and
-      // at 375x667 its first stop's name sat under the nav (the bar is 56px of a 254px map there).
-      // Story mode hides the nav, so its rect is empty and costs nothing then.
-      const bar = document.querySelector<HTMLElement>(".trip-spotlight") ?? document.querySelector<HTMLElement>("nav");
-      const top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0;
-      setViewPadding({ left: 0, bottom, top });
-      if (reframe && !story.active) reframeRoute();
+      // The fixed nav covers the top, so the day is framed below it. Without that the day centred in
+      // a band that started at y = 0, and at 375x667 its first stop's name sat under the nav (the bar
+      // is 56px of a 254px map there). AppShell keeps the nav through a film, so it counts then too.
+      // `.polar-nav`, not the first `<nav>` in the DOM, which need not be the bar.
+      const nav = document.querySelector<HTMLElement>(".polar-nav");
+      const top = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 0;
+      // The open map search is a sheet down the left (none below 40rem, where its rect is empty).
+      // Its edge is stored as padding, not applied: opening the search leaves the view where it is
+      // (it is about the view on screen), and every camera command after it (a result panned out from
+      // under the sheet, the sheet's own day arrows) frames in the map to its right.
+      // Where it comes to rest, as for the foot: it slides in 1.5rem from the left (`tsl-in`).
+      const sheet = document.querySelector<HTMLElement>(".trip-spotlight");
+      const rect = sheet?.getBoundingClientRect();
+      const left = sheet && rect?.width ? Math.round(rect.right - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m41) : 0;
+      setViewPadding({ left, bottom, top });
+      // Only the open board re-frames on the crossing: a drawer, the map search or a film is what
+      // the traveller is reading, and replaying the day's framing over it would move it away.
+      if (reframe && shape === "board" && !story.active) reframeRoute();
       reframe = false;
       // With nothing along the foot (the map search open) the controls stand clear of the corner's
       // trace button (`LlmTraceFab`: 20px in, 48px tall) instead. `0px` would beat the CSS fallback

@@ -31,13 +31,15 @@ import type { ScreenPoint } from "@/lib/mapRenderer";
 import type { Itinerary, Stop } from "@/lib/types";
 
 /**
- * The trip page's map search: Spotlight's command bar with the day drawn inside it (canvas design
- * "Map search · 4 · Spotlight with the day").
+ * The trip page's map search: a sheet down the left of the map with the day at its head (canvas
+ * design "Map search · 3 · Ask the map"; its rows open as "Map search · 2 · Side sheet"'s do). It was
+ * a command bar across the top middle ("Map search · 4"), which covered the places the map was
+ * showing; the sheet leaves the map to its right whole.
  *
- * The gaps between the day's stops are the bar's second row, and pressing one makes it part of the
+ * The gaps between the day's stops are the sheet's timeline, and pressing one makes it part of the
  * question ("in the 3 PM gap"), so what comes back is what fits there on foot. As the highlight
- * moves down the list, the day shows where that place would go (a ghost in its gap), the map shows
- * where it is (its numbered pin lit and a tag beside it), and the preview beside the list says why.
+ * moves down the list, the day shows where that place would go (a ghost in its gap) and the map shows
+ * where it is (its numbered pin lit and a tag beside it); a row pressed opens to say why.
  *
  * Fitting is `dayGaps.ts`: walking reach, the gap's length, a visit length by kind and the day's
  * weekday against the place's closed days. The hours themselves are shown as written, never
@@ -148,6 +150,9 @@ export default function TripSpotlight({
 
   const cur = rows.find((r) => r.place.id === selectedId) ?? rows[0] ?? null;
   const curIndex = cur ? rows.indexOf(cur) : -1;
+  /** The row opened to its address, hours and why, by result id. A click or ↑↓ opens it, not a
+   *  hover: a row that grew under a passing pointer would move every row below it. */
+  const [openId, setOpenId] = useState<string | null>(null);
 
   // The pins, numbered in the list's own order.
   useEffect(() => {
@@ -204,7 +209,7 @@ export default function TripSpotlight({
     const place = () => {
       const canvas = renderer.canvas();
       const width = canvas?.clientWidth ?? window.innerWidth;
-      const barBottom = barRef.current?.getBoundingClientRect().bottom ?? 0;
+      const sheet = barRef.current?.getBoundingClientRect();
       const tag = tagRef.current;
       if (tag) {
         if (!tagPoint) tag.style.visibility = "hidden";
@@ -213,7 +218,8 @@ export default function TripSpotlight({
           const left = p.x > width - tag.offsetWidth - 48;
           const x = left ? p.x - tag.offsetWidth - 20 : p.x + 20;
           const y = p.y - tag.offsetHeight / 2;
-          const hidden = p.y < barBottom + 8 || p.x < 0 || p.x > width;
+          // Under the sheet, above its top (the nav), or off the map.
+          const hidden = p.y < (sheet?.top ?? 0) + 8 || p.x < (sheet?.right ?? 0) + 8 || p.x > width;
           tag.style.visibility = hidden ? "hidden" : "visible";
           tag.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
           tag.dataset.side = left ? "left" : "right";
@@ -239,7 +245,7 @@ export default function TripSpotlight({
     return renderer.onFrame(place);
   }, [rendererRef, ready, isOpen, tagPoint?.lat, tagPoint?.lng, anchorStop, cur?.place.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Move the highlight, and bring its pin out from under the bar if that is where it is. */
+  /** Move the highlight, and bring its pin out from under the sheet if that is where it is. */
   const highlight = (row: Row, show: boolean, select = true) => {
     if (select) setSelectedId(row.place.id);
     if (!show) return;
@@ -248,13 +254,19 @@ export default function TripSpotlight({
     const p: ScreenPoint = { x: 0, y: 0 };
     renderer.project(row.place.lat, row.place.lng, 0, p);
     const canvas = renderer.canvas();
-    const barBottom = barRef.current?.getBoundingClientRect().bottom ?? 0;
-    const off = p.y < barBottom + 24 || p.y > (canvas?.clientHeight ?? window.innerHeight) - 24 || p.x < 24 || p.x > (canvas?.clientWidth ?? window.innerWidth) - 24;
+    // The sheet runs down the map's left, so the map it leaves starts at its right edge and below
+    // its top (the nav is above that).
+    const sheet = barRef.current?.getBoundingClientRect();
+    const off =
+      p.y < (sheet?.top ?? 0) + 24 ||
+      p.y > (canvas?.clientHeight ?? window.innerHeight) - 24 ||
+      p.x < (sheet?.right ?? 0) + 24 ||
+      p.x > (canvas?.clientWidth ?? window.innerWidth) - 24;
     const view = renderer.cameraState();
     if (off && view) {
       // A pan at the current range and heading, not `flyToSearchResult`: that frames a whole
       // neighbourhood and would pull a street-level view back out to the city. The view padding
-      // the page sets puts the place below the bar.
+      // the page sets puts the place in the map beside the sheet.
       holdResearch(SHOW_FLIGHT_HOLD_MS);
       renderer.flyToPoint({
         lat: row.place.lat,
@@ -267,7 +279,7 @@ export default function TripSpotlight({
     }
   };
 
-  // A new set of results whose first place is under the bar is a set nobody can see: bring it out.
+  // A new set of results whose first place is under the sheet is a set nobody can see: bring it out.
   // Keyed on the first id, so moving the highlight or re-sorting for a gap does not fly again.
   const firstId = rows[0]?.place.id;
   useEffect(() => {
@@ -386,84 +398,31 @@ export default function TripSpotlight({
       )}
 
       <section ref={barRef} className="tm trip-spotlight" data-appearance="light" aria-label="Search the map">
-        <div className="tsl-field">
-          <SearchIcon />
-          {gap && (
-            <button type="button" className="tsl-token is-gap" onClick={() => setGapStart(null)} aria-label="Search any time of the day">
-              {formatClock(gap.start)} gap
-              <span aria-hidden="true">×</span>
-            </button>
-          )}
-          {categories.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className="tsl-token"
-              style={{ ["--c" as string]: searchColourFor(c) }}
-              onClick={() => setCategories(categories.filter((x) => x !== c))}
-              aria-label={`Remove ${CHIP_LABELS[c]}`}
-            >
-              <i className="tsl-swatch" />
-              {CHIP_LABELS[c]}
-              <span aria-hidden="true">×</span>
-            </button>
-          ))}
-          <input
-            ref={inputRef}
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={gap ? `What fits ${formatClock(gap.start)} to ${formatClock(gap.end)}?` : "Search near this view…"}
-            aria-label="Search near this view"
-            aria-controls="tsl-results"
-            aria-activedescendant={cur ? `tsl-row-${cur.place.id}` : undefined}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                const next = rows[Math.max(0, Math.min(rows.length - 1, curIndex + (e.key === "ArrowDown" ? 1 : -1)))];
-                if (next) highlight(next, true);
-              } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && !query) {
-                e.preventDefault();
-                moveGap(e.key === "ArrowRight" ? 1 : -1);
-              } else if (e.key === "Enter" && cur && !added[cur.place.id] && (!gap || cur.fit?.ok)) {
-                e.preventDefault();
-                add(cur);
-              } else if (e.key === "Backspace" && !query && (categories.length || gap)) {
-                if (categories.length) setCategories(categories.slice(0, -1));
-                else setGapStart(null);
-              } else if (e.key === "Escape") {
-                if (query || categories.length || gap) {
-                  setQuery("");
-                  setCategories([]);
-                  setGapStart(null);
-                } else close();
-              }
-            }}
-          />
-          {state === "searching" && <span className="tsl-spin" role="status" aria-label="Searching" />}
-          <button type="button" className="tsl-x" onClick={close} aria-label="Close search" title="Close (Esc)">
-            <kbd>esc</kbd>
-          </button>
-        </div>
-
-        {/* The day, inside the bar: stops as blocks, gaps as what you press, the highlighted place as a ghost. */}
-        <div className="tsl-day">
-          <div className="tsl-day-head">
-            <button type="button" aria-label="Previous day" disabled={dayIndex === 0} onClick={() => changeDay(dayIndex - 1)}>
-              ‹
-            </button>
-            <span>
-              <b>Day {dayIndex + 1}</b> {date ? weekdayName(date) : ""}
-            </span>
-            <button type="button" aria-label="Next day" disabled={dayIndex >= itinerary.days.length - 1} onClick={() => changeDay(dayIndex + 1)}>
-              ›
+        {/* The day, at the head of the sheet: stops as blocks, gaps as what you press, the highlighted place as a ghost. */}
+        <header className="tsl-day">
+          <div className="tsl-day-top">
+            <div>
+              <p className="tsl-kicker">Fill the day</p>
+              <div className="tsl-day-head">
+                <button type="button" aria-label="Previous day" disabled={dayIndex === 0} onClick={() => changeDay(dayIndex - 1)}>
+                  ‹
+                </button>
+                <span>
+                  <b>Day {dayIndex + 1}</b> {date ? `· ${weekdayName(date)}` : ""}
+                </span>
+                <button type="button" aria-label="Next day" disabled={dayIndex >= itinerary.days.length - 1} onClick={() => changeDay(dayIndex + 1)}>
+                  ›
+                </button>
+              </div>
+            </div>
+            <button type="button" className="tsl-x" onClick={close} aria-label="Close search" title="Close (Esc)">
+              ×
             </button>
           </div>
           <div className="tsl-track" role="group" aria-label={`Day ${dayIndex + 1}, 9 AM to 10 PM`}>
-            {[12, 15, 18, 21].map((h) => (
+            {[9, 12, 15, 18, 21].map((h) => (
               <span key={h} className="tsl-hour" style={{ left: pos(h * 60) }}>
-                {h % 12 || 12}
-                {h < 12 ? "a" : "p"}
+                {h % 12 || 12} {h < 12 ? "AM" : "PM"}
               </span>
             ))}
             {stops.map((s, i) => {
@@ -499,6 +458,68 @@ export default function TripSpotlight({
             ))}
             {ghost && <span className="tsl-ghost" style={{ left: pos(ghost.start), width: width(ghost.start, ghost.end) }} aria-hidden="true" />}
           </div>
+        </header>
+
+        <div className="tsl-field">
+          <SearchIcon />
+          {gap && (
+            <button type="button" className="tsl-token is-gap" onClick={() => setGapStart(null)} aria-label="Search any time of the day">
+              {formatClock(gap.start)} gap
+              <span aria-hidden="true">×</span>
+            </button>
+          )}
+          {categories.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className="tsl-token"
+              style={{ ["--c" as string]: searchColourFor(c) }}
+              onClick={() => setCategories(categories.filter((x) => x !== c))}
+              aria-label={`Remove ${CHIP_LABELS[c]}`}
+            >
+              <i className="tsl-swatch" />
+              {CHIP_LABELS[c]}
+              <span aria-hidden="true">×</span>
+            </button>
+          ))}
+          <input
+            ref={inputRef}
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={gap ? `What fits ${formatClock(gap.start)} to ${formatClock(gap.end)}?` : "Search near this view…"}
+            aria-label="Search near this view"
+            aria-controls="tsl-results"
+            aria-activedescendant={cur ? `tsl-row-${cur.place.id}` : undefined}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const next = rows[Math.max(0, Math.min(rows.length - 1, curIndex + (e.key === "ArrowDown" ? 1 : -1)))];
+                if (next) {
+                  highlight(next, true);
+                  // A key press is deliberate, so the row it lands on opens (the click-only rule is for
+                  // a passing pointer): the detail follows the highlight, and is reachable by keyboard.
+                  setOpenId(next.place.id);
+                }
+              } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && !query) {
+                e.preventDefault();
+                moveGap(e.key === "ArrowRight" ? 1 : -1);
+              } else if (e.key === "Enter" && cur && !added[cur.place.id] && (!gap || cur.fit?.ok)) {
+                e.preventDefault();
+                add(cur);
+              } else if (e.key === "Backspace" && !query && (categories.length || gap)) {
+                if (categories.length) setCategories(categories.slice(0, -1));
+                else setGapStart(null);
+              } else if (e.key === "Escape") {
+                if (query || categories.length || gap) {
+                  setQuery("");
+                  setCategories([]);
+                  setGapStart(null);
+                } else close();
+              }
+            }}
+          />
+          {state === "searching" && <span className="tsl-spin" role="status" aria-label="Searching" />}
         </div>
 
         <div className="tsl-cats" role="group" aria-label="Kinds of place">
@@ -511,50 +532,52 @@ export default function TripSpotlight({
           ))}
         </div>
 
-        {!hasQuery && rows.length === 0 ? (
-          <div className="tsl-idle">
-            <p>Press a gap in the day, pick a kind of place, or type a name.</p>
-            {history.length > 0 && (
-              <div className="tsl-recent">
-                {history.map((entry) => (
-                  <span key={entry}>
-                    <button type="button" onClick={() => setQuery(entry)}>
-                      {entry}
-                    </button>
-                    <button type="button" className="tsl-rm" aria-label={`Remove "${entry}" from recent searches`} onClick={() => setHistory(forgetSearch(entry))}>
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : state === "throttled" ? (
-          <p className="tsl-alert" role="status">
-            Search is busy right now: the free places index rate-limits. Try again in a moment.
-          </p>
-        ) : state === "searching" && rows.length === 0 ? (
-          <ul className="tsl-skel" aria-hidden="true">
-            {[0, 1, 2].map((i) => (
-              <li key={i}>
-                <span style={{ width: "1.5em", height: "1.5em", borderRadius: "50%" }} />
-                <span style={{ width: `${45 + i * 12}%` }} />
-              </li>
-            ))}
-          </ul>
-        ) : rows.length === 0 ? (
-          <p className="tsl-none">Nothing of that kind near this view. Pan somewhere else, or clear a filter.</p>
-        ) : (
-          <>
-            <p className="tsl-h">
-              {gap
-                ? `${fitting} of ${rows.length} fit ${formatClock(gap.start)} to ${formatClock(gap.end)} on foot`
-                : `${rows.length} near this view · each placed where it fits Day ${dayIndex + 1}`}
+        {/* The one part of the sheet that scrolls. */}
+        <div className="tsl-body">
+          {!hasQuery && rows.length === 0 ? (
+            <div className="tsl-idle">
+              <p>Press a gap in the day, pick a kind of place, or type a name.</p>
+              {history.length > 0 && (
+                <div className="tsl-recent">
+                  {history.map((entry) => (
+                    <span key={entry}>
+                      <button type="button" onClick={() => setQuery(entry)}>
+                        {entry}
+                      </button>
+                      <button type="button" className="tsl-rm" aria-label={`Remove "${entry}" from recent searches`} onClick={() => setHistory(forgetSearch(entry))}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : state === "throttled" ? (
+            <p className="tsl-alert" role="status">
+              Search is busy right now: the free places index rate-limits. Try again in a moment.
             </p>
-            <div className="tsl-split">
+          ) : state === "searching" && rows.length === 0 ? (
+            <ul className="tsl-skel" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <li key={i}>
+                  <span style={{ width: "2.75rem", height: "2.75rem" }} />
+                  <span style={{ width: `${45 + i * 12}%` }} />
+                </li>
+              ))}
+            </ul>
+          ) : rows.length === 0 ? (
+            <p className="tsl-none">Nothing of that kind near this view. Pan somewhere else, or clear a filter.</p>
+          ) : (
+            <>
+              <p className="tsl-h">
+                {gap
+                  ? `${fitting} of ${rows.length} fit ${formatClock(gap.start)} to ${formatClock(gap.end)} on foot`
+                  : `${rows.length} near this view · each placed where it fits Day ${dayIndex + 1}`}
+              </p>
               <ul id="tsl-results" className="tsl-list" role="listbox" aria-label="Places">
                 {rows.map((r, i) => {
                   const on = cur?.place.id === r.place.id;
+                  const opened = openId === r.place.id;
                   const done = added[r.place.id];
                   const fits = r.fit ? r.fit.ok : !!r.best;
                   const at = when(r);
@@ -564,10 +587,17 @@ export default function TripSpotlight({
                       id={`tsl-row-${r.place.id}`}
                       role="option"
                       aria-selected={on}
-                      className={`tsl-row${on ? " is-on" : ""}${fits || done ? "" : " is-out"}`}
+                      className={`tsl-row${on ? " is-on" : ""}${opened ? " is-open" : ""}${fits || done ? "" : " is-out"}`}
                       style={{ ["--c" as string]: searchColourFor(r.place.category) }}
-                      onMouseEnter={() => highlight(r, false)}
-                      onClick={() => highlight(r, true)}
+                      // While a row is open the pointer passing over others leaves the selection on it,
+                      // so the tag, the lit pin and the facts lookup stay with the row being read.
+                      onMouseEnter={() => !openId && highlight(r, false)}
+                      onClick={(e) => {
+                        // The open detail's own link and text are not a second press on the row.
+                        if ((e.target as HTMLElement).closest(".tsl-detail")) return;
+                        highlight(r, true);
+                        setOpenId(opened ? null : r.place.id);
+                      }}
                     >
                       <span className="tsl-n">{i + 1}</span>
                       <span className="tsl-what">
@@ -576,12 +606,14 @@ export default function TripSpotlight({
                           {KIND[r.place.category]}
                           {r.near ? ` · ${r.near.minutes} min from ${r.near.stop.name}` : r.place.address ? ` · ${r.place.address}` : ""}
                         </span>
-                      </span>
-                      <span className={`tsl-fit${fits ? "" : " is-no"}`}>
-                        {done ? "" : at ? (gap ? `Fits ${formatClock(at.start)}` : `${formatClock(at.gap.start)} gap`) : r.fit && !r.fit.ok ? r.fit.why : "No gap fits"}
+                        {!done && (
+                          <span className={`tsl-fit${fits ? "" : " is-no"}`}>
+                            {at ? (gap ? `Fits ${formatClock(at.start)} – ${formatClock(at.end)}` : `Best fit: the ${formatClock(at.gap.start)} gap`) : r.fit && !r.fit.ok ? r.fit.why : "No gap fits"}
+                          </span>
+                        )}
                       </span>
                       {done ? (
-                        <span className="tsl-done">✓ {done.time}</span>
+                        <span className="tsl-done">Added · {done.time}</span>
                       ) : (
                         <button
                           type="button"
@@ -593,17 +625,17 @@ export default function TripSpotlight({
                           }}
                           aria-label={at ? `Add ${r.place.name} at ${formatClock(at.start)}` : `Add ${r.place.name} at the usual time for its kind`}
                         >
-                          + {at ? formatClock(at.start) : "Add"}
+                          {at ? `Add at ${formatClock(at.start)}` : "Add"}
                         </button>
                       )}
+                      {opened && <Detail row={r} gap={gap} added={done} at={at} stops={stops} />}
                     </li>
                   );
                 })}
               </ul>
-              {cur && <Preview row={cur} gap={gap} added={curAdded} at={curWhen} stops={stops} />}
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
 
         <footer className="tsl-foot">
           <span>
@@ -618,9 +650,9 @@ export default function TripSpotlight({
   );
 }
 
-/** The quick read on the highlighted place, beside the list: what it is, how far, its hours, and
- *  exactly where it would go in the day and why, or why it would not. */
-function Preview({
+/** A row opened: where it is and how far, its hours and the rest of what is known, and exactly where
+ *  it would go in the day and why, or why it would not. The name and kind are the row's own line. */
+function Detail({
   row,
   gap,
   added,
@@ -643,20 +675,14 @@ function Preview({
   if (place.phone) facts.push(["Phone", place.phone]);
   const anchor = at ? stops[at.gap.before ?? at.gap.after ?? -1] : undefined;
   return (
-    <aside className="tsl-preview" aria-label={`About ${place.name}`} style={{ ["--c" as string]: searchColourFor(place.category) }}>
-      <div className="tsl-pv-head">
-        <div className="tsl-art" aria-hidden="true">
-          <b>{place.name.slice(0, 1)}</b>
-        </div>
-        <div>
-          <p className="tsl-eyebrow">
-            <i className="tsl-swatch" /> {KIND[place.category]}
-            {row.near ? ` · ${shortDistance(row.near.metres)}` : ""}
-          </p>
-          <h3>{place.name}</h3>
-          {place.address && <p className="tsl-addr">{place.address}</p>}
-        </div>
-      </div>
+    <div className="tsl-detail" role="group" aria-label={`About ${place.name}`}>
+      {(place.address || row.near) && (
+        <p className="tsl-addr">
+          {place.address}
+          {place.address && row.near ? " · " : ""}
+          {row.near ? `${shortDistance(row.near.metres)} from ${row.near.stop.name}` : ""}
+        </p>
+      )}
       {facts.length > 0 && (
         <dl>
           {facts.map(([k, v]) => (
@@ -688,7 +714,7 @@ function Preview({
           Website ↗
         </a>
       )}
-    </aside>
+    </div>
   );
 }
 

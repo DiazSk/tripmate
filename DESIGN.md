@@ -672,8 +672,8 @@ beside it (see `docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`).
 ### Map Search (signature)
 The trip page's spotlight (canvas "Map search · 4"): ⌘K opens it over the map with the day's gaps on a
 timeline, category chips, results that fit a gap ("Add at 3:35 PM") and rows that open to the place's
-address and hours. **Decided 2026-10-16:** it moves to the left side sheet of "Map search · 3", keeping
-every per-place detail.
+address and hours. **Since 2026-10-16** it is the left side sheet of "Map search · 3" (27rem, narrowing
+to 36vw on smaller laptops), keeping every per-place detail: a row opens to it as in "Map search · 2".
 
 ### The Story Player (signature)
 A film of a day (canvas "Story mode · 1 Subtitles"): the narration as subtitles above a near-opaque

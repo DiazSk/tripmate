@@ -1,15 +1,15 @@
-/* The trip page's map search (canvas "Map search · 4 · Spotlight with the day"). Polar ice under
-   `.tm` for its tokens; `.tm.` raises each root over `.tm`'s own `width`/`min-height`/`position`. */
+/* The trip page's map search: a sheet down the left of the map (canvas "Map search · 3 · Ask the
+   map", MapSearch3AskTheMap.css:2-17), rows that open as "Map search · 2 · Side sheet"'s do. Polar ice
+   under `.tm` for its tokens; `.tm.` raises each root over `.tm`'s own `width`/`min-height`/`position`. */
 
 .tm.trip-spotlight,
 .tm.tsl-closed {
   position: fixed;
-  top: calc(var(--nav-h) + 0.75rem);
-  left: 50%;
-  translate: -50% 0;
+  top: calc(var(--nav-h) + 1rem);
+  left: 1.25rem;
   z-index: 25;
   min-height: 0;
-  /* The trip page lets clicks through to the map; the bar takes its own back. */
+  /* The trip page lets clicks through to the map; the sheet takes its own back. */
   pointer-events: auto;
 }
 .trip-spotlight kbd,
@@ -24,11 +24,13 @@
   border-bottom-width: 2px;
   border-radius: var(--wd-radius-sm);
 }
+/* Closed, it waits in the corner the sheet opens from (design 3's `.ms3-fab`), so it never competes
+   with the column or a drawer on the right for the width between them. */
 .tm.tsl-closed {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  width: min(32rem, calc(100% - 24rem));
+  width: min(24rem, calc(100% - 2.5rem));
   height: 2.9rem;
   padding: 0 0.6rem 0 1rem;
   font-size: 0.9rem;
@@ -47,19 +49,28 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* Design 3's sheet is 27rem; below ~75rem it gives way to 36vw (17.5rem at the least), so a 1024px
+   laptop still keeps more than half its screen as map. The rows rearrange for that narrower sheet
+   (the container query below). The day, the field and the chips stand; the results scroll. If the
+   window is too short for all of them and eight rows' worth of list, the sheet scrolls whole rather
+   than squeezing the list to nothing (200% zoom on a laptop). */
 .tm.trip-spotlight {
-  width: min(58rem, calc(100% - 22rem));
+  bottom: 1.25rem;
+  width: clamp(17.5rem, 36vw, 27rem);
   display: grid;
-  overflow: hidden;
+  grid-template-rows: auto auto auto minmax(8rem, 1fr) auto;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  container: tsl / inline-size;
   color: var(--wd-ink);
   border-radius: var(--wd-radius-card);
-  box-shadow: 0 2em 5em -1.5em rgba(0, 0, 0, 0.8);
-  animation: tsl-in 0.3s var(--wd-ease-reveal) both;
+  box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.8);
+  animation: tsl-in 0.35s var(--wd-ease-reveal) both;
 }
 @keyframes tsl-in {
   from {
     opacity: 0;
-    transform: translateY(-0.5rem);
+    transform: translateX(-1.5rem);
   }
 }
 /* The trip page has no phone-width map search, as the map chrome's has none. */
@@ -87,24 +98,27 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.4rem;
-  min-height: 3.4rem;
-  padding: 0.45rem 0.6rem 0.45rem 1.1rem;
-  border-bottom: 1px solid var(--wd-rule);
+  min-height: 2.8rem;
+  margin: 0.6rem 1rem;
+  padding: 0.2rem 0.4rem 0.2rem 0.8rem;
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
 }
 .tsl-field:focus-within {
-  box-shadow: inset 0 -2px 0 var(--wd-signal);
+  border-color: var(--wd-signal);
 }
 .tsl-field > svg {
   color: var(--wd-charcoal);
 }
 .tsl-field input {
   flex: 1;
-  min-width: 10rem;
-  height: 2.4rem;
+  min-width: 6rem;
+  height: 2.2rem;
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 1.02rem;
+  font-size: 0.95rem;
   color: var(--wd-ink);
 }
 /* The field's own underline is the focus mark; a second outline inside it reads as a mistake. */
@@ -162,49 +176,60 @@
 .tsl-x {
   display: grid;
   place-items: center;
-  min-width: 2.75rem;
+  width: 2.75rem;
   height: 2.75rem;
+  font-size: 1.2rem;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-sm);
+}
+.tsl-x:hover {
+  background: var(--wd-veil-05);
 }
 
 /* The day */
 .tsl-day {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem 1.1rem 0.6rem;
-  background: var(--wd-paper);
-  border-bottom: 1px solid var(--wd-rule);
+  padding: 0.95rem 1rem 0.3rem;
+}
+.tsl-day-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-right: -0.6rem;
+}
+.tsl-kicker {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wd-ember);
 }
 .tsl-day-head {
   display: flex;
   align-items: center;
-  gap: 0.1rem;
-  font-size: 0.8rem;
+  gap: 0.2rem;
+  margin-left: -0.6rem;
   white-space: nowrap;
+}
+.tsl-day-head span {
+  font-size: 0.8rem;
+  color: var(--wd-charcoal);
 }
 .tsl-day-head b {
   font-family: var(--wd-font-display);
-  font-weight: 500;
-  font-size: 1.15rem;
-}
-.tsl-day-head span {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  color: var(--wd-charcoal);
-}
-.tsl-day-head span b {
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1.1;
   color: var(--wd-ink);
 }
 .tsl-day-head button {
   display: grid;
   place-items: center;
-  width: 1.9rem;
+  width: 2.2rem;
   height: 2.2rem;
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   color: var(--wd-charcoal);
-  border-radius: var(--wd-radius-sm);
+  border-radius: 50%;
 }
 .tsl-day-head button:hover:not(:disabled) {
   background: var(--wd-veil-05);
@@ -215,26 +240,30 @@
 .tsl-track {
   position: relative;
   height: 2.6rem;
-  margin-top: 0.7rem;
-  background: var(--wd-ice);
+  margin-top: 1.9rem;
+  background: var(--wd-snow);
   border-radius: var(--wd-radius-sm);
-  box-shadow: inset 0 0 0 1px var(--wd-rule);
 }
 .tsl-hour {
   position: absolute;
-  top: -1rem;
+  top: -1.1rem;
   translate: -50% 0;
   font-family: var(--wd-font-condensed);
-  font-size: 0.64rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
   color: var(--wd-stone);
+  white-space: nowrap;
+}
+.tsl-hour:first-child {
+  translate: 0 0;
 }
 .tsl-stop,
 .tsl-gap,
 .tsl-new,
 .tsl-ghost {
   position: absolute;
-  top: 0.3rem;
-  bottom: 0.3rem;
+  top: 0.35rem;
+  bottom: 0.35rem;
   border-radius: var(--wd-radius-hairline);
 }
 /* A hairline of ice between stops that run back to back, so a full morning still reads as stops. */
@@ -282,18 +311,17 @@
 }
 .tsl-cats {
   display: flex;
-  gap: 0.35rem;
-  padding: 0.55rem 1.1rem;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0 1rem 0.7rem;
   border-bottom: 1px solid var(--wd-rule);
 }
 .tm .tsl-cats button {
-  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
-  min-height: 2rem;
-  padding: 0 0.75em;
+  gap: 0.35em;
+  min-height: 2.1rem;
+  padding: 0 0.7em;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--wd-ash);
@@ -308,34 +336,33 @@
   color: var(--wd-ink);
   border-color: var(--wd-ink);
 }
+.tsl-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .tsl-h {
-  padding: 0.65rem 1.1rem 0.25rem;
+  padding: 0.7rem 1rem 0.25rem;
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--wd-charcoal);
 }
-/* The list and the quick read on the highlighted place, side by side: wider, never taller. */
-.tsl-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-}
-/* Short on purpose: four rows, so the map below keeps the places it is showing. */
 .tsl-list {
   list-style: none;
   margin: 0;
-  padding: 0.2rem 0.6rem 0.5rem;
-  max-height: calc(4 * 3.35rem + 0.7rem);
-  overflow-y: auto;
+  padding: 0 0.6rem 0.8rem;
+  display: grid;
+  gap: 0.15rem;
 }
 .tsl-row {
   display: grid;
-  grid-template-columns: 1.6rem minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.7rem;
-  min-height: 3.35rem;
-  padding: 0 0.5rem;
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--wd-rule);
   border-radius: var(--wd-radius-sm);
   cursor: pointer;
 }
@@ -343,27 +370,34 @@
   background: var(--wd-snow);
   box-shadow: inset 2px 0 0 var(--c);
 }
+/* Opened (design 2's `.ms2-card.is-open`, :260-263): ringed in its kind's colour. */
+.tsl-row.is-open {
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
 .tsl-row.is-out {
   opacity: 0.55;
 }
+/* Design 3's tile (searchKit.css `.sk-tile`), carrying the number its pin carries on the map, in the
+   condensed face the pin's badge uses: the display face's old-style 1 reads as a small capital I. */
 .tsl-n {
   display: grid;
   place-items: center;
-  width: 1.55rem;
-  height: 1.55rem;
+  width: 2.75rem;
+  height: 2.75rem;
   font-family: var(--wd-font-condensed);
-  font-size: 0.76rem;
-  color: var(--wd-night);
-  background: var(--c);
-  border-radius: 50%;
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.75);
+  background: var(--wd-deep);
+  border-radius: var(--wd-radius-sm);
+  box-shadow: inset 0 0 0 2px var(--c);
 }
 .tsl-what {
   display: grid;
-  gap: 0.08rem;
+  gap: 0.1rem;
   min-width: 0;
 }
 .tsl-what b {
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -376,25 +410,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tsl-fit {
-  max-width: 13rem;
-  overflow: hidden;
-  font-family: var(--wd-font-condensed);
-  font-size: 0.78rem;
-  letter-spacing: 0.02em;
+.tsl-what .tsl-fit {
+  font-weight: 600;
   color: #0e6670;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
-.tsl-fit.is-no {
-  font-family: var(--wd-font-sans);
-  font-size: 0.72rem;
+.tsl-what .tsl-fit.is-no {
   color: var(--wd-charcoal);
 }
 .tm .tsl-add {
-  min-height: 2.3rem;
-  min-width: 5.6rem;
-  padding: 0 0.7rem;
+  min-height: 2.4rem;
+  padding: 0 0.75rem;
   font-size: 0.76rem;
   font-weight: 600;
   white-space: nowrap;
@@ -404,23 +429,40 @@
 .tm .tsl-add:hover:not(:disabled) {
   background: var(--wd-mushroom);
 }
-.tm .tsl-row.is-on .tsl-add:not(:disabled) {
+/* Design 3's add is signal; a row that fits takes it, as the highlighted one did. */
+.tm .tsl-row:not(.is-out) .tsl-add:not(:disabled) {
   background: var(--wd-signal);
+}
+.tm .tsl-row:not(.is-out) .tsl-add:not(:disabled):hover {
+  background: var(--wd-signal-hover);
 }
 .tm .tsl-add:disabled {
   opacity: 0.4;
 }
 .tsl-done {
-  min-width: 5.6rem;
   font-size: 0.76rem;
   font-weight: 600;
-  text-align: center;
   color: var(--wd-ember);
+  white-space: nowrap;
+}
+/* The narrower sheet of a 1024px laptop: the add goes under the words rather than starving them. */
+@container tsl (width < 23rem) {
+  .tsl-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .tm .tsl-row > .tsl-add,
+  .tsl-row > .tsl-done {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .tm .tsl-row > .tsl-add {
+    min-height: 2.2rem;
+  }
 }
 .tsl-idle {
   display: grid;
   gap: 0.6rem;
-  padding: 0.9rem 1.1rem;
+  padding: 0.9rem 1rem;
 }
 .tsl-idle p,
 .tsl-none {
@@ -430,7 +472,7 @@
   color: var(--wd-ash);
 }
 .tsl-none {
-  padding: 0.9rem 1.1rem;
+  padding: 0.9rem 1rem;
 }
 .tsl-recent {
   display: flex;
@@ -458,7 +500,7 @@
   color: var(--wd-ink);
 }
 .tsl-alert {
-  margin: 0.8rem 1.1rem;
+  margin: 0.8rem 1rem;
   padding: 0.7rem 0.85rem;
   font-size: 0.86rem;
   font-weight: 600;
@@ -469,7 +511,7 @@
 .tsl-skel {
   list-style: none;
   margin: 0;
-  padding: 0.8rem 1.1rem;
+  padding: 0.8rem 1rem;
   display: grid;
   gap: 0.9rem;
 }
@@ -492,9 +534,10 @@
 }
 .tsl-foot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 1.1rem;
+  gap: 0.2rem 1rem;
+  padding: 0.55rem 1rem;
   font-size: 0.7rem;
   color: var(--wd-charcoal);
   background: var(--wd-snow);
@@ -504,91 +547,52 @@
   margin-right: 0.15em;
 }
 
-.tsl-preview {
-  max-height: calc(4 * 3.35rem + 0.7rem);
-  overflow-y: auto;
+.tsl-detail {
+  grid-column: 1 / -1;
   display: grid;
-  align-content: start;
-  gap: 0.35rem;
-  margin: 0.2rem 0.6rem 0.5rem 0;
-  padding: 0.75rem 0.9rem;
-  background: var(--wd-paper);
-  border-radius: var(--wd-radius-sm);
+  gap: 0.45rem;
+  padding: 0.1rem 0.35rem 0.35rem;
+  cursor: auto;
+  animation: tsl-open 0.3s var(--wd-ease-reveal) both;
 }
-/* The tile beside the name, not above it, so the whole read fits the list's four rows. */
-.tsl-pv-head {
-  display: grid;
-  grid-template-columns: 3.4rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.7rem;
-  margin-bottom: 0.15rem;
-}
-.tsl-pv-head > div:last-child {
-  display: grid;
-  gap: 0.1rem;
-  min-width: 0;
-}
-.tsl-art {
-  display: grid;
-  place-items: center;
-  width: 3.4rem;
-  height: 3.4rem;
-  color: var(--wd-night);
-  background: color-mix(in srgb, var(--c) 55%, var(--wd-ice));
-  border-radius: var(--wd-radius-sm);
-}
-.tsl-art b {
-  font-family: var(--wd-font-display);
-  font-weight: 500;
-  font-size: 1.6rem;
-}
-.tsl-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-family: var(--wd-font-condensed);
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--wd-charcoal);
-}
-.tsl-preview h3 {
-  font-family: var(--wd-font-display);
-  font-weight: 400;
-  font-size: 1.4rem;
-  line-height: 1.05;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+@keyframes tsl-open {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
 }
 .tsl-addr {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--wd-charcoal);
 }
-.tsl-preview dl {
-  margin: 0.15rem 0 0;
+.tsl-detail dl {
   display: grid;
 }
-.tsl-preview dl div {
+.tsl-detail dl div {
   display: grid;
-  grid-template-columns: 4.6rem minmax(0, 1fr);
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0.6rem;
-  padding: 0.28rem 0;
-  font-size: 0.78rem;
+  padding: 0.4rem 0;
+  font-size: 0.82rem;
   border-top: 1px solid var(--wd-rule);
 }
-.tsl-preview dt {
+.tsl-detail dt {
   font-weight: 600;
   color: var(--wd-charcoal);
 }
-.tsl-preview dd {
+.tsl-detail dd {
   overflow-wrap: anywhere;
 }
 .tsl-why {
-  margin-top: 0.15rem;
+  padding: 0.6rem 0.75rem;
   font-size: 0.8rem;
   line-height: 1.45;
   color: var(--wd-ash);
+  background: var(--wd-paper);
+  border-radius: var(--wd-radius-sm);
+}
+.tsl-why:empty {
+  display: none;
 }
 .tm .tsl-link {
   justify-self: start;
@@ -699,23 +703,9 @@
   color: var(--wd-charcoal);
 }
 
-@media (max-width: 900px) {
-  .tsl-split {
-    grid-template-columns: 1fr;
-  }
-  .tsl-preview {
-    display: none;
-  }
-  .tsl-day {
-    grid-template-columns: 1fr;
-  }
-  .tsl-fit,
-  .tsl-foot > span:first-child {
-    display: none;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .tm.trip-spotlight,
+  .tsl-detail,
   .tsl-spin,
   .tsl-skel span {
     animation: none;
