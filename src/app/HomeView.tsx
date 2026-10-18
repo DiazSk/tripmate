@@ -10,6 +10,7 @@ import FeedbackLoop, { type DraftState } from "@/components/FeedbackLoop";
 import { DEFAULT_PARTY } from "@/components/PartyCounter";
 import {
   legacyExplorerStyle,
+  MAX_STARRED_PRIORITIES,
   sanitizeNamedList,
   travelStyleOf,
 } from "@/lib/userAnswers";
@@ -793,7 +794,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setStarredInterests((prev) =>
       prev.includes(tag)
         ? prev.filter((t) => t !== tag)
-        : prev.length >= 3
+        : prev.length >= MAX_STARRED_PRIORITIES
           ? prev
           : [...prev, tag]
     );

@@ -12,7 +12,7 @@ import { INTEREST_TAGS } from "@/components/InterestPicker";
 import { DIETARY_TAGS } from "@/components/DietaryPicker";
 import HomeCitySearch from "@/components/welcome/HomeCitySearch";
 import AccountReceipt from "@/components/AccountReceipt";
-import { legacyExplorerStyle, travelStyleOf } from "@/lib/userAnswers";
+import { legacyExplorerStyle, MAX_STARRED_PRIORITIES as MAX_STARRED, priorityHint, starLabel, travelStyleOf } from "@/lib/userAnswers";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { monumentEms } from "@/lib/monumentFit";
@@ -40,7 +40,6 @@ const DEFAULTS: TravelerProfile = {
   accessibility: NO_ACCESSIBILITY_NEEDS,
 };
 
-const MAX_STARRED = 3;
 /** The masthead's ground when there is no kept trip to photograph. */
 const FALLBACK_PHOTO = "/scenes/graubunden-autumn-valley.webp";
 
@@ -371,7 +370,6 @@ export default function ProfileForm({
 
   const style = travelStyleOf(profile);
   const fullStars = profile.topPriorities.length >= MAX_STARRED;
-  const starsLeft = MAX_STARRED - profile.topPriorities.length;
 
   function field(key: SectionKey) {
     switch (key) {
@@ -390,29 +388,27 @@ export default function ProfileForm({
           <div className="pf-chips">
             {INTEREST_TAGS.map((tag) => {
               const on = profile.priorities.includes(tag);
-              const star = profile.topPriorities.includes(tag);
+              const rank = profile.topPriorities.indexOf(tag) + 1;
               return (
-                <span key={tag} className={`pf-chip${on ? " is-on" : ""}${star ? " is-star" : ""}`}>
+                <span key={tag} className={`pf-chip${on ? " is-on" : ""}${rank ? " is-star" : ""}`}>
                   <button type="button" aria-pressed={on} onClick={() => toggleInterest(tag)} className="pf-chip-main">
                     {tag}
                   </button>
                   <button
                     type="button"
-                    aria-pressed={star}
-                    aria-label={star ? `Unstar ${tag}` : `Star ${tag}`}
-                    disabled={!star && fullStars}
+                    aria-pressed={rank > 0}
+                    aria-label={starLabel(tag, profile.topPriorities)}
+                    aria-disabled={!rank && fullStars}
                     onClick={() => toggleStar(tag)}
                     className="pf-chip-star"
                   >
-                    {star ? "★" : "☆"}
+                    {rank || "☆"}
                   </button>
                 </span>
               );
             })}
             <p className="pf-hint pf-stars-left">
-              {profile.topPriorities.length
-                ? `${profile.topPriorities.join(" > ")} · ${starsLeft ? `${starsLeft} left` : "top three set"}`
-                : "No stars yet, so everything you pick counts the same."}
+              {priorityHint(profile.topPriorities)}
             </p>
           </div>
         );

@@ -306,21 +306,36 @@
   color: var(--wd-ink);
   border-color: #fff;
 }
+/* The star is the chip's rank: ☆ to claim a place, then 1, 2 or 3 in ink on signal. With all three
+   places taken a selected chip's ☆ becomes a dashed, see-through slot with a gap before it (not the
+   old greyed white box, which read as broken). It stays focusable (aria-disabled, not disabled) so
+   a screen reader hears what it would take: "Unstar one to make Culture & History a top three". */
 .pp-star {
   display: inline-grid;
   place-items: center;
   min-height: 2.6em;
   width: 2.4em;
   font-size: 0.88em;
-  color: var(--wd-signal);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--wd-ink);
   border: 1px solid #fff;
   border-left: 0;
   background: #fff;
   border-radius: 0 var(--wd-radius-hairline) var(--wd-radius-hairline) 0;
   margin-left: -0.45em;
 }
-.pp-star:disabled {
-  opacity: 0.45;
+.pp-star[aria-pressed='true'] {
+  background: var(--wd-signal);
+  border-color: var(--wd-signal);
+}
+.pp-star[aria-disabled='true'] {
+  margin-left: 0.3em;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.4);
+  border-radius: var(--wd-radius-hairline);
+  cursor: not-allowed;
 }
 .pp-cards {
   display: grid;

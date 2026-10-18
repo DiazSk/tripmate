@@ -9,7 +9,7 @@ import { INTEREST_TAGS } from "@/components/InterestPicker";
 import { DIETARY_TAGS } from "@/components/DietaryPicker";
 import type { SuggestOption } from "@/components/SuggestInput";
 import { anchorKey, foundSummary } from "@/lib/anchors";
-import { MAX_STARRED_PRIORITIES, PARTY_MAX_PER_BAND } from "@/lib/userAnswers";
+import { MAX_STARRED_PRIORITIES, PARTY_MAX_PER_BAND, priorityHint, starLabel } from "@/lib/userAnswers";
 import { MAX_TRIP_DAYS, TIERS, tripDays, type TierId } from "@/lib/tiers";
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from "@/lib/weather";
 import type { DietaryNeeds } from "@/lib/travelerProfile";
@@ -1071,19 +1071,19 @@ function Preferences({ m }: { m: PlannerModel }) {
   const anySpecifics = !!(m.purpose || m.mustInclude || m.avoid || m.constraintsNote);
   return (
     <>
-      <Section title="What matters most" hint={`Pick any. Star up to ${MAX_STARRED_PRIORITIES === 3 ? "three" : MAX_STARRED_PRIORITIES}; those drive the plan.`}>
+      <Section title="What matters most" hint="Pick any, then star the ones that matter most.">
         <div className="pp-chips">
           {INTEREST_TAGS.map((i) => {
             const on = m.interests.includes(i);
-            const star = m.starredInterests.includes(i);
+            const rank = m.starredInterests.indexOf(i) + 1;
             return (
               <span key={i} className="inline-flex">
                 <button type="button" aria-pressed={on} onClick={() => m.toggleInterest(i)} className="pp-chip">
                   {i}
                 </button>
                 {on && (
-                  <button type="button" aria-pressed={star} aria-label={star ? `Unstar ${i}` : `Star ${i}`} disabled={!star && left === 0} onClick={() => m.toggleInterestStar(i)} className="pp-star">
-                    {star ? "★" : "☆"}
+                  <button type="button" aria-pressed={rank > 0} aria-label={starLabel(i, m.starredInterests)} aria-disabled={!rank && left === 0} onClick={() => m.toggleInterestStar(i)} className="pp-star">
+                    {rank || "☆"}
                   </button>
                 )}
               </span>
@@ -1091,9 +1091,7 @@ function Preferences({ m }: { m: PlannerModel }) {
           })}
         </div>
         <p className="pp-hint" aria-live="polite" style={{ fontVariantNumeric: "tabular-nums" }}>
-          {m.starredInterests.length
-            ? `${m.starredInterests.join(" > ")} · ${left === 0 ? "top three set" : `${plural(left, "star")} left`}`
-            : "No stars yet, so everything you pick counts the same."}
+          {priorityHint(m.starredInterests)}
         </p>
       </Section>
 

@@ -20,6 +20,8 @@ import {
   partyBudget,
   travelStyleOf,
   legacyExplorerStyle,
+  priorityHint,
+  starLabel,
 } from "./userAnswers.ts";
 
 const answers = (over) => ({
@@ -307,4 +309,21 @@ test("sanitize keeps a valid pair and drops junk rather than defaulting it", () 
   const bad = sanitizeAnswers({ ...base, pace: "sprint", discovery: 7 });
   assert.equal(bad.pace, undefined);
   assert.equal(bad.discovery, undefined);
+});
+
+test("priorityHint names the ranks once three are set, and the places left before that", () => {
+  assert.equal(priorityHint([]), "No stars yet, so everything you pick counts the same.");
+  assert.equal(priorityHint(["Food", "Nightlife"]), "Star up to 3 to lead the plan · 1 left");
+  assert.equal(priorityHint(["Food"]), "Star up to 3 to lead the plan · 2 left");
+  assert.equal(
+    priorityHint(["Food", "Nightlife", "Shopping"]),
+    "Your top three: 1 Food · 2 Nightlife · 3 Shopping. These lead the plan."
+  );
+});
+
+test("starLabel carries the rank, and says what a locked star would take", () => {
+  const full = ["Food", "Nightlife", "Shopping"];
+  assert.equal(starLabel("Nightlife", full), "Nightlife, priority 2 of 3");
+  assert.equal(starLabel("Culture & History", full), "Unstar one to make Culture & History a top three");
+  assert.equal(starLabel("Nature", ["Food"]), "Star Nature");
 });

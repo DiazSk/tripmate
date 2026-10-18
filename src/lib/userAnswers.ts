@@ -56,6 +56,23 @@ export const PACE_LABEL_THRESHOLDS = { slowAtOrBelow: 2, moderateAt: 3 } as cons
 /** How many priorities the traveler may star. */
 export const MAX_STARRED_PRIORITIES = 3;
 
+/** The line under the interest chips (planner and /profile share it). Names each rank once the
+ *  set is full: the order starred is the order the plan leads with, and a ">" never said so. */
+export function priorityHint(starred: string[]): string {
+  if (!starred.length) return "No stars yet, so everything you pick counts the same.";
+  const left = MAX_STARRED_PRIORITIES - starred.length;
+  if (left > 0) return `Star up to ${MAX_STARRED_PRIORITIES} to lead the plan · ${left} left`;
+  return `Your top three: ${starred.map((t, i) => `${i + 1} ${t}`).join(" · ")}. These lead the plan.`;
+}
+
+/** A chip's star button name: its rank when starred, or, with every slot taken, what it would
+ *  take to star this one (the button stays focusable so a screen reader hears that). */
+export function starLabel(tag: string, starred: string[]): string {
+  const rank = starred.indexOf(tag) + 1;
+  if (rank) return `${tag}, priority ${rank} of ${MAX_STARRED_PRIORITIES}`;
+  return starred.length >= MAX_STARRED_PRIORITIES ? `Unstar one to make ${tag} a top three` : `Star ${tag}`;
+}
+
 // --- Sanitizing ------------------------------------------------------------------------------
 // `POST /api/itinerary` takes `userAnswers` as `unknown` and there is no `parseUserAnswers`, so
 // these run inside `deriveFlags` — the single point every path (UI, staged pipeline, raw curl,

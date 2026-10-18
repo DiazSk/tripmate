@@ -76,11 +76,16 @@
   font-size: 1.05em;
   opacity: 0.7;
 }
-.pf-chip-star:disabled {
-  opacity: 0.25;
+/* All three places taken: aria-disabled rather than disabled, so the name still says why (see starLabel). */
+.pf-chip-star[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
+
 .pf-chip-star[aria-pressed='true'] {
   opacity: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .pf-hint {
   font-size: 0.8em;
@@ -589,6 +594,11 @@
 .pb-index a:focus-visible {
   outline: 2px solid var(--wd-signal);
   outline-offset: 2px;
+}
+/* The chip clips its overflow, so the star's ring sits inside it, in ink so it shows on a signal badge. */
+.pf-chip .pf-chip-star:focus-visible {
+  outline-color: var(--wd-ink);
+  outline-offset: -3px;
 }
 @media (prefers-reduced-motion: reduce) {
   .pb-mast-img,

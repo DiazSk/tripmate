@@ -628,7 +628,9 @@ inset clips are scroll effects on photographs, not shapes.
 - **Destination chips:** a radio group over the hero photograph — night glass (5px blur), white text,
   frost edge brightening on hover. The checked chip turns ice with ink text, and a 2px signal bar along
   its foot fills over the rotation interval (`--rotate-ms`), pausing on hover or focus.
-- **Planner chips** (`.pp-chip`): hairline corners, multi-select, filled when chosen.
+- **Planner chips** (`.pp-chip`): hairline corners, multi-select, filled when chosen. A chosen interest chip
+  carries a star slot (`.pp-star`): ☆ in ink on white to claim a place, then its rank, 1 to 3, in ink on signal.
+  With all three places taken the slot of an unstarred chip is dashed and see-through, set a gap off the chip.
 - **Saved-place chips** (`.pp-anchor`): star, name, status, remove. The status is always words: found is
   "✓" plus where, in `{colors.tag-positive-fg}` with its edge tinted to match; not found is "Not found —
   try a nearby landmark" in the failure-alert text on dark glass (`#ffb3b3`, as `.pp-alert`; `--alert`
