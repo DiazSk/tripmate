@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getTrip, setTripShareToken } from "@/lib/db";
 import { currentOwner } from "@/lib/ownerRequest";
+import { writableOwners } from "@/lib/owner";
 import { shareUrl } from "@/lib/share";
 
 /**
@@ -27,9 +28,11 @@ export const dynamic = "force-dynamic";
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const trip = getTrip(id);
+  const { id: ownerId } = await currentOwner();
   // Same 404 copy, and the same reason, as every other handler on this path: a trip somebody may
-  // not touch must not be distinguishable from one that is not there.
-  if (!trip) {
+  // not touch must not be distinguishable from one that is not there. Checked before the
+  // `existing` return below, or a stranger could read an already-minted token.
+  if (!trip || !writableOwners(ownerId).includes(trip.owner_id)) {
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
@@ -39,7 +42,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // UUIDv4, the id format everywhere else here — 122 bits of randomness, and nothing derived
   // from the trip it opens. See the `share_token` column note for why that separation matters.
   const token = randomUUID();
-  const { id: ownerId } = await currentOwner();
   if (!setTripShareToken(id, token, ownerId)) {
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }

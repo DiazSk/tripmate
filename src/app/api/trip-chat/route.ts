@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listChatTurns } from "@/lib/db";
+import { readOwnTrip } from "@/lib/ownerRequest";
 
 /**
  * `GET ?tripId=` → the saved edit conversation for a trip, oldest first.
@@ -14,6 +15,10 @@ import { listChatTurns } from "@/lib/db";
 export async function GET(req: NextRequest) {
   const tripId = req.nextUrl.searchParams.get("tripId")?.trim();
   if (!tripId) return NextResponse.json({ error: "tripId is required" }, { status: 400 });
+
+  // Owner-scoped: a trip id is not a credential, so someone else's transcript reads as empty —
+  // the same answer as a trip that has no conversation.
+  if (!(await readOwnTrip(tripId))) return NextResponse.json({ turns: [] });
 
   const turns = listChatTurns(tripId).map((t) => ({
     role: t.role,

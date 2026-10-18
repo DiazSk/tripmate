@@ -226,8 +226,9 @@ export async function POST(req: NextRequest) {
     // Whichever session actually served the turn — which is NOT necessarily the one we asked for,
     // since the fallback above opens a new one. Persisting the wrong id would strand the trip on
     // a dead session for every future turn.
-    if (mode === "chat" && tripId && servedBy && servedBy !== stored?.chat_session_id) {
-      setTripChatSession(tripId, servedBy);
+    // `stored` is the owner-checked row, so a trip that is not the caller's is never written to.
+    if (mode === "chat" && stored && servedBy && servedBy !== stored.chat_session_id) {
+      setTripChatSession(stored.id, servedBy);
     }
 
     // Persist the turn pair, but only for a saved trip and only in chat mode. An element edit is
@@ -235,7 +236,8 @@ export async function POST(req: NextRequest) {
     // threading it into the transcript would put words in the traveler's mouth they never typed.
     // Best-effort: a transcript that fails to write must not fail the edit that already
     // succeeded, which is the same fail-soft bargain every other side-effect here makes.
-    if (tripId && mode === "chat") {
+    // `stored`, not `tripId`: the transcript belongs to the owner of the row, not to whoever names it.
+    if (stored && mode === "chat") {
       try {
         const turns = (body as { messages?: { role: string; content: string }[] }).messages ?? [];
         const latest = turns[turns.length - 1];
@@ -246,14 +248,14 @@ export async function POST(req: NextRequest) {
           // the assistant having ignored a scope that was never in force. Recording it here is
           // what lets the sheet stamp each turn with the scope it actually went out under.
           appendChatTurn({
-            tripId,
+            tripId: stored.id,
             role: "user",
             content: latest.content,
             meta: { scope: scope?.dayIndex ?? null },
           });
         }
         appendChatTurn({
-          tripId,
+          tripId: stored.id,
           role: "assistant",
           content: parsed.reply ?? "",
           meta: {

@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseJsonResponse, runClaude } from "@/lib/claude";
 import { buildPlaceDetailPrompt } from "@/lib/itineraryPrompt";
 import { compactItinerary } from "@/lib/editPrompt";
-import { getTrip, insertRun } from "@/lib/db";
+import { insertRun } from "@/lib/db";
+import { readOwnTrip } from "@/lib/ownerRequest";
 import { throttle } from "@/lib/ipThrottle";
 import { capResponse, limitResponse, modelFailureResponse } from "@/lib/limitResponse";
 import { dailyCapResumesAt } from "@/lib/spendCap";
@@ -52,7 +53,8 @@ export async function POST(req: NextRequest) {
     // browsing place details shows up as more steps on that same pipeline
     // card. Falls back to a fresh single-step run otherwise (no trip yet,
     // or an unknown/stale tripId).
-    const trip = tripId ? getTrip(tripId) : undefined;
+    // Owner-scoped: someone else's trip must not lend us its run id or its itinerary context.
+    const trip = tripId ? await readOwnTrip(tripId) : undefined;
     let runId = trip?.run_id ?? undefined;
     if (!runId) {
       runId = randomUUID();
