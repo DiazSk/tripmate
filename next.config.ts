@@ -31,7 +31,7 @@ const EVAL = "'unsafe-eval'";
 
 /** Each list is an audited set of origins, kept beside the feature that needs it.
  *  Added from the browser's own violation reports, one surface at a time. */
-const PROTECT = "https://*.client.protect.clerk.com:*"; // Clerk's bot probe: seven ports, not just 443
+const PROTECT = "https://*.client.protect.clerk.com:*"; // Clerk's bot probe: its loader.js, then probes on seven ports
 const OPENFREEMAP = "https://tiles.openfreemap.org"; // MapLibre: style, sprites, glyphs, vector tiles
 const TERRAIN = "https://s3.amazonaws.com/elevation-tiles-prod/"; // MapLibre's terrarium DEM, this bucket only
 const CESIUM = ["https://api.cesium.com", "https://tile.googleapis.com"]; // Ion token handshake, Google 3D tiles
@@ -41,12 +41,14 @@ const KOKORO = [
   "https://huggingface.co", "https://*.hf.co", "https://cdn-lfs.huggingface.co", // the model weights
 ];
 
-/** Report-only until a clean run on every surface: `/`, `/trip/[id]` on both map engines with a
- *  story film playing, sign-in and the saved-places import. `'unsafe-inline'` stays on script-src
- *  deliberately — App Router emits inline scripts and nonces would force every page dynamic. */
+/** Enforced, after a clean report-only run on every surface: `/`, `/trip/[id]` on both map engines
+ *  with a story film playing, sign-in and the saved-places import. A new origin a feature starts
+ *  calling has to be added here or the browser refuses the request. `'unsafe-inline'` stays on
+ *  script-src deliberately — App Router emits inline scripts and nonces would force every page
+ *  dynamic. */
 const CSP = [
   "default-src 'self'",
-  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", "https://cdn.protect.clerk.com", CLERK)}`,
+  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", "https://cdn.protect.clerk.com", PROTECT, CLERK)}`,
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   `connect-src ${list("'self'", ...KOKORO, OPENFREEMAP, TERRAIN, ...CESIUM, "https://geocoding-api.open-meteo.com", PROTECT, CLERK)}`,
@@ -103,7 +105,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
-          { key: "Content-Security-Policy-Report-Only", value: CSP },
+          { key: "Content-Security-Policy", value: CSP },
         ],
       },
       {
