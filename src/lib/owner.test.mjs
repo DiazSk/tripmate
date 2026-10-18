@@ -137,3 +137,29 @@ describe("writes are never widened", () => {
     assert.ok(writableOwners(resolveOwnerId(undefined)).includes(LEGACY_OWNER));
   });
 });
+
+// Production has no shared bucket. `env` is passed explicitly so these run under `node --test`,
+// where NODE_ENV is unset and the dev behaviour above is what applies.
+describe("the legacy bucket in production", () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  it("is not a valid owner id in production, and still is in development", () => {
+    assert.equal(isValidOwnerId(LEGACY_OWNER, "production"), false);
+    assert.equal(isValidOwnerId(LEGACY_OWNER, "development"), true);
+    assert.equal(isValidOwnerId(newOwnerId(), "production"), true);
+  });
+
+  it("is never widened into a read in production", () => {
+    const id = newOwnerId();
+    assert.deepEqual(readableOwners(id, false, "production"), [id]);
+    assert.deepEqual(readableOwners(id, false, "development"), [id, LEGACY_OWNER]);
+  });
+
+  it("is replaced by a fresh owner when a request carries none", () => {
+    const a = resolveOwnerId(undefined, "production");
+    assert.match(a, UUID);
+    assert.notEqual(a, LEGACY_OWNER);
+    assert.notEqual(resolveOwnerId("local", "production"), LEGACY_OWNER);
+    assert.equal(resolveOwnerId(undefined, "development"), LEGACY_OWNER);
+  });
+});

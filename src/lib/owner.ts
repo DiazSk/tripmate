@@ -55,6 +55,15 @@ export const OWNER_COOKIE_MAX_AGE_S = 400 * 24 * 60 * 60;
  * predate the cookie, so there is no honest way to attribute them, and hiding them would read to
  * the one person who has been using this app as though their trips had been deleted. Rows written
  * from here on carry a real owner and are visible only to it.
+ *
+ * **A development-migration affordance, and production does not have it.** The bucket exists so a
+ * developer's own `tripmate.db`, `curl`, the perf scripts and the bench harness — none of which
+ * carry a cookie — keep seeing what they saw before ownership existed. A deployment has no such
+ * history to protect and, worse, a shared bucket anyone can name: `"local"` passes the same shape
+ * check as a UUID, so `X-TripMate-Owner: local` was enough to write into it, and because every
+ * anonymous read is widened to include it, whatever was written appeared on every anonymous
+ * visitor's `/trips` wall. In production the three functions below therefore refuse it: it is not
+ * a valid id, it is never the fallback, and it is never added to a read.
  */
 export const LEGACY_OWNER = LOCAL_OWNER;
 
@@ -69,11 +78,18 @@ export function newOwnerId(): string {
  * Validated rather than trusted because it reaches a SQL parameter and a client can send anything.
  * It is parameterised at every call site, so this is not what stops injection — it stops a junk
  * value from silently becoming a *real, distinct owner*, which would hand the sender an empty
- * drafts list and no explanation. Anything that fails falls back to the legacy bucket.
+ * drafts list and no explanation. Anything that fails falls back to the legacy bucket — in
+ * development; in production it falls back to a fresh identity (see `resolveOwnerId`).
+ *
+ * **`"local"` is valid only outside production.** `env` defaults to `process.env.NODE_ENV` so no
+ * caller has to pass it; it is a parameter so a test can exercise both modes without mutating the
+ * process environment (`node --test` leaves NODE_ENV unset, which takes the development branch).
+ * The proxy validates both the `X-TripMate-Owner` header and the cookie with this function, so in
+ * production a `"local"` claim fails there and the proxy mints a real owner instead of adopting it.
  */
-export function isValidOwnerId(value: string | undefined | null): boolean {
+export function isValidOwnerId(value: string | undefined | null, env = process.env.NODE_ENV): boolean {
   if (!value) return false;
-  if (value === LEGACY_OWNER) return true;
+  if (value === LEGACY_OWNER) return env !== "production";
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
@@ -83,9 +99,14 @@ export function isValidOwnerId(value: string | undefined | null): boolean {
  * The fallback is what keeps every non-browser caller working unchanged — `curl`, the perf scripts,
  * the bench harness and the browser's very first request all arrive with no cookie, and all of them
  * should see the same thing they saw before ownership existed rather than an empty list.
+ *
+ * **In production there is no such bucket to fall back to.** A request that reaches here with no
+ * valid cookie (the proxy normally mints one first, so this is a defence in depth) gets a fresh,
+ * throwaway owner: it sees nothing, and whatever it writes belongs to nobody who can name it
+ * later, rather than landing in a pool every other cookieless caller can read and write.
  */
-export function resolveOwnerId(raw: string | undefined | null): string {
-  return isValidOwnerId(raw) ? (raw as string) : LEGACY_OWNER;
+export function resolveOwnerId(raw: string | undefined | null, env = process.env.NODE_ENV): string {
+  return isValidOwnerId(raw, env) ? (raw as string) : env === "production" ? newOwnerId() : LEGACY_OWNER;
 }
 
 /**
@@ -107,9 +128,14 @@ export function resolveOwnerId(raw: string | undefined | null): string {
  * both UUIDv4 by design, so nothing about the value distinguishes them. It defaults to `false` so
  * every existing caller keeps its previous behaviour — the same additive shape `owner_id` itself
  * was introduced with.
+ *
+ * **In production nobody is widened.** The bucket is a development-migration affordance (see
+ * LEGACY_OWNER) and a deployment has no shared bucket, so every caller reads exactly its own
+ * rows. `env` follows `signedIn` rather than replacing it, so existing two-argument callers are
+ * unchanged.
  */
-export function readableOwners(ownerId: string, signedIn = false): string[] {
-  if (signedIn) return [ownerId];
+export function readableOwners(ownerId: string, signedIn = false, env = process.env.NODE_ENV): string[] {
+  if (signedIn || env === "production") return [ownerId];
   return ownerId === LEGACY_OWNER ? [LEGACY_OWNER] : [ownerId, LEGACY_OWNER];
 }
 
