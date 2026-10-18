@@ -1,6 +1,7 @@
 /* Run: npm test (needs --import ./scripts/ts-resolve.mjs, since failure.ts imports actionHolds extensionless) */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { OFF_TOPIC_SENTENCES, offTopicResponse } from "./limitResponse.ts";
 import { failureFromResponse, failureFromStreamError, failureFromThrown, isAbort } from "./failure.ts";
 
 const res = (status, body, headers = {}) =>
@@ -76,4 +77,17 @@ test("formatResumeTime says the cap's end on the traveller's clock", async () =>
   assert.equal(formatResumeTime(new Date(2026, 9, 17, 23, 20), now), "about 11:20 tonight");
   assert.equal(formatResumeTime(new Date(2026, 9, 18, 9, 40), now), "about 9:40 tomorrow morning");
   assert.equal(formatResumeTime(new Date(2026, 9, 18, 0, 5), now), "about 12:05 tomorrow morning");
+});
+
+test("off_topic and too_long map to invalid with the server's sentence, from a response or a stream", async () => {
+  const chat = OFF_TOPIC_SENTENCES.chat;
+  assert.deepEqual(await failureFromResponse(offTopicResponse("chat"), "edit"), { kind: "invalid", message: chat });
+  assert.deepEqual(failureFromStreamError({ code: "off_topic", error: OFF_TOPIC_SENTENCES.refine }, "plan"), {
+    kind: "invalid",
+    message: OFF_TOPIC_SENTENCES.refine,
+  });
+  assert.deepEqual(await failureFromResponse(res(413, { error: "Too long.", code: "too_long" }), "edit"), { kind: "invalid", message: "Too long." });
+  assert.deepEqual(failureFromStreamError({ code: "too_long", error: "Too long." }, "plan"), { kind: "invalid", message: "Too long." });
+  // A code with no sentence to show is not an invalid failure.
+  assert.equal(failureFromStreamError({ code: "off_topic" }, "plan").kind, "server");
 });

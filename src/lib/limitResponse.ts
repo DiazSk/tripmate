@@ -53,6 +53,17 @@ export const TIMEOUT_SENTENCES = {
     "Writing the details for this place took longer than TripMate allows, so it stopped. Your plan is unchanged. Try again.",
 } satisfies Partial<Record<Bucket, string>>;
 
+/** SV-14..SV-16: what the scope guard says when it refuses, per surface. */
+export const OFF_TOPIC_SENTENCES = {
+  chat: "TripMate can only help with this trip: its stops, timing, costs and getting around. Ask about the plan, or ask for a change to it.",
+  element: "TripMate can only swap this stop for another place to go. Describe the stop you’d like instead.",
+  refine: "TripMate can only change this trip. Say what you’d like different about the plan.",
+};
+
+export function offTopicResponse(kind: keyof typeof OFF_TOPIC_SENTENCES): NextResponse {
+  return NextResponse.json({ error: OFF_TOPIC_SENTENCES[kind], code: "off_topic" }, { status: 422 });
+}
+
 export function limitResponse(r: Extract<ThrottleResult, { limited: true }>, bucket: LimitedBucket): NextResponse {
   const { retryAfterSeconds, limit, windowMinutes } = r;
   return NextResponse.json(

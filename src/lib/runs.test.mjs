@@ -50,3 +50,7 @@ test("parseUsage tags a Messages API envelope as transport 'api'", () => {
 test("parseUsage tags a malformed envelope as transport 'unknown'", () => {
   assert.equal(parseUsage("not json").transport, "unknown");
 });
+
+test("parseUsage on a refused row (no envelope, no stored cost) reports no spend", () => {
+  assert.deepEqual(parseUsage(null, "none", null), { inputTokens: null, outputTokens: null, costUsd: null, transport: "unknown" });
+});

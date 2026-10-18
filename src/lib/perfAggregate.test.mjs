@@ -116,3 +116,10 @@ test("aggregatePerfStats prefers a trace's own cost_usd column over the envelope
   const [generate] = aggregatePerfStats(traces);
   assert.equal(generate.costUsd.avg, 0.5);
 });
+
+test("a refused trace (null raw_response, null cost_usd) adds no spend and does not throw", () => {
+  const [chat] = aggregatePerfStats([{ type: "chat", durationMs: null, rawResponse: null, costUsd: null }]);
+  assert.equal(chat.count, 1);
+  assert.equal(chat.costUsd.avg, null);
+  assert.equal(chat.inputTokens.avg, null);
+});

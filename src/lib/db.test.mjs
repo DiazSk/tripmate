@@ -10,7 +10,13 @@ import {
   getLlmSession,
   getTrip,
   getTripByShareToken,
+  getRunSteps,
   insertGeneration,
+  insertRefusalTrace,
+  insertTrace,
+  markTraceRefused,
+  truncateLlmSession,
+  updateTrace,
   insertTrip,
   linkGenerationToTrip,
   setTripShareToken,
@@ -18,6 +24,41 @@ import {
   writeRevisionOver,
 } from "./db.ts";
 import { normalizeDays } from "./itinerary.ts";
+
+test("markTraceRefused sets status and reason and leaves duration, raw_response and cost alone", () => {
+  const runId = "run-refused-1";
+  const id = insertTrace({ type: "chat", prompt: "p", model: "m", runId });
+  updateTrace(id, { status: "ok", rawResponse: '{"usage":{}}', durationMs: 1234, costUsd: 0.02 });
+  markTraceRefused(id, "model: off_topic");
+  const [t] = getRunSteps(runId);
+  assert.equal(t.status, "refused");
+  assert.equal(t.error_message, "model: off_topic");
+  assert.equal(t.duration_ms, 1234);
+  assert.equal(t.raw_response, '{"usage":{}}');
+  assert.equal(t.cost_usd, 0.02);
+});
+
+test("insertRefusalTrace keeps the first 500 characters and records the rule", () => {
+  const runId = "run-refused-2";
+  const id = insertRefusalTrace({ type: "chat", prompt: "x".repeat(2000), rule: "poem", runId });
+  const [t] = getRunSteps(runId);
+  assert.equal(t.id, id);
+  assert.equal(t.status, "refused");
+  assert.equal(t.model, "none");
+  assert.equal(t.prompt.length, 500);
+  assert.equal(t.error_message, "prefilter: poem");
+  assert.equal(t.run_id, runId);
+  assert.equal(t.raw_response, null);
+  assert.equal(t.cost_usd, null);
+});
+
+test("truncateLlmSession keeps the first n messages; an unknown id is a no-op", () => {
+  const id = createLlmSession([1, 2, 3, 4, 5, 6].map((n) => ({ role: n % 2 ? "user" : "assistant", content: String(n) })));
+  truncateLlmSession(id, 4);
+  assert.deepEqual(getLlmSession(id).map((m) => m.content), ["1", "2", "3", "4"]);
+  truncateLlmSession("does-not-exist", 4);
+  assert.equal(getLlmSession("does-not-exist"), undefined);
+});
 
 test("createLlmSession/getLlmSession round-trip the messages array", () => {
   const id = createLlmSession([{ role: "user", content: "hi" }]);

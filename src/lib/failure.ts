@@ -19,6 +19,10 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 /** Same mapping for an HTTP error body and for an SSE `error` event's data. */
 function fromCode(body: Body, retryHeader: number | null, now: number, hint: Bucket): Failure | null {
   if (body.code === "timeout") return { kind: "timeout" };
+  // The server wrote the sentence (SV-14..16 for the scope guard, SV-17/20 for the length caps).
+  if ((body.code === "off_topic" || body.code === "too_long") && typeof body.error === "string" && body.error) {
+    return { kind: "invalid", message: body.error };
+  }
   if (body.code === "daily_cap") {
     return { kind: "daily_cap", resumesAt: new Date(now + (num(body.retryAfterSeconds) ?? retryHeader ?? 60) * 1000) };
   }

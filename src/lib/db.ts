@@ -1183,6 +1183,32 @@ export function updateTrace(
   });
 }
 
+/**
+ * The scope guard refused what the model wrote: re-mark that call's trace. Its own narrow UPDATE
+ * rather than `updateTrace`, which sets `duration_ms` and would null it when omitted. The tokens
+ * were spent, so `raw_response`, `duration_ms` and `cost_usd` stay as they are.
+ */
+export function markTraceRefused(id: string, reason: string): void {
+  db.prepare(`UPDATE llm_traces SET status = 'refused', error_message = ? WHERE id = ?`).run(reason, id);
+}
+
+/** A refusal with no model call behind it (the prefilter): a row so the trace viewer shows it. */
+export function insertRefusalTrace(p: { type: string; prompt: string; rule: string; runId?: string }): string {
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO llm_traces (id, type, prompt, model, run_id, status, error_message, created_at)
+     VALUES (@id, @type, @prompt, 'none', @runId, 'refused', @errorMessage, @createdAt)`
+  ).run({
+    id,
+    type: p.type,
+    prompt: p.prompt.slice(0, 500),
+    runId: p.runId ?? null,
+    errorMessage: `prefilter: ${p.rule}`,
+    createdAt: new Date().toISOString(),
+  });
+  return id;
+}
+
 export function listTraces(): TraceRow[] {
   return db
     .prepare(
@@ -1708,6 +1734,15 @@ export function appendLlmSessionTurns(id: string, newTurns: unknown[]): void {
     JSON.stringify([...existing, ...newTurns]),
     id
   );
+}
+
+/** Drops a refused turn from an API-transport session so the model never replays it. An unknown id
+ *  is a no-op. (The CLI transport keeps a JSONL file that cannot be edited after the fact; it only
+ *  serves local development, so that risk is accepted.) */
+export function truncateLlmSession(id: string, keepCount: number): void {
+  const existing = getLlmSession(id);
+  if (!existing) return;
+  db.prepare(`UPDATE llm_sessions SET messages = ? WHERE id = ?`).run(JSON.stringify(existing.slice(0, keepCount)), id);
 }
 
 /** Each costed trace at or after `isoCutoff`, oldest first. The cutoff is a caller-supplied ISO

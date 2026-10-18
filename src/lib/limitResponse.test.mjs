@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LIMITS } from "./ipThrottle.ts";
-import { capResponse, limitResponse, modelFailureResponse, routeLimitSentence, unit } from "./limitResponse.ts";
+import { OFF_TOPIC_SENTENCES, capResponse, limitResponse, modelFailureResponse, offTopicResponse, routeLimitSentence, unit } from "./limitResponse.ts";
 import { ModelTimeoutError } from "./modelTimeout.ts";
 
 // Copy table rows SV-01..SV-13, SV-18, SV-19 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
@@ -81,4 +81,20 @@ test("a value of 1 takes the singular unit, 2 the plural", async () => {
   assert.match((await capResponse(new Date(3_600_001), now).json()).error, /about 2 more hours\./);
   assert.equal(routeLimitSentence(1), "Too many walking-time lookups in the last minute. They’ll be ready again in about 1 second.");
   assert.equal(routeLimitSentence(2), "Too many walking-time lookups in the last minute. They’ll be ready again in about 2 seconds.");
+});
+
+// Copy table rows SV-14..SV-16.
+const OFF_TOPIC = {
+  chat: "TripMate can only help with this trip: its stops, timing, costs and getting around. Ask about the plan, or ask for a change to it.",
+  element: "TripMate can only swap this stop for another place to go. Describe the stop you’d like instead.",
+  refine: "TripMate can only change this trip. Say what you’d like different about the plan.",
+};
+
+test("offTopicResponse is a 422 off_topic carrying the copy row for its surface", async () => {
+  assert.deepEqual(OFF_TOPIC_SENTENCES, OFF_TOPIC);
+  for (const [kind, error] of Object.entries(OFF_TOPIC)) {
+    const res = offTopicResponse(kind);
+    assert.equal(res.status, 422);
+    assert.deepEqual(await res.json(), { error, code: "off_topic" });
+  }
 });
