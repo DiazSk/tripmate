@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCandidatePoisCached } from "@/lib/serverFetchCached";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /**
  * `GET ?lat=&lng=` → real named places within a short walk of a point on the globe.
@@ -20,6 +22,8 @@ import { getCandidatePoisCached } from "@/lib/serverFetchCached";
  * `available: true` with an empty list, and the picker says nothing about a service.
  */
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const params = req.nextUrl.searchParams;
   const lat = Number(params.get("lat"));
   const lng = Number(params.get("lng"));

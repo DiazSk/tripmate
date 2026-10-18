@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchRawTrip } from "@/lib/tripFetch";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /**
  * Step 2a: the preference-independent data fetch, fired the moment a trip is submitted
@@ -10,6 +12,8 @@ import { fetchRawTrip } from "@/lib/tripFetch";
  * the identical path; this route is just the HTTP shell.
  */
 export async function POST(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const { destination, startDate, endDate } = await req.json();
   if (!destination || !startDate || !endDate) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

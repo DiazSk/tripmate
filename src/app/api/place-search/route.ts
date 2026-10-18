@@ -5,7 +5,12 @@ import {
   searchPlaces,
   type PlaceCategory,
 } from "@/lib/placeSearch";
+import { cached } from "@/lib/fetchCache";
 import { decodePolygon } from "@/lib/searchArea";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
+
+const GOOGLE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * `GET ?lat=&lng=&q=&category=&radius=&area=` → named places in an area, for the map's search
@@ -26,6 +31,8 @@ import { decodePolygon } from "@/lib/searchArea";
  * can attribute it honestly; see `placeSearch.ts` for why there are two.
  */
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "geocode-place");
+  if (limit.limited) return limitResponse(limit, "geocode-place");
   const params = req.nextUrl.searchParams;
   const lat = Number(params.get("lat"));
   const lng = Number(params.get("lng"));
@@ -66,13 +73,17 @@ export async function GET(req: NextRequest) {
   const MAX_AREA_VERTICES = 32;
   const boundedArea = area && area.length <= MAX_AREA_VERTICES ? area : undefined;
 
-  const result = await searchPlaces({
+  const result = await searchPlaces(
+    {
     lat,
     lng,
     query: params.get("q") ?? undefined,
     categories: categories.length ? categories : undefined,
     radiusM,
     area: boundedArea,
-  });
+    },
+    // A day of Google answers per spot: a map nudge or a re-typed query is not a new paid call.
+    (key, fetcher) => cached(key, GOOGLE_TTL_MS, fetcher)
+  );
   return NextResponse.json(result);
 }

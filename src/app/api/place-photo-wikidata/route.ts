@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { wikidataPhoto } from "@/lib/placePhotos";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /**
  * `GET /api/place-photo-wikidata?qid=Q869130` → `{ url }`, or `{ url: null }`.
@@ -17,6 +19,8 @@ import { wikidataPhoto } from "@/lib/placePhotos";
  * same way.
  */
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const qid = req.nextUrl.searchParams.get("qid");
   if (!qid) return NextResponse.json({ error: "qid is required" }, { status: 400 });
   return NextResponse.json({ url: await wikidataPhoto(qid) });

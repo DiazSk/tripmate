@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchCityBoundary, fetchNearbyPlaces } from "@/lib/cityBoundary";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /**
  * `GET ?lat=&lng=` → the city's administrative outline and the towns around it.
@@ -13,6 +15,8 @@ import { fetchCityBoundary, fetchNearbyPlaces } from "@/lib/cityBoundary";
  * contract as `/api/roads`.
  */
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const lat = Number(req.nextUrl.searchParams.get("lat"));
   const lng = Number(req.nextUrl.searchParams.get("lng"));
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {

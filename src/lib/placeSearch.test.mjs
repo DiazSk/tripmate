@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { categoryFromTags, detailsFromTags } from "./placeSearch.ts";
+import { categoryFromTags, detailsFromTags, googleCacheKey, searchPlaces } from "./placeSearch.ts";
 import { categoryForPoiClass } from "./tilePlaces.ts";
 
 test("a place with no interesting tags yields no keys, not empty ones", () => {
@@ -129,4 +129,50 @@ test("anything unrecognised still falls back rather than inventing a chip", () =
   assert.equal(categoryFromTags({ office: "lawyer" }), "place");
   assert.equal(categoryFromTags({}), "place");
   assert.equal(categoryFromTags({ amenity: "bench" }, "cafe"), "cafe");
+});
+
+test("the Google cache key ignores a map nudge but not a different question", () => {
+  const base = { lat: 45.4642, lng: 9.19, query: "Cafe", categories: ["cafe", "bar"] };
+  const key = googleCacheKey(base);
+  assert.equal(googleCacheKey({ ...base, lat: 45.46421, lng: 9.19004, query: " cafe ", categories: ["bar", "cafe"] }), key);
+  assert.notEqual(googleCacheKey({ ...base, query: "bar" }), key);
+  assert.notEqual(googleCacheKey({ ...base, lat: 45.4652 }), key);
+  assert.notEqual(googleCacheKey({ ...base, categories: ["cafe"] }), key);
+  assert.notEqual(googleCacheKey({ ...base, radiusM: 5000 }), key);
+});
+
+test("only a non-empty Google answer reaches the cache: a failure or an empty list is never stored", async () => {
+  const prevKey = process.env.GOOGLE_PLACES_API_KEY;
+  const prevFetch = globalThis.fetch;
+  process.env.GOOGLE_PLACES_API_KEY = "test-key";
+  const asked = [];
+  // Google answers per the mode; everything else (the Overpass fallback) fails, so `available` is false.
+  let googleBody;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("places.googleapis.com")) {
+      if (googleBody === "fail") return { ok: false, json: async () => ({}) };
+      return { ok: true, json: async () => googleBody };
+    }
+    throw new Error("offline");
+  };
+  const memo = async (key, fetcher) => {
+    const v = await fetcher();
+    asked.push(v);
+    return v;
+  };
+  try {
+    googleBody = "fail";
+    await searchPlaces({ lat: 1, lng: 2, query: "x" }, memo);
+    googleBody = { places: [] };
+    await searchPlaces({ lat: 1, lng: 2, query: "x" }, memo);
+    googleBody = { places: [{ id: "a", displayName: { text: "Duomo" }, location: { latitude: 1, longitude: 2 } }] };
+    const hit = await searchPlaces({ lat: 1, lng: 2, query: "x" }, memo);
+    assert.deepEqual(asked.map((v) => v === null), [true, true, false]);
+    assert.equal(hit.provider, "google");
+    assert.equal(hit.places[0].name, "Duomo");
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevKey === undefined) delete process.env.GOOGLE_PLACES_API_KEY;
+    else process.env.GOOGLE_PLACES_API_KEY = prevKey;
+  }
 });

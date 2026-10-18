@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDestinationContext } from "@/lib/destinationContext";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse } from "@/lib/limitResponse";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 
 /**
  * Fire-and-forget cache warmer: the client calls this the moment destination/dates are
@@ -16,9 +19,17 @@ import { getDestinationContext } from "@/lib/destinationContext";
  * unaffected. `context` is null whenever the lookup failed.
  */
 export async function POST(req: NextRequest) {
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
+  const limit = throttle(req, "context");
+  if (limit.limited) return limitResponse(limit, "context");
   const { destination, startDate, endDate } = await req.json();
   if (!destination || !startDate || !endDate) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+  // A string no longer than any real place name, before it reaches a prompt and a paid search.
+  if (typeof destination !== "string" || destination.length > 200) {
+    return NextResponse.json({ error: "Invalid destination" }, { status: 400 });
   }
   const context = await getDestinationContext(destination, startDate, endDate);
   return NextResponse.json({ ok: true, context });

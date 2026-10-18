@@ -4,7 +4,7 @@ import { LIMITS } from "./ipThrottle.ts";
 import { capResponse, limitResponse, modelFailureResponse, routeLimitSentence, unit } from "./limitResponse.ts";
 import { ModelTimeoutError } from "./modelTimeout.ts";
 
-// Copy table rows SV-01..SV-13 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
+// Copy table rows SV-01..SV-13, SV-18, SV-19 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
 // section 9), with {minutes} = 5 for retryAfterSeconds 241..300.
 const SV = {
   plan: "You’ve planned 3 trips in the last 10 minutes, which is the limit. You can plan another in about 5 minutes.",
@@ -15,10 +15,13 @@ const SV = {
   "import-plan": "You’ve brought in 30 plans in the last 10 minutes, which is the limit. You can try again in about 5 minutes.",
   "import-plan-complete": "You’ve saved 30 imported plans in the last 10 minutes, which is the limit. You can try again in about 5 minutes.",
   "geocode-place": "You’ve looked up 60 places in the last 10 minutes, which is the limit. You can look again in about 5 minutes.",
+  context: "TripMate looked up 10 destinations in the last 10 minutes, which is the limit. It can look up another in about 5 minutes.",
+  lookup: "TripMate looked up a lot of places in the last 10 minutes. It can look again in about 5 minutes.",
 };
 
 test("every bucket has its copy row, and the 429 carries the structured body", async () => {
-  assert.deepEqual(Object.keys(SV).sort(), Object.keys(LIMITS).sort());
+  // `refusal` is internal: it is counted, never answered as a 429.
+  assert.deepEqual(Object.keys(SV).sort(), Object.keys(LIMITS).filter((b) => b !== "refusal").sort());
   for (const [bucket, sentence] of Object.entries(SV)) {
     const { max, windowMinutes } = LIMITS[bucket];
     const res = limitResponse({ limited: true, retryAfterSeconds: 241, limit: max, windowMinutes }, bucket);

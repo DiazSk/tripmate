@@ -105,3 +105,27 @@ test("the key map stays bounded under a flood of distinct addresses", () => {
   for (let i = 0; i < 10_050; i += 1) throttle(fakeRequest(`77.${i >> 16 & 255}.${i >> 8 & 255}.${i & 255}`), "geocode-place");
   assert.ok(throttleKeyCount() <= 10_000, `map grew to ${throttleKeyCount()}`);
 });
+
+test("an IPv6 client is keyed by its /64, so the host half buys no fresh bucket", () => {
+  const a = clientIp(fakeRequest("2001:db8:1:2:aaaa::1"));
+  assert.equal(a, "2001:db8:1:2::/64");
+  assert.equal(clientIp(fakeRequest("2001:db8:1:2:bbbb::9")), a);
+  // Compressed inside the first four groups, and uppercase.
+  assert.equal(clientIp(fakeRequest("2001:DB8::5:1")), "2001:db8:0:0::/64");
+  assert.equal(clientIp(fakeRequest("2001:db8:1:2:3:4:5:6")), "2001:db8:1:2::/64");
+  assert.equal(clientIp(fakeRequest("::2")), "0:0:0:0::/64");
+  const req = fakeRequest("2001:db8:77:1:1::1");
+  for (let i = 0; i < LIMITS.plan.max; i += 1) assert.equal(throttle(req, "plan").limited, false);
+  assert.equal(throttle(fakeRequest("2001:db8:77:1:ffff::2"), "plan").limited, true);
+});
+
+test("an IPv4-mapped IPv6 address is the IPv4 address; IPv4 is unchanged", () => {
+  assert.equal(clientIp(fakeRequest("::ffff:203.0.113.5")), "203.0.113.5");
+  assert.equal(clientIp(fakeRequest("203.0.113.5")), "203.0.113.5");
+});
+
+test("the context, lookup and refusal buckets", () => {
+  assert.deepEqual(LIMITS.context, { max: 10, windowMinutes: 10 });
+  assert.deepEqual(LIMITS.lookup, { max: 120, windowMinutes: 10 });
+  assert.deepEqual(LIMITS.refusal, { max: 30, windowMinutes: 10 });
+});

@@ -20,7 +20,10 @@ export function unit(n: number, word: string): string {
 /** "1 minute", "2 minutes". */
 const count = (n: number, word: string) => `${n} ${unit(n, word)}`;
 
-const LIMIT_SENTENCES: Record<Bucket, (wait: string) => string> = {
+/** `refusal` is internal (the scope guard counts it) and is never answered as a 429, so it has no sentence. */
+type LimitedBucket = Exclude<Bucket, "refusal">;
+
+const LIMIT_SENTENCES: Record<LimitedBucket, (wait: string) => string> = {
   plan: (w) => `You’ve planned 3 trips in the last 10 minutes, which is the limit. You can plan another in about ${w}.`,
   edit: (w) => `You’ve asked TripMate for 6 changes in the last 10 minutes, which is the limit. You can ask for another in about ${w}.`,
   "place-detail": (w) =>
@@ -32,6 +35,9 @@ const LIMIT_SENTENCES: Record<Bucket, (wait: string) => string> = {
   "import-plan-complete": (w) =>
     `You’ve saved 30 imported plans in the last 10 minutes, which is the limit. You can try again in about ${w}.`,
   "geocode-place": (w) => `You’ve looked up 60 places in the last 10 minutes, which is the limit. You can look again in about ${w}.`,
+  context: (w) =>
+    `TripMate looked up 10 destinations in the last 10 minutes, which is the limit. It can look up another in about ${w}.`,
+  lookup: (w) => `TripMate looked up a lot of places in the last 10 minutes. It can look again in about ${w}.`,
 };
 
 /** SV-09, for `/api/route`'s own limiter. */
@@ -47,7 +53,7 @@ export const TIMEOUT_SENTENCES = {
     "Writing the details for this place took longer than TripMate allows, so it stopped. Your plan is unchanged. Try again.",
 } satisfies Partial<Record<Bucket, string>>;
 
-export function limitResponse(r: Extract<ThrottleResult, { limited: true }>, bucket: Bucket): NextResponse {
+export function limitResponse(r: Extract<ThrottleResult, { limited: true }>, bucket: LimitedBucket): NextResponse {
   const { retryAfterSeconds, limit, windowMinutes } = r;
   return NextResponse.json(
     {

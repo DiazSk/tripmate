@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchSummary, resolveTitle } from "@/lib/wikiTitle";
 import { commonsCategoryImages, commonsFileUrl, wikidataPlace } from "@/lib/placePhotos";
 import { fetchPoiOsmTags } from "@/lib/poiDetails";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /**
  * Everything a place card can say about one stop, from free sources, in one request.
@@ -60,6 +62,8 @@ const EMPTY: PlaceGallery = {
 };
 
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const name = req.nextUrl.searchParams.get("name");
   const lat = Number(req.nextUrl.searchParams.get("lat"));
   const lng = Number(req.nextUrl.searchParams.get("lng"));

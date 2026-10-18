@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reconcileTrip } from "@/lib/reconcile";
 import { enrichSelectedPois } from "@/lib/poiEnrichment";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /**
  * Steps 3 + 4. The caller awaits both parallel tracks and posts them here together — that await
@@ -11,6 +13,8 @@ import { enrichSelectedPois } from "@/lib/poiEnrichment";
  * field degrades to a flagged default carried in `notes`.
  */
 export async function POST(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const { rawFetch, userAnswers } = await req.json();
   if (!rawFetch || !userAnswers) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

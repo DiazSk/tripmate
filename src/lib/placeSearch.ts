@@ -194,10 +194,40 @@ export interface PlaceSearchResult {
   available: boolean;
 }
 
-export async function searchPlaces(request: PlaceSearchRequest): Promise<PlaceSearchResult> {
+/**
+ * How a caller caches a Google answer, passed in rather than imported: this module is also read by
+ * client components (`PLACE_CATEGORIES`), and the cache reaches the database driver.
+ * `fetchCache.cached` has exactly this shape; its `null` means "could not ask" and is never stored.
+ */
+export type GoogleMemo = (key: string, fetcher: () => Promise<FoundPlace[] | null>) => Promise<FoundPlace[] | null>;
+
+const r = (n: number, places: number) => Number(n.toFixed(places));
+
+/** Everything that changes Google's answer. The bias point is rounded to 3 decimals (~110m), so a map
+ *  nudge hits the same row; the polygon and radius are in the key because they change what comes back. */
+export function googleCacheKey({ lat, lng, query, categories, radiusM, area }: PlaceSearchRequest): string {
+  return `place-search:google:${JSON.stringify([
+    query?.trim().toLowerCase() ?? "",
+    r(lat, 3),
+    r(lng, 3),
+    [...(categories ?? [])].sort(),
+    radiusM ?? DEFAULT_SEARCH_RADIUS_M,
+    area?.map((p) => [r(p.lat, 4), r(p.lng, 4)]) ?? null,
+  ])}`;
+}
+
+export async function searchPlaces(
+  request: PlaceSearchRequest,
+  memo: GoogleMemo = (_key, fetcher) => fetcher()
+): Promise<PlaceSearchResult> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (key) {
-    const places = await searchGoogle(request, key);
+    // Only a non-empty answer is stored: `searchGoogle` returns null for "could not ask" and [] for
+    // "found nothing", and both fall through to OSM below, so neither is worth a day of staleness.
+    const places = await memo(googleCacheKey(request), async () => {
+      const found = await searchGoogle(request, key);
+      return found && found.length > 0 ? found : null;
+    });
     // A Google failure falls through to OSM rather than returning nothing. The traveler asked a
     // question; a quota error is our problem, not theirs.
     if (places && places.length > 0) return { provider: "google", places, available: true };

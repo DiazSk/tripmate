@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchSummary, resolveTitle, wideImage } from "@/lib/wikiTitle";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const name = req.nextUrl.searchParams.get("name");
   if (!name) {
     return NextResponse.json({ error: "Missing name" }, { status: 400 });

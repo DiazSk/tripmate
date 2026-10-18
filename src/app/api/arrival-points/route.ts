@@ -6,6 +6,8 @@ import {
 } from "@/lib/arrivalPoints";
 import { TTL, cached } from "@/lib/fetchCache";
 import { askOverpass } from "@/lib/overpass";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 
 /** Longer than the shared default, and measured rather than guessed: this query came back in 18s
  *  against the public instance, almost all of it queue wait. The `[timeout:25]` inside the query
@@ -26,6 +28,8 @@ const OVERPASS_TIMEOUT_MS = 45_000;
  * 502 here would surface as an error on a question nobody was required to answer.
  */
 export async function GET(req: NextRequest) {
+  const limit = throttle(req, "lookup");
+  if (limit.limited) return limitResponse(limit, "lookup");
   const lat = Number(req.nextUrl.searchParams.get("lat"));
   const lon = Number(req.nextUrl.searchParams.get("lon"));
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {

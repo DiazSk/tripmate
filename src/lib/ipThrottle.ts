@@ -7,6 +7,8 @@
  * One bucket per action, because a cheap route must not spend the model routes' budget, or be held
  * to it, and because a refusal has to name the action it refused (limitResponse.ts says which).
  */
+import { isIPv6 } from "node:net";
+
 export type Bucket =
   | "plan"
   | "edit"
@@ -15,7 +17,10 @@ export type Bucket =
   | "import"
   | "import-plan"
   | "import-plan-complete"
-  | "geocode-place";
+  | "geocode-place"
+  | "context"
+  | "lookup"
+  | "refusal";
 
 export const LIMITS: Record<Bucket, { max: number; windowMinutes: number }> = {
   plan: { max: 3, windowMinutes: 10 },
@@ -26,6 +31,13 @@ export const LIMITS: Record<Bucket, { max: number; windowMinutes: number }> = {
   "import-plan": { max: 30, windowMinutes: 10 },
   "import-plan-complete": { max: 30, windowMinutes: 10 },
   "geocode-place": { max: 60, windowMinutes: 10 },
+  // destination-context: two model calls and a paid Brave search per request, and the wizard fires it
+  // on leaving the basics step, so a person plans a handful an hour, not a handful a minute.
+  context: { max: 10, windowMinutes: 10 },
+  // The free lookups (Overpass, Wikimedia, Open-Meteo, ...): cheap each, but a loop is a loop.
+  lookup: { max: 120, windowMinutes: 10 },
+  // Internal: counts refusals by the AI scope guard. Never answered as a 429.
+  refusal: { max: 30, windowMinutes: 10 },
 };
 
 /** The longest window, which is how long any key can still matter to the sweep. */
@@ -49,13 +61,38 @@ const recentByBucketAndIp = new Map<string, number[]>();
  * switch to the deployment's trusted hop instead of guessing here.
  */
 export function clientIp(req: { headers: { get(name: string): string | null } }): string | null {
-  const ip = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const raw = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   // Loopback is no signal either: `next start` forwards a direct request as `x-forwarded-for: ::1`,
   // so every local caller would share one bucket and an ordinary dev session would trip it.
   // Without `x-real-ip`, a forged loopback `x-forwarded-for` sits out too, which is no worse than
   // the rotation that header already allows.
-  if (!ip || /^(127\.|::1$|::ffff:127\.)/.test(ip)) return null;
-  return ip;
+  if (!raw || /^(127\.|::1$|::ffff:127\.)/.test(raw)) return null;
+  const ip = isIPv6(raw) ? ipv6Key(raw) : raw;
+  return /^127\./.test(ip) ? null : ip;
+}
+
+/**
+ * An IPv6 client is a /64, not an address: a residential connection is handed a whole /64, so keying
+ * on the full address let one person rotate through 2^64 buckets. `::ffff:a.b.c.d` is IPv4 in an
+ * IPv6 wrapper and keys as `a.b.c.d`. Node has no expander, so this writes the four hextets out.
+ */
+function ipv6Key(addr: string): string {
+  let a = addr.split("%")[0].toLowerCase();
+  // An embedded dotted tail ("64:ff9b::1.2.3.4") is two hextets.
+  const v4 = a.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const [b0, b1, b2, b3] = v4.slice(1).map(Number);
+    a = a.slice(0, v4.index) + ((b0 << 8) | b1).toString(16) + ":" + ((b2 << 8) | b3).toString(16);
+  }
+  const [head, tail] = a.split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const groups = tail === undefined ? h : [...h, ...Array<string>(8 - h.length - t.length).fill("0"), ...t];
+  const n = groups.map((g) => parseInt(g, 16));
+  if (n.slice(0, 5).every((g) => g === 0) && n[5] === 0xffff) {
+    return `${n[6] >> 8}.${n[6] & 255}.${n[7] >> 8}.${n[7] & 255}`;
+  }
+  return `${n.slice(0, 4).map((g) => g.toString(16)).join(":")}::/64`;
 }
 
 /** Drops every key whose window has emptied, then, if still over the cap, the oldest-inserted. */
