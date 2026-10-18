@@ -15,6 +15,7 @@ colors:
   money-soft: "rgba(255, 255, 255, 0.14)"
   alert: "#ff6b6b"
   alert-soft: "rgba(255, 107, 107, 0.16)"
+  alert-on-night: "#ffb3b3"
   card-border: "rgba(255, 255, 255, 0.2)"
   tag-neutral-bg: "rgba(255, 255, 255, 0.1)"
   tag-neutral-fg: "#d6d8dc"
@@ -1106,7 +1107,8 @@ never colour alone, at 11px or more. The alert text on dark glass is the token `
 - **Inline note** (`InlineNote`): the failure written on the thing that failed, in three sizes. `field`
   sits under its control (`aria-describedby` from the control); `item` rides a row or chip with its own
   text action; `section` stands in for a block that could not load, a dashed frame in the block's own
-  space with a "Couldn't load" tag, the why and a retry. Polite, never moves focus, and kept mounted so
+  space with a "Couldn't load" tag (Oswald, as the canvas sets it: it names the state, like an
+  eyebrow), the why and a retry. Polite, never moves focus, and kept mounted so
   a change is announced. `HeldNote` is its limit form, counting down and resolving to the ok tone.
 - **Page error** (`PageError`): the section note in a glass card with a way forward, shared by the route
   boundaries (`error.tsx` at `/`, `/trips` and `/trip/[id]`, `not-found.tsx`). `global-error.tsx`
