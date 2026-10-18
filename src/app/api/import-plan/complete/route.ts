@@ -36,10 +36,10 @@ import type { Anchor } from "@/lib/types";
 const FILL_TIMEOUT_MS = 60_000;
 
 export async function POST(req: NextRequest) {
-  const limit = throttle(req, "import-plan-complete");
-  if (limit.limited) return limitResponse(limit, "import-plan-complete");
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, "import-plan-complete");
+  if (limit.limited) return limitResponse(limit, "import-plan-complete");
   let body: unknown;
   try {
     body = await req.json();

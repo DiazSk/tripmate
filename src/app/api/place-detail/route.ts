@@ -37,10 +37,10 @@ function locateStop(
 }
 
 export async function POST(req: NextRequest) {
-  const limit = throttle(req, "place-detail");
-  if (limit.limited) return limitResponse(limit, "place-detail");
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, "place-detail");
+  if (limit.limited) return limitResponse(limit, "place-detail");
   const { name, destination, lat, lng, tripId } = await req.json();
 
   if (!name || !destination || typeof lat !== "number" || typeof lng !== "number") {

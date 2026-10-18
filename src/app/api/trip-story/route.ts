@@ -105,10 +105,10 @@ export async function POST(req: NextRequest) {
   // already written — free, served from `trip_stories` — still spent one of the three requests per
   // ten minutes, and the fourth replay fell back to reading the plan aloud. Only a request that is
   // about to call the model is counted or capped now.
-  const limit = throttle(req, "story");
-  if (limit.limited) return limitResponse(limit, "story");
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, "story");
+  if (limit.limited) return limitResponse(limit, "story");
 
   const runId = randomUUID();
   insertRun({ id: runId, kind: "story", destination, tripId: tripId ?? null });

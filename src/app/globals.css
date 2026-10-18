@@ -4163,6 +4163,10 @@ html[data-story-mode="true"] .marker-day-label {
     height: max(100%, 44px);
     translate: -50% -50%;
   }
+  /* Real buttons (a section's retry, PageError's footer links): 40px drawn, so they grow. */
+  .inline-note .err-btn {
+    height: 2.75rem;
+  }
 }
 
 /* The error dialog. Centring, the backdrop, the entrance and the pointer-events opt-in come from

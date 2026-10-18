@@ -97,6 +97,13 @@ export default function ErrorDialog({
       // cancellable `cancel`) is the safe choice too, so the parent's state can't stay open.
       onClose={() => {
         if (!wantOpen.current) return;
+        // Pending, Esc and the backdrop do nothing, so the close watcher must not either: reshow
+        // rather than leave React's `open` true over a closed element.
+        if (pending) {
+          ref.current?.showModal();
+          primaryRef.current?.focus();
+          return;
+        }
         opener.current = null;
         primary.onClick();
       }}

@@ -25,11 +25,12 @@ export async function readImportRequest(
   bucket: "import" | "import-plan"
 ): Promise<{ items: ImportItem[]; destination: string | null } | NextResponse> {
   // One import is one short model call; a traveller shares several screenshots in a row, so the
-  // allowance is 30 (LIMITS); the daily spend cap stays the real backstop.
-  const limit = throttle(req, bucket);
-  if (limit.limited) return limitResponse(limit, bucket);
+  // allowance is 30 (LIMITS); the daily spend cap stays the real backstop. The cap is checked
+  // first: a refused request is not recorded, and a cap refusal is one.
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, bucket);
+  if (limit.limited) return limitResponse(limit, bucket);
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "That's a lot at once. Try fewer screenshots." }, { status: 413 });
   }

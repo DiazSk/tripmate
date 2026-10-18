@@ -26,10 +26,22 @@ export interface Toast extends ToastCopy {
   resolved?: ToastCopy;
 }
 
-/** Newest last; past MAX_VISIBLE the oldest goes. A hold toast replaces any earlier one for the same
- *  bucket: one wait, one message. */
-export const pushToast = (list: Toast[], toast: Toast): Toast[] =>
-  [...list.filter((t) => !toast.hold || t.hold !== toast.hold), toast].slice(-MAX_VISIBLE);
+/** Newest last. A hold toast replaces any earlier one for the same bucket (one wait, one message),
+ *  and a plain error toast replaces one with the same title. Past MAX_VISIBLE the oldest success goes
+ *  first, so a success cannot push out an error that needs reading; with no success, the oldest. */
+export const pushToast = (list: Toast[], toast: Toast): Toast[] => {
+  const next = [
+    ...list.filter(
+      (t) => !(toast.hold && t.hold === toast.hold) && !(toast.kind === "error" && !toast.hold && t.kind === "error" && !t.hold && t.title === toast.title)
+    ),
+    toast,
+  ];
+  while (next.length > MAX_VISIBLE) {
+    const i = next.findIndex((t) => t.kind === "success");
+    next.splice(i < 0 || i === next.length - 1 ? 0 : i, 1);
+  }
+  return next;
+};
 
 /** Success toasts fade; an error toast stays until it is dismissed or resolved (null: no timer). */
 export const autoDismissMs = (toast: Toast): number | null => (toast.kind === "success" ? TOAST_MS : null);

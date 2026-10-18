@@ -10,10 +10,10 @@ import { dailyCapResumesAt } from "@/lib/spendCap";
  * validation in, JSON out.
  */
 export async function POST(req: NextRequest) {
-  const limit = throttle(req, "plan");
-  if (limit.limited) return limitResponse(limit, "plan");
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, "plan");
+  if (limit.limited) return limitResponse(limit, "plan");
   const { reconciled, poiDetails, tripId, destination } = await req.json();
   if (!reconciled || !poiDetails) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

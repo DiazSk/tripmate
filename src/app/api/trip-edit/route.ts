@@ -62,10 +62,10 @@ function daysModified(ops: PatchOp[], rejected: { op: PatchOp }[]): number[] {
  * the UI. Raw model output never leaves this route.
  */
 export async function POST(req: NextRequest) {
-  const limit = throttle(req, "edit");
-  if (limit.limited) return limitResponse(limit, "edit");
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, "edit");
+  if (limit.limited) return limitResponse(limit, "edit");
   const body = await req.json();
   const { mode, trip, itinerary, tripId, userAnswers, sessionId, syncedHash } = body as {
     mode: "chat" | "element";

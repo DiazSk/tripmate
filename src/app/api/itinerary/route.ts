@@ -40,11 +40,11 @@ export async function POST(req: NextRequest) {
   }
   // Read first so the refusal can name the action: a refine or a rebalance is a change to a plan
   // the traveller already has, and is held to the edit allowance, not the planning one.
-  const bucket = body.rebalance || body.previousItinerary ? "edit" : "plan";
-  const limit = throttle(req, bucket);
-  if (limit.limited) return limitResponse(limit, bucket);
+  const bucket = body.rebalance || (body.previousItinerary && body.feedback) ? "edit" : "plan";
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const limit = throttle(req, bucket);
+  if (limit.limited) return limitResponse(limit, bucket);
   const {
     destination,
     startDate,
