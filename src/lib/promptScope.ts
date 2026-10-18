@@ -24,15 +24,28 @@ export function fenceUserText(text: string): string {
 }
 
 // A request verb, then at most three filler words, then a code noun, all adjacent. "the" is not a
-// filler, so "the wifi code" and "the function room" pass; `class` and `program` are not nouns here
-// ("a cooking class", "a program of events"), and a real class definition is caught line-wise below.
+// filler, so "the wifi code" passes; `class` and `program` are not nouns ("a cooking class", "a program
+// of events"), and a real class definition is caught line-wise below.
+// Two noun lists. Unambiguous nouns have no travel meaning, so plain adjacency refuses. Ambiguous
+// ones also mean something on a trip ("a function room", "a code for the museum discount"), so they
+// refuse only when the fillers include a language name or "this" ("write me a Python function",
+// "debug this code").
 // ponytail: "build me a react component" and "implement a sorting algorithm" slip through; the scope
 // block's refusal covers them, and widening this is how real trips get refused.
-const FILLER = "(?:me|us|a|an|some|this|that|my|our|python|java(?:script)?|typescript|c\\+\\+|c#|rust|go|bash|ruby|php|sql|react|node)";
-const CODE_REQUEST = new RegExp(
-  `\\b(?:write|generate|create|give me|fix|debug|refactor|explain|make|build|implement)(?:\\s+${FILLER}){0,3}\\s+(?:code|function|python script|javascript|typescript|sql|regex|html|css|algorithm|script in)\\b`,
+const LANG = "python|java(?:script)?|typescript|c\\+\\+|c#|rust|go|bash|ruby|php|sql|react|node";
+const VERB = "\\b(?:write|generate|create|give me|fix|debug|refactor|explain|make|build|implement)";
+const FILLERS = `((?:\\s+(?:me|us|a|an|some|this|that|my|our|${LANG})){0,3})`;
+const SURE_NOUN = new RegExp(
+  `${VERB}${FILLERS}\\s+(?:regex|sql(?: query)?|javascript|typescript|python script|script in \\w+|source code|snippet)\\b`,
   "i",
 );
+const MAYBE_NOUN = new RegExp(`${VERB}${FILLERS}\\s+(?:code|function|algorithm|html|css|api)\\b`, "gi");
+const LANG_OR_THIS = new RegExp(`\\s(?:this|${LANG})(?=\\s|$)`, "i");
+
+function isCodeRequest(text: string): boolean {
+  if (SURE_NOUN.test(text)) return true;
+  return [...text.matchAll(MAYBE_NOUN)].some((m) => LANG_OR_THIS.test(m[1]));
+}
 
 // One line of source. SELECT/FROM stay upper-case: "Select a cafe from the list" is a sentence.
 // The indented bare `return x` / `print(` line is what lets a two-line `def f():` + body count as two;
@@ -52,7 +65,7 @@ export type Screen = { refused: false } | { refused: true; rule: "code-request" 
 
 /** The free check. Obvious cases only; the scope block and the reply check cover the rest. */
 export function screenRequest(text: string): Screen {
-  if (CODE_REQUEST.test(text)) return { refused: true, rule: "code-request" };
+  if (isCodeRequest(text)) return { refused: true, rule: "code-request" };
   if (looksLikeCode(text)) return { refused: true, rule: "code-block" };
   return { refused: false };
 }

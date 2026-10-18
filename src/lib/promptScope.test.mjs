@@ -60,6 +60,18 @@ const MUST_PASS = [
   "give me the function room booking",
   "create a day with a function at the embassy",
   "Day 1:\n  return to hotel by 6\n  return the rental car",
+  // fix round 2: ambiguous nouns behind a/an/some/that/my
+  "give me a function room for 20 people",
+  "make a function room reservation on day 3",
+  "create a function at the hotel for our anniversary",
+  "can you give me a code for the museum discount",
+  "give me some code to get into the building",
+  "explain that code on the ticket",
+  "write a code of conduct note for the group",
+  "give me an algorithm for choosing restaurants",
+  "make me a program for the kids",
+  "give me my booking code again",
+  "build a day around the HTML museum",
 ];
 
 test("screenRequest refuses code requests and code blocks", () => {
