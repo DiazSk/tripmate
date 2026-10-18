@@ -1,4 +1,5 @@
 import { partyBudget, travelStyleOf } from "./userAnswers";
+import { tagUserText } from "./promptScope";
 import type {
   DestinationContext,
   EnrichedPoi,
@@ -40,7 +41,7 @@ function flagsSection(trip: ReconciledTrip): string {
     `crowd_bias: prefer_offpeak_timing=${c.preferOffpeakTiming}, boost_offbeat_pois=${c.boostOffbeatPois}, schedule_icons_at_offpeak=${c.scheduleIconsAtOffpeak}, markets_and_lively_ok=${c.marketsAndLivelyOk}, peak_timing_ok=${c.peakTimingOk}`,
     `priorities_ranked (primary): ${f.prioritiesRanked.primary.length > 0 ? f.prioritiesRanked.primary.join(" > ") : "none starred"}`,
     `priorities_ranked (tie-breakers): ${f.prioritiesRanked.tiebreakers.length > 0 ? f.prioritiesRanked.tiebreakers.join(", ") : "none"}`,
-    `group: ${a.group}${a.group === "other" && a.groupOther?.trim() ? ` (${a.groupOther.trim()})` : ""}`,
+    `group: ${a.group}${a.group === "other" && a.groupOther?.trim() ? ` (${tagUserText(a.groupOther.trim())})` : ""}`,
   ];
 
   if (a.party) {
@@ -68,7 +69,7 @@ function flagsSection(trip: ReconciledTrip): string {
     // boundary, so nothing reading this line multiplies again.
     `budget_usd (whole party): ${partyBudget(a.budget, a.budgetBasis, f.partySize)}`
   );
-  if (a.purpose.trim()) lines.push(`purpose: ${a.purpose.trim()}`);
+  if (a.purpose.trim()) lines.push(`purpose: ${tagUserText(a.purpose.trim())}`);
   return lines.join("\n");
 }
 
@@ -80,7 +81,7 @@ function dietarySection(trip: ReconciledTrip): string {
   const tags = d?.tags ?? [];
   const note = d?.note?.trim() ?? "";
   if (tags.length === 0 && !note) return "None stated.";
-  return [tags.length > 0 ? tags.join(", ") : null, note || null].filter(Boolean).join("; ");
+  return [tags.length > 0 ? tags.join(", ") : null, note ? tagUserText(note) : null].filter(Boolean).join("; ");
 }
 
 /** Stated mobility needs, kept separate from `mobility_profile` in the flags. The flags are the
@@ -92,7 +93,7 @@ function accessibilitySection(trip: ReconciledTrip): string {
   const parts: string[] = [];
   if (a.stepFreeRequired) parts.push("step-free routes required throughout (hard constraint)");
   if (a.limitStairs && !a.stepFreeRequired) parts.push("avoid stairs and steep climbs where possible");
-  if (a.note.trim()) parts.push(a.note.trim());
+  if (a.note.trim()) parts.push(tagUserText(a.note.trim()));
   return parts.length > 0 ? parts.join("; ") : "Nothing stated.";
 }
 
@@ -102,7 +103,7 @@ function logisticsSection(trip: ReconciledTrip): string {
   const l = trip.userAnswers.logistics;
   const lines: string[] = [];
   if (l?.stayBooked?.trim()) {
-    lines.push(`booked_lodging: ${l.stayBooked.trim()} (already paid for, cost 0, every night)`);
+    lines.push(`booked_lodging: ${tagUserText(l.stayBooked.trim())} (already paid for, cost 0, every night)`);
   }
   if (l?.arrivalTime?.trim()) lines.push(`arrival_time (day 1, local): ${l.arrivalTime.trim()}`);
   if (l?.departureTime?.trim()) {
@@ -112,7 +113,7 @@ function logisticsSection(trip: ReconciledTrip): string {
   // than as an instruction competing with the rules. Never parsed: the machine-readable
   // requirements have their own section.
   if (trip.userAnswers.constraintsNote?.trim()) {
-    lines.push(`traveler's own words: ${trip.userAnswers.constraintsNote.trim()}`);
+    lines.push(`traveler's own words: ${tagUserText(trip.userAnswers.constraintsNote.trim())}`);
   }
   return lines.length > 0 ? lines.join("\n") : "Nothing booked or stated; lodging is yours to choose.";
 }
@@ -127,8 +128,8 @@ function logisticsSection(trip: ReconciledTrip): string {
 function requirementsSection(trip: ReconciledTrip): string {
   const a = trip.userAnswers;
   const lines: string[] = [];
-  if (a.mustInclude?.length) lines.push(`must_include: ${a.mustInclude.join(", ")}`);
-  if (a.avoid?.length) lines.push(`avoid: ${a.avoid.join(", ")}`);
+  if (a.mustInclude?.length) lines.push(`must_include: ${tagUserText(a.mustInclude.join(", "))}`);
+  if (a.avoid?.length) lines.push(`avoid: ${tagUserText(a.avoid.join(", "))}`);
   return lines.length > 0 ? lines.join("\n") : "None stated.";
 }
 
@@ -176,15 +177,15 @@ function datesSection(trip: ReconciledTrip): string {
   if (l) {
     if (l.arrivalTime || l.arrivalPoint) {
       lines.push(
-        `arrival (day 1): ${l.arrivalTime ?? "time unknown"}${l.arrivalPoint ? ` at ${l.arrivalPoint}` : ""}`
+        `arrival (day 1): ${l.arrivalTime ?? "time unknown"}${l.arrivalPoint ? ` at ${tagUserText(l.arrivalPoint)}` : ""}`
       );
     }
     if (l.departureTime || l.departurePoint) {
       lines.push(
-        `departure (last day): ${l.departureTime ?? "time unknown"}${l.departurePoint ? ` from ${l.departurePoint}` : ""}`
+        `departure (last day): ${l.departureTime ?? "time unknown"}${l.departurePoint ? ` from ${tagUserText(l.departurePoint)}` : ""}`
       );
     }
-    if (l.stayBooked) lines.push(`lodging already booked: ${l.stayBooked}`);
+    if (l.stayBooked) lines.push(`lodging already booked: ${tagUserText(l.stayBooked)}`);
   }
 
   return lines.join("\n");

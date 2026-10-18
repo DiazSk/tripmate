@@ -1,4 +1,5 @@
 import type { DietaryNeeds } from "./travelerProfile";
+import { tagUserText } from "./promptScope";
 
 /**
  * The traveler's dietary restrictions, rendered as a prompt block. Its own module rather
@@ -18,7 +19,7 @@ export function formatDietary(dietary: DietaryNeeds | null): string {
 
   const parts: string[] = [];
   if (tags.length > 0) parts.push(tags.join(", "));
-  if (note) parts.push(note);
+  if (note) parts.push(tagUserText(note));
   if (parts.length === 0) return "";
 
   return `\nDietary needs: ${parts.join("; ")}. Every food stop must have something that genuinely fits. Name what to order or which counter to use in that stop's "note", and never route the day through somewhere they would have nothing to eat. This constrains which food stops are chosen; it is not a remark to append to them.\n`;

@@ -12,7 +12,7 @@ test("the sketch prompt names the days, the musts and the ask", () => {
     anchors: [{ name: "teamLab Planets", lat: 35.6, lng: 139.8, priority: "must" }],
   });
   assert.match(p, /2026-10-06/);
-  assert.match(p, /MUST: teamLab Planets/);
+  assert.match(p, /MUST: <traveler_text>teamLab Planets<\/traveler_text>/);
   assert.match(p, /"theme"/);
 });
 

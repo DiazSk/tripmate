@@ -1,5 +1,5 @@
 import type { ResolvedFlags, TripLogistics, UserAnswers } from "./types";
-import { fenceUserText } from "./promptScope";
+import { tagUserText } from "./promptScope";
 
 /**
  * The traveler's answers, rendered as prompt lines. Kept in its own module rather
@@ -49,7 +49,7 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
     );
   }
 
-  lines.push(`Travelling as: <traveler_text>${fenceUserText(flags.groupLabel)}</traveler_text>.`);
+  lines.push(`Travelling as: ${tagUserText(flags.groupLabel)}.`);
 
   if (flags.partySize !== null) {
     lines.push(
@@ -111,7 +111,7 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
   const lines: string[] = [];
 
   if (logistics.arrivalTime || logistics.arrivalPoint) {
-    const where = logistics.arrivalPoint ? ` at ${logistics.arrivalPoint}` : "";
+    const where = logistics.arrivalPoint ? ` at ${tagUserText(logistics.arrivalPoint)}` : "";
     const when = logistics.arrivalTime
       ? `The traveler arrives on day 1 at ${logistics.arrivalTime}${where}. Allow about 90 minutes for immigration, bags and the transfer in, then start the day from there. Do not plan anything before that, and keep the first stop close to the arrival point.`
       : `The traveler arrives on day 1${where}. Keep the first stop close to the arrival point.`;
@@ -119,7 +119,7 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
   }
 
   if (logistics.departureTime || logistics.departurePoint) {
-    const where = logistics.departurePoint ? ` from ${logistics.departurePoint}` : "";
+    const where = logistics.departurePoint ? ` from ${tagUserText(logistics.departurePoint)}` : "";
     const when = logistics.departureTime
       ? `The traveler departs on the last day at ${logistics.departureTime}${where}. Reserve two separate things before it: the travel time from the last stop to the departure point, PLUS an arrival buffer at the departure point itself: about 2 hours before a domestic flight, 3 hours before an international one, much less for a train. Those defaults apply unless the trip context says otherwise, and the airport buffer is not part of the transfer time. Plan nothing that would run into either.`
       : `The traveler departs on the last day${where}. Keep the last day's stops near the departure point.`;
@@ -128,7 +128,7 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
 
   if (logistics.stayBooked) {
     lines.push(
-      `Lodging is already booked: ${logistics.stayBooked}. Use it for every night instead of choosing one, route the days around it, and give it a cost of 0 (SKILL.md §4e), because charging again for something already paid for distorts what is left to spend.`
+      `Lodging is already booked: ${tagUserText(logistics.stayBooked)}. Use it for every night instead of choosing one, route the days around it, and give it a cost of 0 (SKILL.md §4e), because charging again for something already paid for distorts what is left to spend.`
     );
   }
 
@@ -149,15 +149,15 @@ export function formatRequirements(answers: UserAnswers | null): string {
   const lines: string[] = [];
   if (answers.mustInclude?.length) {
     lines.push(
-      `Must include, and these are requirements rather than preferences: ${answers.mustInclude.join(", ")}. Each appears exactly once. If one genuinely cannot fit, say which and why rather than dropping it silently.`
+      `Must include, and these are requirements rather than preferences: ${tagUserText(answers.mustInclude.join(", "))}. Each appears exactly once. If one genuinely cannot fit, say which and why rather than dropping it silently.`
     );
   }
   if (answers.avoid?.length) {
-    lines.push(`Do not include: ${answers.avoid.join(", ")}. This is a hard exclusion, not a de-emphasis.`);
+    lines.push(`Do not include: ${tagUserText(answers.avoid.join(", "))}. This is a hard exclusion, not a de-emphasis.`);
   }
   if (answers.constraintsNote?.trim()) {
     lines.push(
-      `In the traveler's own words: "${answers.constraintsNote.trim()}". Treat anything named there as already decided, and keep any time they say they're busy or unavailable free of stops. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one; that is not the same as assuming they don't have one.`
+      `In the traveler's own words: ${tagUserText(answers.constraintsNote.trim())}. Treat anything named there as already decided, and keep any time they say they're busy or unavailable free of stops. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one; that is not the same as assuming they don't have one.`
     );
   }
   if (lines.length === 0) return "";

@@ -23,6 +23,11 @@ export function fenceUserText(text: string): string {
   return text.replace(/<(\s*)\//g, "<$1\\/");
 }
 
+/** The fenced text inside `<traveler_text>`, for a traveller string that sits mid-sentence. */
+export function tagUserText(text: string): string {
+  return `<traveler_text>${fenceUserText(text)}</traveler_text>`;
+}
+
 // A request verb, then at most three filler words, then a code noun, all adjacent. "the" is not a
 // filler, so "the wifi code" passes; `class` and `program` are not nouns ("a cooking class", "a program
 // of events"), and a real class definition is caught line-wise below.

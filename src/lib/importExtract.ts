@@ -1,7 +1,7 @@
 import { parseJsonResponse } from "./claude";
 import { anchorKey } from "./anchors";
 import type { SourceKind } from "./importSources";
-import { SCOPE_BLOCK, fenceUserText } from "./promptScope";
+import { SCOPE_BLOCK, fenceUserText, tagUserText } from "./promptScope";
 
 export interface ExtractSource {
   index: number;
@@ -24,7 +24,7 @@ export function buildExtractPrompt(sources: ExtractSource[], imageIndices: numbe
     : "";
   return `${SCOPE_BLOCK}
 
-A traveler saved these while dreaming about a trip${destination ? ` to ${destination}` : ""}. List every specific, real place they could visit: venues, sights, neighbourhoods, markets, restaurants.
+A traveler saved these while dreaming about a trip${destination ? ` to ${tagUserText(destination)}` : ""}. List every specific, real place they could visit: venues, sights, neighbourhoods, markets, restaurants.
 
 ${images}<traveler_text>
 ${fenceUserText(listed)}

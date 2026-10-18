@@ -1,6 +1,7 @@
 import type { Itinerary, TripSummary, UserAnswers } from "./types";
 import { TIERS } from "./tiers";
 import { sanitizeAnswers, travelStyleOf } from "./userAnswers";
+import { tagUserText } from "./promptScope";
 
 /**
  * The frozen anchor for an edit session.
@@ -52,21 +53,21 @@ priorities: ${answers.topPriorities?.length ? answers.topPriorities.join(" > ") 
       }
 energy: ${answers.energy ?? "unknown"} (walking/stairs tolerance)
 crowds: ${answers.crowds ?? "unknown"}
-group: ${answers.group ?? "unknown"}${answers.group === "other" && answers.groupOther?.trim() ? ` (${answers.groupOther.trim()})` : ""}${
+group: ${answers.group ?? "unknown"}${answers.group === "other" && answers.groupOther?.trim() ? ` (${tagUserText(answers.groupOther.trim())})` : ""}${
         answers.party
           ? `\nparty: ${answers.party.adults} adults, ${answers.party.children} children (2-11), ${answers.party.infants} infants (under 2)`
           : ""
       }${
         answers.logistics?.arrivalTime || answers.logistics?.arrivalPoint
-          ? `\narrival (day 1): ${answers.logistics.arrivalTime ?? "time unknown"}${answers.logistics.arrivalPoint ? ` at ${answers.logistics.arrivalPoint}` : ""}`
+          ? `\narrival (day 1): ${answers.logistics.arrivalTime ?? "time unknown"}${answers.logistics.arrivalPoint ? ` at ${tagUserText(answers.logistics.arrivalPoint)}` : ""}`
           : ""
       }${
         answers.logistics?.departureTime || answers.logistics?.departurePoint
-          ? `\ndeparture (last day): ${answers.logistics.departureTime ?? "time unknown"}${answers.logistics.departurePoint ? ` from ${answers.logistics.departurePoint}` : ""}`
+          ? `\ndeparture (last day): ${answers.logistics.departureTime ?? "time unknown"}${answers.logistics.departurePoint ? ` from ${tagUserText(answers.logistics.departurePoint)}` : ""}`
           : ""
       }
 pace: ${travelStyleOf(answers).pace}
-discovery: ${travelStyleOf(answers).discovery}${answers.purpose?.trim() ? `\npurpose: ${answers.purpose.trim()}` : ""}`
+discovery: ${travelStyleOf(answers).discovery}${answers.purpose?.trim() ? `\npurpose: ${tagUserText(answers.purpose.trim())}` : ""}`
     : "";
 
   return `# Trip Context (frozen for this edit session)

@@ -8,7 +8,7 @@ import {
   type ImportedStop,
 } from "./importedPlan";
 import { formatClock, parseClock } from "./itinerary";
-import { SCOPE_BLOCK, fenceUserText } from "./promptScope";
+import { SCOPE_BLOCK, fenceUserText, tagUserText } from "./promptScope";
 
 /**
  * The read: a traveller's own plan, as days of stops, in their order. The model copies; it
@@ -26,7 +26,7 @@ export function buildPlanReadPrompt(
     : "";
   return `${SCOPE_BLOCK}
 
-A traveller already has a plan for a trip${destination ? ` to ${destination}` : ""} and wants to bring it in exactly as it is. Read it into days and stops.
+A traveller already has a plan for a trip${destination ? ` to ${tagUserText(destination)}` : ""} and wants to bring it in exactly as it is. Read it into days and stops.
 
 ${images}<traveler_text>
 ${fenceUserText(listed)}

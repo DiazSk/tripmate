@@ -25,7 +25,7 @@ import { formatPlaceConflicts } from "./placeConflicts";
 import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
 import { NO_EM_DASH_RULE } from "./writingStyle";
-import { SCOPE_BLOCK, SCOPE_BLOCK_WITH_REFUSAL, fenceUserText } from "./promptScope";
+import { SCOPE_BLOCK, SCOPE_BLOCK_WITH_REFUSAL, fenceUserText, tagUserText } from "./promptScope";
 
 /**
  * One stop's shape.
@@ -106,8 +106,8 @@ function formatPreferences(preferences?: ItineraryPreferences | null): string {
   const tags = preferences?.tags ?? [];
   if (!preferences || (tags.length === 0 && !preferences.vibe)) return "";
   const parts: string[] = [];
-  if (preferences.vibe) parts.push(`leans toward a "${preferences.vibe}" vibe`);
-  if (tags.length > 0) parts.push(`especially interested in ${tags.join(", ")}`);
+  if (preferences.vibe) parts.push(`leans toward a ${tagUserText(preferences.vibe)} vibe`);
+  if (tags.length > 0) parts.push(`especially interested in ${tagUserText(tags.join(", "))}`);
 
   const guidance = tags
     .map((tag) => INTEREST_GUIDANCE[tag])
@@ -269,7 +269,7 @@ export function formatAnchors(anchors: Anchor[] | undefined): string {
     // seasonal syntax pass through for the model to read rather than being guessed at here.
     const closed = a.closedDays && a.closedDays.length > 0 ? `; closed ${a.closedDays.join(", ")}` : "";
     const hours = a.openingHours ? `, open ${a.openingHours}${closed} (OpenStreetMap)` : "";
-    return `- ${a.priority === "must" ? "MUST" : "WANT"}: ${a.name} ${where}${hours}`;
+    return `- ${a.priority === "must" ? "MUST" : "WANT"}: ${tagUserText(a.name)} ${where}${hours}`;
   });
   return `\nThe traveler's own places (they chose these before asking for a plan):\n${lines.join("\n")}\n${ANCHOR_INSTRUCTION}\n`;
 }
@@ -320,7 +320,7 @@ export function buildGeneratePrompt(params: {
 }): string {
   return `${SCOPE_BLOCK}
 
-Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
+Plan a day-by-day trip itinerary for ${tagUserText(params.destination)}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
 ${PRECEDENCE_INSTRUCTION}
 
@@ -358,7 +358,7 @@ export function buildRefinePrompt(params: {
 }): string {
   return `${SCOPE_BLOCK_WITH_REFUSAL}
 
-Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
+Here is a trip itinerary for ${tagUserText(params.destination)} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
 
 <traveler_text>
 ${fenceUserText(JSON.stringify(params.previousItinerary))}
@@ -411,7 +411,7 @@ export function buildPlaceDetailPrompt(params: {
 
   return `${SCOPE_BLOCK}
 
-Give a compact travel-guide entry for <traveler_text>${fenceUserText(params.name)}</traveler_text> in <traveler_text>${fenceUserText(params.destination)}</traveler_text> (approx. coordinates ${params.lat}, ${params.lng}).${context}
+Give a compact travel-guide entry for ${tagUserText(params.name)} in ${tagUserText(params.destination)} (approx. coordinates ${params.lat}, ${params.lng}).${context}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 {"history":"1-2 sentence history or significance","bestTime":"short best time of day or season to visit","tips":["practical tip 1","practical tip 2"],"duration":"suggested visit duration, e.g. '1-2 hours'","pros":["Short label: one sentence on what is genuinely good here","..."],"cons":["Short label: one sentence on what is genuinely worse here","..."]}
@@ -425,9 +425,13 @@ export function buildRebalancePrompt(params: {
   remainingBudget: number;
   tier: TierId;
 }): string {
-  return `Here are the remaining days of a trip itinerary for ${params.destination}:
+  return `${SCOPE_BLOCK}
 
-${JSON.stringify(params.remainingDays)}
+Here are the remaining days of a trip itinerary for ${tagUserText(params.destination)}:
+
+<traveler_text>
+${fenceUserText(JSON.stringify(params.remainingDays))}
+</traveler_text>
 
 Style: ${tierStyle(params.tier)}
 
@@ -452,7 +456,9 @@ export function buildContextPrompt(params: {
   startDate: string;
   endDate: string;
 }): string {
-  return `Give background context useful for planning a trip to ${params.destination} between ${params.startDate} and ${params.endDate}.
+  return `${SCOPE_BLOCK}
+
+Give background context useful for planning a trip to ${tagUserText(params.destination)} between ${params.startDate} and ${params.endDate}.
 
 Cover: notable shopping areas/districts, and any current travel trends (popular new spots, seasonal crowds, etc.). Leave a category's array empty if you don't have anything genuinely relevant; don't invent filler. ${NO_EM_DASH_RULE}
 
@@ -475,11 +481,15 @@ export function buildCritiquePrompt(params: {
 }): string {
   const interestLine =
     params.interestTags && params.interestTags.length > 0
-      ? `\nThe traveler said they're especially interested in: ${params.interestTags.join(", ")}.\n`
+      ? `\nThe traveler said they're especially interested in: ${tagUserText(params.interestTags.join(", "))}.\n`
       : "";
-  return `Here is a generated trip itinerary with a total budget of $${params.budget}:
+  return `${SCOPE_BLOCK}
 
-${JSON.stringify(params.itinerary)}
+Here is a generated trip itinerary with a total budget of $${params.budget}:
+
+<traveler_text>
+${fenceUserText(JSON.stringify(params.itinerary))}
+</traveler_text>
 ${formatContextBlock(params.contextInsight)}${interestLine}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}
 Review it for: (1) total cost (lodging + stops) landing at or under the budget, with anything already paid for counted as 0 and every cost read as the party total it already is rather than a per-person price, (2) stop times being sequential, non-overlapping, and realistically spaced (no implausibly tight back-to-back stops), (3) reasonable use of the destination context above, if any was given, (4) whether the itinerary genuinely reflects the traveler's stated interests above, if any were given, not just generic sightseeing, (5) whether each day respects the traveler profile above, if one was given: the stops-per-day target and any mobility or family constraints, (6) whether every food stop actually fits the traveler's dietary needs above, if any were given (a stop they could not eat at is a defect even if the rest of the day is good), (7) whether any attraction, restaurant or area appears more than once across the whole trip, including under a second name or as a branch of the same chain, (8) whether the trip as a whole reflects the starred priorities in the order given, rather than one day carrying all of them.
 ${formatPlaceConflicts(params.placeConflicts ?? [], params.travelFindings ?? [])}

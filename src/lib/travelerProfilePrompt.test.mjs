@@ -170,14 +170,14 @@ test("absent logistics leave the prompt byte-identical", () => {
 
 test("an arrival carries its time, its place and the transfer buffer", () => {
   const out = formatTravelLegs(legs({ arrivalTime: "20:15", arrivalPoint: "Kansai Intl (KIX)" }));
-  assert.match(out, /arrives on day 1 at 20:15 at Kansai Intl \(KIX\)/);
+  assert.match(out, /arrives on day 1 at 20:15 at <traveler_text>Kansai Intl \(KIX\)<\/traveler_text>/);
   assert.match(out, /90 minutes/);
   assert.doesNotMatch(out, /departs/, "a one-way answer must not invent the other leg");
 });
 
 test("a place without a time still says where, and claims no time", () => {
   const out = formatTravelLegs(legs({ arrivalPoint: "Kyoto Station" }));
-  assert.match(out, /arrives on day 1 at Kyoto Station/);
+  assert.match(out, /arrives on day 1 at <traveler_text>Kyoto Station<\/traveler_text>/);
   assert.doesNotMatch(out, /90 minutes/, "no landing time means no buffer to reserve");
 });
 
@@ -249,19 +249,19 @@ test("nothing named leaves the prompt byte-identical", () => {
 
 test("a named must-see is a requirement, not a preference, and appears exactly once", () => {
   const out = formatRequirements(answers({ mustInclude: ["Louvre Museum"] }));
-  assert.match(out, /Must include, and these are requirements rather than preferences: Louvre Museum/);
+  assert.match(out, /Must include, and these are requirements rather than preferences: <traveler_text>Louvre Museum<\/traveler_text>/);
   assert.match(out, /exactly once/);
 });
 
 test("a named exclusion is a hard exclusion, not a de-emphasis", () => {
   const out = formatRequirements(answers({ avoid: ["nightclubs"] }));
-  assert.match(out, /Do not include: nightclubs/);
+  assert.match(out, /Do not include: <traveler_text>nightclubs<\/traveler_text>/);
   assert.match(out, /hard exclusion/);
 });
 
 test("the constraints note reaches the prompt verbatim, labelled as the traveler's own words", () => {
   const out = formatRequirements(answers({ constraintsNote: "No rental car; budget is per person." }));
-  assert.match(out, /In the traveler's own words: "No rental car; budget is per person\."/);
+  assert.match(out, /In the traveler's own words: <traveler_text>No rental car; budget is per person\.<\/traveler_text>/);
 });
 
 test("the constraints note tells the model not to assume access it wasn't given, and not to assert its absence either", () => {
