@@ -1,7 +1,7 @@
 /* Run: node --import ./scripts/ts-resolve.mjs --test src/lib/poiDetails.test.mjs */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { matchElementsToPois, nameRegex, poiNameClauses } from "./poiDetails.ts";
+import { fetchPoiOsmTags, matchElementsToPois, nameRegex, poiNameClauses } from "./poiDetails.ts";
 
 const NIJO = { name: "Nijo Castle", lat: 35.0142, lon: 135.7481 };
 
@@ -90,4 +90,25 @@ test("quotes and parentheses in a name cannot break the query", () => {
   // Inside each ~"…" the only unescaped quotes are the two delimiters.
   for (const m of q.matchAll(/~"(.*?[^\\])"/g)) assert.ok(!/[^\\]"/.test(m[1]), m[1]);
   assert.ok(new RegExp(`^${value}$`, "i").test(`St. Peter's "Basilica" (Vatican)`), "still matches the name itself");
+});
+
+test("a website that is not plain http(s), or carries credentials, is dropped", async () => {
+  const real = globalThis.fetch;
+  // A different latitude per case: the result is cached by the requested POIs, so a repeat would
+  // be served from the first case's row instead of the stub.
+  const site = async (website, lat) => {
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ elements: [{ lat, lon: 135.7481, tags: { name: "Nijo Castle", website } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    return (await fetchPoiOsmTags([{ name: "Nijo Castle", lat, lon: 135.7481 }]))?.["Nijo Castle"]?.website;
+  };
+  try {
+    assert.equal(await site("ftp://x", 10.1), null);
+    assert.equal(await site("https://user:pw@x", 10.2), null);
+    assert.equal(await site("https://nijo.example/", 10.3), "https://nijo.example/");
+  } finally {
+    globalThis.fetch = real;
+  }
 });

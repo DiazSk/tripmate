@@ -54,10 +54,30 @@ export function parseGoogleMapsUrl(url: string): { name: string; lat: number; ln
   return name ? { name, lat: Number(coords[1]), lng: Number(coords[2]) } : null;
 }
 
-/** SSRF guard: only addresses on the public internet may be fetched on a traveller's behalf. */
+/** The eight 16-bit groups of an IPv6 literal, with `::` expanded and a trailing dotted IPv4 folded in. */
+function ipv6Groups(ip: string): number[] | null {
+  let v = ip.toLowerCase();
+  const dotted = v.match(/^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (dotted) {
+    const [, head, a, b, c, d] = dotted;
+    v = `${head}${((+a << 8) | +b).toString(16)}:${((+c << 8) | +d).toString(16)}`;
+  }
+  const halves = v.split("::");
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - left.length - right.length : 0;
+  if (fill < 0 || (halves.length === 1 && left.length !== 8)) return null;
+  const groups = [...left, ...Array(fill).fill("0"), ...right].map((g) => parseInt(g, 16));
+  return groups.length === 8 && groups.every((g) => g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+/**
+ * SSRF guard: only addresses on the public internet may be fetched on a traveller's behalf.
+ * An IPv6 address that merely wraps an IPv4 one (`::ffff:a.b.c.d` and its hex form, the NAT64
+ * prefix `64:ff9b::/96`, the deprecated `::a.b.c.d`) is judged as the IPv4 it carries.
+ */
 export function isPublicAddress(ip: string): boolean {
-  const mapped = ip.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return isPublicAddress(mapped[1]);
   const version = isIP(ip);
   if (version === 4) {
     const [a, b] = ip.split(".").map(Number);
@@ -71,8 +91,18 @@ export function isPublicAddress(ip: string): boolean {
     );
   }
   if (version === 6) {
-    const v = ip.toLowerCase();
-    return !(v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || /^fe[89ab]/.test(v));
+    const g = ipv6Groups(ip);
+    if (!g) return false;
+    const v4 = `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`;
+    const zeros = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+    if (zeros(0, 5) && (g[5] === 0xffff || g[5] === 0)) return isPublicAddress(v4); // mapped, compatible (and :: / ::1, which land on 0.x)
+    if (g[0] === 0x64 && g[1] === 0xff9b && zeros(2, 6)) return isPublicAddress(v4);
+    return !(
+      (g[0] & 0xfe00) === 0xfc00 || // unique local
+      (g[0] & 0xffc0) === 0xfe80 || // link-local
+      (g[0] & 0xffc0) === 0xfec0 || // site-local
+      g[0] >> 8 === 0xff // multicast
+    );
   }
   return false;
 }
@@ -83,19 +113,20 @@ const MAX_BODY_BYTES = 512 * 1024;
 
 export interface LinkDeps {
   fetch: typeof fetch;
-  lookup: (host: string) => Promise<string>;
+  lookup: (host: string) => Promise<string[]>;
 }
 
 const defaultLinkDeps: LinkDeps = {
   fetch: (...args) => fetch(...args),
-  lookup: async (host) => (await dnsLookup(host)).address,
+  lookup: async (host) => (await dnsLookup(host, { all: true })).map((r) => r.address),
 };
 
 /**
  * https only, public addresses only, every redirect hop re-checked, bounded time.
- * ponytail: checks the address, then lets fetch resolve again — a DNS-rebinding host could answer
- * differently the second time. Pin the socket to the checked address if this ever serves more
- * than a demo beta.
+ * Every record the host resolves to must be public. ponytail: checking every record narrows DNS
+ * rebinding but cannot close it — fetch resolves again, and a host can answer differently the
+ * second time. Pinning the socket needs undici's Agent({ connect: { lookup } }), a new dependency,
+ * worth adding only if the link reader ever accepts http or skips TLS.
  */
 async function guardedFetch(url: string, deps: LinkDeps): Promise<{ res: Response; url: string } | null> {
   let current = url;
@@ -109,8 +140,8 @@ async function guardedFetch(url: string, deps: LinkDeps): Promise<{ res: Respons
     if (u.protocol !== "https:") return null;
     try {
       const host = u.hostname.replace(/^\[|\]$/g, "");
-      const address = isIP(host) ? host : await deps.lookup(host);
-      if (!isPublicAddress(address)) return null;
+      const addresses = isIP(host) ? [host] : await deps.lookup(host);
+      if (addresses.length === 0 || !addresses.every(isPublicAddress)) return null;
       const res = await deps.fetch(u.toString(), {
         redirect: "manual",
         signal: AbortSignal.timeout(LINK_TIMEOUT_MS),

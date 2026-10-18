@@ -3,6 +3,7 @@ import { askOverpass } from "./overpass";
 import { searchTermsFor } from "./placeQuery";
 import type { PoiOsmTags } from "./types";
 import { parseWheelchair, parseWikidataId, tagValue } from "./osmTags";
+import { validHttpUrl } from "./placeSearch";
 
 /** Longer than the shared default because this batches every POI in a trip into one query and
  *  Overpass queues under load. NOTE the `[timeout:N]` inside the query is an instruction to
@@ -200,7 +201,7 @@ async function fetchPoiOsmTagsUncached(
         // rather than a raw read because OSM carries empty strings and lone semicolons, and the
         // card's rule is that a heading is not drawn over a value that is not there.
         address: street ? (houseNumber ? `${houseNumber} ${street}` : street) : null,
-        website: tagValue(tags, "website", "contact:website", "url") ?? null,
+        website: validHttpUrl(tagValue(tags, "website", "contact:website", "url")) ?? null,
         phone: tagValue(tags, "phone", "contact:phone") ?? null,
         wikidataId: parseWikidataId(tagValue(tags, "wikidata")) ?? null,
         commonsCategory: tagValue(tags, "wikimedia_commons") ?? null,

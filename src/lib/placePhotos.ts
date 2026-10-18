@@ -1,4 +1,5 @@
 import { TTL, cached } from "./fetchCache";
+import { validHttpUrl } from "./placeSearch";
 
 /**
  * A photograph for a place that OpenStreetMap has tagged with a Wikidata item.
@@ -76,7 +77,7 @@ export async function wikidataPlace(qid: string): Promise<WikidataPlace | null> 
       const place: WikidataPlace = {
         image: claimString(claims, "P18"),
         commonsCategory: claimString(claims, "P373"),
-        website: claimString(claims, "P856"),
+        website: validHttpUrl(claimString(claims, "P856") ?? undefined) ?? null,
       };
       // Nothing useful is a miss, not a row worth keeping.
       return place.image || place.commonsCategory || place.website ? place : null;

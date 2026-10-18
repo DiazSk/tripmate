@@ -549,7 +549,7 @@ export function detailsFromTags(tags: Record<string, string>) {
  * rather than guessed at — in particular a bare `javascript:` or `data:` string must never reach
  * an anchor. A bare domain is the one repair worth making, because it is common and unambiguous.
  */
-function validHttpUrl(raw: string | undefined): string | undefined {
+export function validHttpUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
   try {

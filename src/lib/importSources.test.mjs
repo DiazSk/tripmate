@@ -37,17 +37,18 @@ test("parseGoogleMapsUrl returns null for links it cannot read", () => {
 
 test("isPublicAddress refuses private, loopback, link-local and mapped addresses", () => {
   for (const ip of ["10.0.0.1", "172.16.5.4", "192.168.1.1", "127.0.0.1", "169.254.169.254", "0.0.0.0",
-                    "100.64.0.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "nonsense"]) {
+                    "100.64.0.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "nonsense",
+                    "::ffff:7f00:1", "::FFFF:A00:1", "64:ff9b::a00:1", "::10.0.0.1", "::7f00:1"]) {
     assert.equal(isPublicAddress(ip), false, ip);
   }
-  for (const ip of ["8.8.8.8", "172.32.0.1", "2606:4700:4700::1111"]) {
+  for (const ip of ["8.8.8.8", "172.32.0.1", "2606:4700:4700::1111", "2606:4700::1111", "::ffff:808:808"]) {
     assert.equal(isPublicAddress(ip), true, ip);
   }
 });
 
 /** A fake network: `routes` maps a URL to a Response or a function returning one; `ips` maps a host to an address. */
 const fakeNet = (routes, ips = {}) => ({
-  lookup: async (host) => ips[host] ?? "93.184.216.34",
+  lookup: async (host) => [].concat(ips[host] ?? "93.184.216.34"),
   fetch: async (input) => {
     const url = String(input);
     const r = routes[url];
@@ -60,6 +61,11 @@ const redirect = (to) => new Response(null, { status: 302, headers: { location: 
 test("readLink refuses http and private hosts", async () => {
   assert.equal(await readLink("http://example.com/", fakeNet({})), null);
   assert.equal(await readLink("https://internal.example/", fakeNet({}, { "internal.example": "10.0.0.5" })), null);
+});
+
+test("readLink refuses a host with any private record, even beside a public one", async () => {
+  const net = fakeNet({}, { "split.example": ["93.184.216.34", "10.0.0.1"] });
+  assert.equal(await readLink("https://split.example/", net), null);
 });
 
 test("readLink refuses a redirect into the private network", async () => {
