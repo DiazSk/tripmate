@@ -8,17 +8,19 @@ import type { NextConfig } from "next";
 const SPZ_SHIM_RELATIVE = "./shims/spz-loader-core.ts";
 const SPZ_SHIM_ABSOLUTE = path.resolve(SPZ_SHIM_RELATIVE);
 
-/** The Clerk frontend API host. A publishable key is `pk_<env>_` + base64(`<host>$`), so the host
- *  can be read off it at config time rather than hard-coded per deploy. Falls back to the dev
- *  wildcard when the key is absent or does not decode, and never throws: a config that fails to
- *  load takes the whole build down. */
-function clerkOrigin(): string {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+/** The Clerk frontend API origin, as a list so "no Clerk" can be an empty one. A publishable key
+ *  is `pk_<env>_` + base64(`<host>$`), so the host is read off it at config time rather than
+ *  hard-coded per deploy. No key (Clerk not configured) or a key that does not decode gives no
+ *  origin at all; only an undecodable `pk_test_` key falls back to the dev-instance wildcard, so a
+ *  production policy never trusts every `*.clerk.accounts.dev`. Never throws: a config that fails
+ *  to load takes the whole build down. */
+function clerkOrigins(key: string): string[] {
   const host = Buffer.from(key.split("_")[2] ?? "", "base64").toString("utf8").replace(/\$$/, "");
-  return /^[a-z0-9.-]+$/i.test(host) ? `https://${host}` : "https://*.clerk.accounts.dev";
+  if (/^[a-z0-9.-]+$/i.test(host)) return [`https://${host}`];
+  return key.startsWith("pk_test_") ? ["https://*.clerk.accounts.dev"] : [];
 }
 
-const CLERK = clerkOrigin();
+const CLERK_API = clerkOrigins(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "");
 const list = (...o: string[]) => o.join(" ");
 
 /** `'unsafe-eval'` is here for exactly one line: Cesium's bundled Knockout opens with
@@ -32,8 +34,14 @@ const EVAL = "'unsafe-eval'";
 /** Each list is an audited set of origins, kept beside the feature that needs it.
  *  Added from the browser's own violation reports, one surface at a time. */
 const PROTECT = "https://*.client.protect.clerk.com:*"; // Clerk's bot probe: its loader.js, then probes on seven ports
+// Every Clerk origin appears together or not at all: with Clerk unconfigured none belongs in the policy.
+const CLERK_SCRIPT = CLERK_API.length ? ["https://cdn.protect.clerk.com", PROTECT, ...CLERK_API] : [];
+const CLERK_CONNECT = CLERK_API.length ? [PROTECT, ...CLERK_API] : [];
+const CLERK_IMG = CLERK_API.length ? ["https://img.clerk.com"] : [];
 const OPENFREEMAP = "https://tiles.openfreemap.org"; // MapLibre: style, sprites, glyphs, vector tiles
 const TERRAIN = "https://s3.amazonaws.com/elevation-tiles-prod/"; // MapLibre's terrarium DEM, this bucket only
+const COMMONS = "https://commons.wikimedia.org"; // Special:FilePath hero photos, which redirect on to upload.wikimedia.org
+const OSM_TILES = "https://tile.openstreetmap.org"; // Cesium's flat imagery when there is no Ion token or no 3D tile arrives
 const CESIUM = ["https://api.cesium.com", "https://tile.googleapis.com"]; // Ion token handshake, Google 3D tiles
 const KOKORO = [
   "https://esm.sh", // kokoro-js itself, imported inside a Blob worker
@@ -48,12 +56,12 @@ const KOKORO = [
  *  dynamic. */
 const CSP = [
   "default-src 'self'",
-  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", "https://cdn.protect.clerk.com", PROTECT, CLERK)}`,
+  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", ...CLERK_SCRIPT)}`,
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
-  `connect-src ${list("'self'", ...KOKORO, OPENFREEMAP, TERRAIN, ...CESIUM, "https://geocoding-api.open-meteo.com", PROTECT, CLERK)}`,
-  `img-src ${list("'self'", "data:", "blob:", OPENFREEMAP, "https://assets.ion.cesium.com", "https://upload.wikimedia.org", "https://thumb.wikimedia.org", "https://img.clerk.com")}`,
-  `frame-src ${list("https://challenges.cloudflare.com", CLERK)}`,
+  `connect-src ${list("'self'", ...KOKORO, OPENFREEMAP, TERRAIN, ...CESIUM, OSM_TILES, "https://geocoding-api.open-meteo.com", ...CLERK_CONNECT)}`,
+  `img-src ${list("'self'", "data:", "blob:", OPENFREEMAP, OSM_TILES, "https://assets.ion.cesium.com", "https://upload.wikimedia.org", "https://thumb.wikimedia.org", COMMONS, ...CLERK_IMG)}`,
+  `frame-src ${list("https://challenges.cloudflare.com", ...CLERK_API)}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
