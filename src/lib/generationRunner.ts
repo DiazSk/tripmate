@@ -25,7 +25,8 @@ import {
   selectStopsToEnrich,
 } from "./placeConflicts";
 import { getDestinationContextInsight } from "./destinationContext";
-import { insertGeneration, insertRun } from "./db";
+import { insertGeneration, insertRun, markTraceRefused } from "./db";
+import { isRefusalShape, OffTopicError } from "./promptScope";
 import { sketchModel, llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
 import { buildSketchPrompt, formatSketchForGenerate, parseSketch, type SketchDay } from "./sketch";
@@ -383,6 +384,12 @@ export async function runGeneration(
     itineraryTimeoutMs(dayCount),
     { runId, session: { persist: true }, onText }
   );
+  // Refine is the only generation that carries the refusal line, and its output is days JSON, so
+  // the model's own refusal is the whole reply check here. The route answers it with SV-16.
+  if (isRefine && isRefusalShape(raw)) {
+    markTraceRefused(traceId, "model: off_topic");
+    throw new OffTopicError();
+  }
   onStage({ stage: "generate", status: "done" });
 
   // The full input→output record, written the moment the model answers and **before** anything is

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonResponse, runClaude } from "@/lib/claude";
+import { CAPS, capFailureResponse, checkItinerary, checkText, readJsonCapped } from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
 import { capResponse, limitResponse } from "@/lib/limitResponse";
 import { dailyCapResumesAt } from "@/lib/spendCap";
@@ -48,7 +49,7 @@ const STORY_TIMEOUT_MS = 180_000;
  * `"preview"` placeholder), and those scripts live in the browser's session cache alone.
  */
 export async function POST(req: NextRequest) {
-  let body: {
+  type Body = {
     destination?: string;
     dayIndex?: number;
     dayCount?: number;
@@ -59,11 +60,9 @@ export async function POST(req: NextRequest) {
      *  by then is what the film gets, and nothing waits on what has not. */
     legs?: (CompactLeg | null)[];
   };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const read = await readJsonCapped(req);
+  if (!read.ok) return capFailureResponse(read);
+  const body = (read.value ?? {}) as Body;
 
   const { destination, day, tripId } = body;
   const dayIndex = body.dayIndex ?? 0;
@@ -71,6 +70,11 @@ export async function POST(req: NextRequest) {
   // The one hard validation: with no day there is nothing to narrate and no fallback to build.
   if (!destination || !day || !Array.isArray(day.stops)) {
     return NextResponse.json({ error: "destination and day are required" }, { status: 400 });
+  }
+  // Before the cache too, so one check covers both. No free check: the story prompt carries the
+  // traveller's plan, not a request.
+  for (const c of [checkItinerary({ days: [day] }), checkText(destination, CAPS.destination)]) {
+    if (!c.ok) return capFailureResponse(c);
   }
 
   // Legs reach `compactDay` and therefore the fingerprint, which is the whole point of putting

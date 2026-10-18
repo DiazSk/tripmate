@@ -132,7 +132,7 @@ test("checkEditReply", () => {
   assert.deepEqual(checkEditReply({ reply: "ok", options: [{ label: "```py\nx\n```" }] }, 100), { refused: true, reason: "output: code" });
   assert.deepEqual(checkEditReply({ reply: "x".repeat(101), why: "def f():\n    return 1" }, 100), { refused: true, reason: "output: length" });
   assert.deepEqual(checkEditReply({ reply: 5, changes: [1, null], knockOn: {} }, 100), { refused: false });
-  assert.equal(MAX_REPLY_CHARS, 4000);
+  assert.equal(MAX_REPLY_CHARS, 1500);
 });
 
 test("isRefusalShape", () => {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import type { Bucket, ThrottleResult } from "./ipThrottle";
+import { insertRefusalTrace } from "./db";
+import { throttle, type Bucket, type ThrottleResult } from "./ipThrottle";
 import { ModelTimeoutError } from "./modelTimeout";
+import { screenRequest } from "./promptScope";
 
 /**
  * The structured refusals: a 429 for a per-IP limit, a 503 for the daily cap, a 504 for a model
@@ -62,6 +64,25 @@ export const OFF_TOPIC_SENTENCES = {
 
 export function offTopicResponse(kind: keyof typeof OFF_TOPIC_SENTENCES): NextResponse {
   return NextResponse.json({ error: OFF_TOPIC_SENTENCES[kind], code: "off_topic" }, { status: 422 });
+}
+
+/**
+ * The free check, run before the route's throttle so a refusal costs the traveller none of their
+ * allowance. Null when the text passes. A refusal is logged as a trace row only while the caller's
+ * `refusal` bucket has room: it costs an attacker nothing, so unbounded logging would let anyone
+ * fill the table. Over the bucket it is still refused, just not written down.
+ */
+export function prefilterRefusal(
+  req: { headers: { get(name: string): string | null } },
+  text: unknown,
+  type: string,
+  kind: keyof typeof OFF_TOPIC_SENTENCES
+): NextResponse | null {
+  if (typeof text !== "string") return null;
+  const screen = screenRequest(text);
+  if (!screen.refused) return null;
+  if (!throttle(req, "refusal").limited) insertRefusalTrace({ type, prompt: text, rule: screen.rule });
+  return offTopicResponse(kind);
 }
 
 export function limitResponse(r: Extract<ThrottleResult, { limited: true }>, bucket: LimitedBucket): NextResponse {

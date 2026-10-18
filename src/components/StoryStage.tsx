@@ -69,6 +69,7 @@ function FallbackNote({ failure }: { failure: Failure | null }) {
       </p>
     );
   }
+  if (failure?.kind === "refused") return <p className="sp-note">Read from your plan. {failure.message}</p>;
   return <p className="sp-note">Read from your plan. The storyteller wasn&rsquo;t reachable this time.</p>;
 }
 

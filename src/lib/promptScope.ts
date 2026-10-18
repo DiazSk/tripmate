@@ -79,8 +79,10 @@ export type ReplyCheck =
   | { refused: false }
   | { refused: true; reason: "model: off_topic" | "output: code" | "output: length" };
 
-// ponytail: 4000 is a guess; Task 11 replaces it with a measured p99 x 2.
-export const MAX_REPLY_CHARS = 4000;
+// Measured 2026-10-18 on a scratch copy of the dev tripmate.db: 55 parseable `chat` replies (CLI and
+// API envelopes; 33 auth-error rows skipped), p50 237, p99 592, max 592 characters. p99 x 2 = 1184,
+// rounded up to 500. No element-edit traces existed, so `why` shares the chat number unmeasured.
+export const MAX_REPLY_CHARS = 1500;
 
 // Every string inside a field, whatever its shape (string, array, array of objects); the rest is ignored.
 function strings(v: unknown, depth = 0): string[] {

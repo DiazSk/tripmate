@@ -8,7 +8,15 @@ import {
   runClaude,
   type SessionOption,
 } from "@/lib/claude";
-import { appendChatTurn, insertRun, setTripChatSession } from "@/lib/db";
+import {
+  appendChatTurn,
+  getLlmSession,
+  insertRun,
+  listChatTurns,
+  markTraceRefused,
+  setTripChatSession,
+  truncateLlmSession,
+} from "@/lib/db";
 import { readOwnTrip } from "@/lib/ownerRequest";
 import { buildEditContext } from "@/lib/editContext";
 import {
@@ -18,8 +26,17 @@ import {
   itineraryFingerprint,
 } from "@/lib/editPrompt";
 import { applyPatch, PatchOp } from "@/lib/itineraryPatch";
+import { CAPS, capFailureResponse, chatHistory, checkItinerary, checkText, readJsonCapped } from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
-import { capResponse, limitResponse, modelFailureResponse } from "@/lib/limitResponse";
+import {
+  capResponse,
+  limitResponse,
+  modelFailureResponse,
+  offTopicResponse,
+  prefilterRefusal,
+} from "@/lib/limitResponse";
+import { llmMode } from "@/lib/llmConfig";
+import { checkEditReply, MAX_REPLY_CHARS } from "@/lib/promptScope";
 import { loadSkill } from "@/lib/skill";
 import { dailyCapResumesAt } from "@/lib/spendCap";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
@@ -64,9 +81,9 @@ function daysModified(ops: PatchOp[], rejected: { op: PatchOp }[]): number[] {
 export async function POST(req: NextRequest) {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
-  const limit = throttle(req, "edit");
-  if (limit.limited) return limitResponse(limit, "edit");
-  const body = await req.json();
+  const read = await readJsonCapped(req);
+  if (!read.ok) return capFailureResponse(read);
+  const body = (read.value ?? {}) as Record<string, unknown>;
   const { mode, trip, itinerary, tripId, userAnswers, sessionId, syncedHash } = body as {
     mode: "chat" | "element";
     trip: TripSummary;
@@ -82,6 +99,24 @@ export async function POST(req: NextRequest) {
   if (!mode || !trip || !itinerary) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+
+  // Caps, then the free check, then the throttle: a request refused before the model costs the
+  // traveller none of their 6 changes. The latest message is the only client text the model reads
+  // on a resume, and chatHistory() cuts the rest on a rebuild.
+  const clientMessages = (body as { messages?: { role?: unknown; content?: unknown }[] }).messages;
+  const latest = Array.isArray(clientMessages) ? clientMessages[clientMessages.length - 1]?.content : undefined;
+  const instruction = (body as { instruction?: unknown }).instruction;
+  for (const c of [checkText(latest, CAPS.message), checkText(instruction, CAPS.instruction), checkItinerary(itinerary)]) {
+    if (!c.ok) return capFailureResponse(c);
+  }
+  const refused =
+    mode === "chat"
+      ? prefilterRefusal(req, latest, "chat", "chat")
+      : prefilterRefusal(req, instruction, "element-edit", "element");
+  if (refused) return refused;
+
+  const limit = throttle(req, "edit");
+  if (limit.limited) return limitResponse(limit, "edit");
 
   try {
     const skill = await loadSkill("itinerary-planner");
@@ -117,6 +152,9 @@ export async function POST(req: NextRequest) {
     let session: SessionOption | undefined;
     // Set only on the resume path, so a dead session can be retried as a full rebuild below.
     let resumedFrom: string | null = null;
+    // What a rebuilt chat prompt replays: the saved transcript when there is one, never the
+    // client's own copy of it. Filled in the chat branch below.
+    let history: ReturnType<typeof chatHistory> = [];
 
     if (mode === "chat") {
       const { messages, dayIndex } = body as {
@@ -126,6 +164,7 @@ export async function POST(req: NextRequest) {
       if (!Array.isArray(messages) || messages.length === 0) {
         return NextResponse.json({ error: "Missing messages" }, { status: 400 });
       }
+      history = chatHistory(stored ? listChatTurns(stored.id) : null, messages);
       /**
        * A day-scoped chat is now *enforced*, not merely requested.
        *
@@ -157,17 +196,13 @@ export async function POST(req: NextRequest) {
         });
       } else {
         session = { persist: true };
-        prompt = buildChatEditPrompt({ skill, editContext, itinerary, dayIndex, messages });
+        prompt = buildChatEditPrompt({ skill, editContext, itinerary, dayIndex, messages: history });
       }
     } else {
-      const { dayIndex, stopIndex, instruction } = body as {
-        dayIndex: number;
-        stopIndex: number;
-        instruction: string;
-      };
+      const { dayIndex, stopIndex } = body as { dayIndex: number; stopIndex: number };
       const day = itinerary.days[dayIndex];
       const target = day?.stops[stopIndex];
-      if (!day || !target || !instruction?.trim()) {
+      if (!day || !target || typeof instruction !== "string" || !instruction.trim()) {
         return NextResponse.json({ error: "Missing or invalid element" }, { status: 400 });
       }
       // Scope lock is enforced when applying, not merely requested in the prompt.
@@ -192,10 +227,19 @@ export async function POST(req: NextRequest) {
 
     let raw: string;
     let servedBy: string | undefined;
+    // The trace row of whichever call served the turn, so a refusal marks the right one.
+    let traceId: string;
+    // Set when a resumed API session served the turn: how long it was before, so a refused turn can
+    // be cut back out of the model's memory. The CLI transport's JSONL file can't be edited after
+    // the fact; it only serves local development, so that risk is accepted.
+    let rollback: { id: string; keep: number } | null = null;
+    const lengthBefore = resumedFrom && llmMode() === "api" ? getLlmSession(resumedFrom)?.length : undefined;
     try {
       const r = await runClaude(prompt, callType, timeoutMs, { runId, effort: "low", session });
       raw = r.result;
       servedBy = r.sessionId;
+      traceId = r.traceId;
+      if (resumedFrom && lengthBefore !== undefined) rollback = { id: resumedFrom, keep: lengthBefore };
     } catch (err) {
       // A session is a JSONL file on one machine, so it can simply not be there: the trip was
       // generated on another device, the home dir was cleaned, or persistence was off when it
@@ -205,11 +249,8 @@ export async function POST(req: NextRequest) {
       // traveller heard anything.
       if (!resumedFrom || err instanceof ModelTimeoutError) throw err;
       console.warn(`[trip-edit] session ${resumedFrom} unusable, rebuilding`, err);
-      const { messages, dayIndex } = body as {
-        messages: { role: "user" | "assistant"; content: string }[];
-        dayIndex?: number;
-      };
-      const rebuilt = buildChatEditPrompt({ skill, editContext, itinerary, dayIndex, messages });
+      const { dayIndex } = body as { dayIndex?: number };
+      const rebuilt = buildChatEditPrompt({ skill, editContext, itinerary, dayIndex, messages: history });
       const r = await runClaude(rebuilt, callType, timeoutMs, {
         runId,
         effort: "low",
@@ -217,8 +258,19 @@ export async function POST(req: NextRequest) {
       });
       raw = r.result;
       servedBy = r.sessionId;
+      traceId = r.traceId;
     }
-    const parsed = parseJsonResponse<EditResponse>(raw);
+    const parsed = parseJsonResponse<EditResponse & { refused?: unknown }>(raw);
+
+    // The reply check. A refused turn changes nothing: no ops applied, no transcript written, no
+    // new session stored (a rebuild's fresh session holds only this turn, so the client keeps the
+    // one it sent), and the resumed session is cut back to where it was.
+    const check = checkEditReply(parsed, MAX_REPLY_CHARS);
+    if (check.refused) {
+      markTraceRefused(traceId, check.reason);
+      if (rollback) truncateLlmSession(rollback.id, rollback.keep);
+      return offTopicResponse(mode === "chat" ? "chat" : "element");
+    }
 
     const ops = parsed.ops ?? [];
     const { itinerary: updated, rejected } = applyPatch(itinerary, ops, scope);

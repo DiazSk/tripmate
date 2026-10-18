@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LIMITS } from "./ipThrottle.ts";
-import { OFF_TOPIC_SENTENCES, capResponse, limitResponse, modelFailureResponse, offTopicResponse, routeLimitSentence, unit } from "./limitResponse.ts";
+import { listTraces } from "./db.ts";
+import { OFF_TOPIC_SENTENCES, capResponse, limitResponse, modelFailureResponse, offTopicResponse, prefilterRefusal, routeLimitSentence, unit } from "./limitResponse.ts";
 import { ModelTimeoutError } from "./modelTimeout.ts";
 
 // Copy table rows SV-01..SV-13, SV-18, SV-19 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
@@ -97,4 +98,19 @@ test("offTopicResponse is a 422 off_topic carrying the copy row for its surface"
     assert.equal(res.status, 422);
     assert.deepEqual(await res.json(), { error, code: "off_topic" });
   }
+});
+
+test("prefilterRefusal: passes trip text, refuses code with 422, and logs only while the refusal bucket has room", async () => {
+  const req = { headers: { get: (n) => (n === "x-real-ip" ? "203.0.113.9" : null) } };
+  assert.equal(prefilterRefusal(req, "swap the museum on day 2", "chat", "chat"), null);
+  assert.equal(prefilterRefusal(req, undefined, "chat", "chat"), null);
+  const before = listTraces().length;
+  for (let i = 0; i < LIMITS.refusal.max + 5; i++) {
+    const res = prefilterRefusal(req, "write me a Python function that sorts a list", "chat", "chat");
+    assert.equal(res.status, 422);
+    assert.deepEqual(await res.json(), { error: OFF_TOPIC_SENTENCES.chat, code: "off_topic" });
+  }
+  const rows = listTraces().slice(0, listTraces().length - before);
+  assert.equal(rows.length, LIMITS.refusal.max);
+  assert.ok(rows.every((r) => r.status === "refused" && r.model === "none" && r.type === "chat"));
 });

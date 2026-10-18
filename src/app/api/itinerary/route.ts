@@ -10,8 +10,18 @@ import { GenerationParams, runGeneration } from "@/lib/generationRunner";
 import { StageEvent } from "@/lib/generationStages";
 import type { StreamedStop } from "@/lib/streamingItinerary";
 import type { SketchDay } from "@/lib/sketch";
+import { CAPS, capFailureResponse, checkItinerary, checkText, readJsonCapped } from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
-import { capResponse, limitResponse, modelFailureResponse, TIMEOUT_SENTENCES } from "@/lib/limitResponse";
+import {
+  capResponse,
+  limitResponse,
+  modelFailureResponse,
+  OFF_TOPIC_SENTENCES,
+  offTopicResponse,
+  prefilterRefusal,
+  TIMEOUT_SENTENCES,
+} from "@/lib/limitResponse";
+import { OffTopicError } from "@/lib/promptScope";
 import { dailyCapResumesAt } from "@/lib/spendCap";
 
 const GENERATION_ERROR = "The planner didn't finish. Try generating again.";
@@ -28,12 +38,12 @@ function sseFrame(event: string, data: unknown): Uint8Array {
 }
 
 export async function POST(req: NextRequest) {
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    body = null;
-  }
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
+  const read = await readJsonCapped(req);
+  if (!read.ok) return capFailureResponse(read);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- an untyped request body, as before
+  const body = read.value as any;
   // Before the throttle: a body that cannot be read is not a request for anything.
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
@@ -41,8 +51,18 @@ export async function POST(req: NextRequest) {
   // Read first so the refusal can name the action: a refine or a rebalance is a change to a plan
   // the traveller already has, and is held to the edit allowance, not the planning one.
   const bucket = body.rebalance || (body.previousItinerary && body.feedback) ? "edit" : "plan";
-  const capped = dailyCapResumesAt();
-  if (capped) return capResponse(capped);
+  // Caps and the free check, before the throttle, so a refusal costs none of the allowance.
+  for (const c of [
+    checkText(body.feedback, CAPS.feedback),
+    body.previousItinerary ? checkItinerary(body.previousItinerary) : null,
+    body.remainingDays ? checkItinerary(body.remainingDays) : null,
+  ]) {
+    if (c && !c.ok) return capFailureResponse(c);
+  }
+  if (!body.rebalance && body.previousItinerary && body.feedback) {
+    const refused = prefilterRefusal(req, body.feedback, "refine", "refine");
+    if (refused) return refused;
+  }
   const limit = throttle(req, bucket);
   if (limit.limited) return limitResponse(limit, bucket);
   const {
@@ -146,6 +166,7 @@ export async function POST(req: NextRequest) {
       // written for a developer reading a trace, not for someone waiting on a plan, so the
       // real one goes to the server log and the client gets a recovery step.
       console.error("[itinerary]", err);
+      if (err instanceof OffTopicError) return offTopicResponse("refine");
       return modelFailureResponse(err, GENERATION_ERROR, bucket);
     }
   }
@@ -215,9 +236,11 @@ export async function POST(req: NextRequest) {
         // The stream's status is already 200, so the timeout code rides in the event instead.
         safeEnqueue(
           "error",
-          err instanceof ModelTimeoutError
-            ? { error: TIMEOUT_SENTENCES[bucket], code: "timeout" }
-            : { error: GENERATION_ERROR }
+          err instanceof OffTopicError
+            ? { error: OFF_TOPIC_SENTENCES.refine, code: "off_topic" }
+            : err instanceof ModelTimeoutError
+              ? { error: TIMEOUT_SENTENCES[bucket], code: "timeout" }
+              : { error: GENERATION_ERROR }
         );
       } finally {
         clearInterval(keepalive);

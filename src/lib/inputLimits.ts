@@ -114,3 +114,22 @@ export async function readJsonCapped(
 export function capFailureResponse(f: CapFailure): NextResponse {
   return NextResponse.json({ error: f.error, code: f.code }, { status: f.status });
 }
+
+type Turn = { role: "user" | "assistant"; content: string };
+
+/**
+ * The conversation a rebuilt chat prompt replays. A saved trip replays its own stored transcript
+ * plus the client's latest message, so a client cannot hand the model a history it never had; an
+ * unsaved trip has no transcript and keeps the client's array. Either way: the last
+ * `historyTurns`, each cut to the message cap.
+ */
+export function chatHistory(
+  stored: { role: string; content: string }[] | null,
+  client: { role?: unknown; content?: unknown }[]
+): Turn[] {
+  const turns = stored ? [...stored, client[client.length - 1]] : client;
+  return turns.slice(-CAPS.historyTurns).map((t) => ({
+    role: t?.role === "assistant" ? "assistant" : "user",
+    content: String(t?.content ?? "").slice(0, CAPS.message),
+  }));
+}

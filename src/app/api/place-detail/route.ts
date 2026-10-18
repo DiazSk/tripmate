@@ -5,8 +5,9 @@ import { buildPlaceDetailPrompt } from "@/lib/itineraryPrompt";
 import { compactItinerary } from "@/lib/editPrompt";
 import { insertRun } from "@/lib/db";
 import { readOwnTrip } from "@/lib/ownerRequest";
+import { CAPS, capFailureResponse, checkText, readJsonCapped } from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
-import { capResponse, limitResponse, modelFailureResponse } from "@/lib/limitResponse";
+import { capResponse, limitResponse, modelFailureResponse, prefilterRefusal } from "@/lib/limitResponse";
 import { dailyCapResumesAt } from "@/lib/spendCap";
 import { Itinerary, PlaceDetail } from "@/lib/types";
 
@@ -40,13 +41,28 @@ function locateStop(
 export async function POST(req: NextRequest) {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
-  const limit = throttle(req, "place-detail");
-  if (limit.limited) return limitResponse(limit, "place-detail");
-  const { name, destination, lat, lng, tripId } = await req.json();
+  const read = await readJsonCapped(req);
+  if (!read.ok) return capFailureResponse(read);
+  const { name, destination, lat, lng, tripId } = (read.value ?? {}) as {
+    name?: string;
+    destination?: string;
+    lat?: unknown;
+    lng?: unknown;
+    tripId?: string;
+  };
 
   if (!name || !destination || typeof lat !== "number" || typeof lng !== "number") {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+  for (const c of [checkText(name, CAPS.placeName), checkText(destination, CAPS.destination)]) {
+    if (!c.ok) return capFailureResponse(c);
+  }
+  // Before the throttle, so a refused name costs none of the 10 place details. SV-14: a place
+  // name has no sentence of its own, and the chat one says what TripMate is for.
+  const refused = prefilterRefusal(req, name, "place-detail", "chat");
+  if (refused) return refused;
+  const limit = throttle(req, "place-detail");
+  if (limit.limited) return limitResponse(limit, "place-detail");
 
   try {
     // Append to the trip's original generation run when one exists, so
