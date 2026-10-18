@@ -1871,222 +1871,227 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         </div>
       )}
 
-      {/* Also mounted while a generation streams, which is what makes the wait watchable: the
-          panel opens collapsed to its capsule, and the card inside it — kept mounted rather than
-          unmounted, see DockedPanel — runs its `showTripRoute` effect on every arriving stop, so
-          the route and the marker cards build themselves on the live map behind the foot band.
-          The card is the same one the result view uses; only the value differs. */}
+      {/* Also mounted while a generation streams, because the card inside it — kept mounted rather
+          than unmounted, see DockedPanel — runs its `showTripRoute` effect on every arriving stop, so
+          the route and the marker cards build themselves on the live map behind the foot band. It is
+          not *shown* then: the writing screen is the wait's own surface, and a finished plan opens on
+          its trip page, so the old capsule over the map was only ever a second, stale itinerary
+          (Zaid, 2026-10-17). `invisible` rather than `hidden`, so the panel keeps its geometry and the
+          camera frames exactly as it did; `inert` so nothing in it takes focus. The fallback result
+          view (draft write failed) and a refine still show it. */}
       {(step === "result" || generating || refining) && shownItinerary && (
-        <DockedPanel
-          collapsible
-          busy={refining}
-          // The panel stays through the film, shut to its capsule — see the same note in TripView.
-          capsuleAction={
-            // Not offered mid-run: the film narrates a finished day, and a day that is still
-            // arriving has neither a script to write from nor a camera to spare — the route
-            // replay owns it until the last stop lands.
-            // And gone once one starts: the button leaves for `StoryStage`'s transport row rather
-            // than being mirrored in two places — see the note there.
-            step === "result" && !streamingPlan && itinerary?.days.length && !story.active
-              ? {
-                  label: `Play day ${activeDayIndex + 1} as a story`,
-                  onClick: () =>
-                    itinerary &&
-                    story.start({
-                      itinerary,
-                      dayIndex: activeDayIndex,
-                      destination,
-                      // No trip id: the pre-save view's `trip` prop is the `"preview"`
-                      // placeholder, so its scripts are cached in the browser for the session
-                      // and not against a row.
-                    }),
-                  icon: <PlayIcon className="h-4 w-4" />,
-                }
-              : undefined
-          }
-          wide={!!focus.target}
-          collapsed={planCollapsed}
-          // Opening the plan mid-film ends the film — see the same handler in TripView.
-          onCollapsedChange={(next) => {
-            if (!next && story.active) story.exit();
-            setPlanCollapsed(next);
-          }}
-          // What the capsule carries while the panel is shut — the trip at a glance, so
-          // "which day was I reading" survives a look at the map. Pre-save there is no trip
-          // row yet, so this reads the form's own destination, the way the arrange board does.
-          capsule={
-            destination
-              ? {
-                  title: destination,
-                  ...capsuleDays({ days: shownItinerary?.days, streaming: streamingPlan, tripDays: days, activeDayIndex }),
-                }
-              : undefined
-          }
-        >
-          <div className="space-y-6" {...devLabel("ResultPanel")}>
-            {/* refine()/save() can fail after the card is already showing — this is the
-                only place either error would otherwise have nowhere to render. */}
-            {error && <ErrorNote>{error}</ErrorNote>}
-
-            {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active
-                day and this panel's scroll position both survive the round trip instead of
-                resetting when ItineraryCard remounts. */}
-            <div className={selectedStop ? "hidden" : "space-y-6"}>
-              {/* Withheld while a run streams. `backToLanding` does not abort the request, so
-                  from here it would leave a five-minute model call running invisibly — Cancel in
-                  the generation band is the one way out of a run, and it is right there. */}
-              {step === "result" && !streamingPlan && (
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={backToLanding} className={backPillClass}>
-                    <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
-                    Back
-                  </button>
-                </div>
-              )}
-              {/* Focus Mode takes over the card while editing a day. */}
-              {focus.target && focus.draft && (
-                <FocusEditMode
-                  trip={{ id: "", destination, startDate, endDate, budget }}
-                  userAnswers={currentAnswers()}
-                  draft={focus.draft}
-                  dayIndex={focus.target.dayIndex}
-                  scope={focus.target.scope}
-                  sessionId={lastSessionId}
-                  initialMessage={focus.target.initialMessage}
-                  dirty={focus.dirty}
-                  onDaysModified={(days) =>
-                    setUnseenChangedDays((prev) =>
-                      markUnseenDays(days, focus.target?.dayIndex ?? activeDayIndex, prev)
-                    )
+        <div className={step === "result" ? undefined : "invisible pointer-events-none"} inert={step !== "result" || undefined}>
+          <DockedPanel
+            collapsible
+            busy={refining}
+            // The panel stays through the film, shut to its capsule — see the same note in TripView.
+            capsuleAction={
+              // Not offered mid-run: the film narrates a finished day, and a day that is still
+              // arriving has neither a script to write from nor a camera to spare — the route
+              // replay owns it until the last stop lands.
+              // And gone once one starts: the button leaves for `StoryStage`'s transport row rather
+              // than being mirrored in two places — see the note there.
+              step === "result" && !streamingPlan && itinerary?.days.length && !story.active
+                ? {
+                    label: `Play day ${activeDayIndex + 1} as a story`,
+                    onClick: () =>
+                      itinerary &&
+                      story.start({
+                        itinerary,
+                        dayIndex: activeDayIndex,
+                        destination,
+                        // No trip id: the pre-save view's `trip` prop is the `"preview"`
+                        // placeholder, so its scripts are cached in the browser for the session
+                        // and not against a row.
+                      }),
+                    icon: <PlayIcon className="h-4 w-4" />,
                   }
-                  onDraftChange={focus.applyDraft}
-                  onCancel={focus.cancel}
-                  onSave={() => {
-                    const committed = focus.save();
-                    if (committed) {
-                      // A local edit outranks a critique revision that lands after it — see
-                      // editedSincePlanRef.
-                      editedSincePlanRef.current = true;
-                      setItinerary(committed);
+                : undefined
+            }
+            wide={!!focus.target}
+            collapsed={planCollapsed}
+            // Opening the plan mid-film ends the film — see the same handler in TripView.
+            onCollapsedChange={(next) => {
+              if (!next && story.active) story.exit();
+              setPlanCollapsed(next);
+            }}
+            // What the capsule carries while the panel is shut — the trip at a glance, so
+            // "which day was I reading" survives a look at the map. Pre-save there is no trip
+            // row yet, so this reads the form's own destination, the way the arrange board does.
+            capsule={
+              destination
+                ? {
+                    title: destination,
+                    ...capsuleDays({ days: shownItinerary?.days, streaming: streamingPlan, tripDays: days, activeDayIndex }),
+                  }
+                : undefined
+            }
+          >
+            <div className="space-y-6" {...devLabel("ResultPanel")}>
+              {/* refine()/save() can fail after the card is already showing — this is the
+                  only place either error would otherwise have nowhere to render. */}
+              {error && <ErrorNote>{error}</ErrorNote>}
+
+              {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active
+                  day and this panel's scroll position both survive the round trip instead of
+                  resetting when ItineraryCard remounts. */}
+              <div className={selectedStop ? "hidden" : "space-y-6"}>
+                {/* Withheld while a run streams. `backToLanding` does not abort the request, so
+                    from here it would leave a five-minute model call running invisibly — Cancel in
+                    the generation band is the one way out of a run, and it is right there. */}
+                {step === "result" && !streamingPlan && (
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={backToLanding} className={backPillClass}>
+                      <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
+                      Back
+                    </button>
+                  </div>
+                )}
+                {/* Focus Mode takes over the card while editing a day. */}
+                {focus.target && focus.draft && (
+                  <FocusEditMode
+                    trip={{ id: "", destination, startDate, endDate, budget }}
+                    userAnswers={currentAnswers()}
+                    draft={focus.draft}
+                    dayIndex={focus.target.dayIndex}
+                    scope={focus.target.scope}
+                    sessionId={lastSessionId}
+                    initialMessage={focus.target.initialMessage}
+                    dirty={focus.dirty}
+                    onDaysModified={(days) =>
+                      setUnseenChangedDays((prev) =>
+                        markUnseenDays(days, focus.target?.dayIndex ?? activeDayIndex, prev)
+                      )
                     }
-                  }}
-                />
-              )}
+                    onDraftChange={focus.applyDraft}
+                    onCancel={focus.cancel}
+                    onSave={() => {
+                      const committed = focus.save();
+                      if (committed) {
+                        // A local edit outranks a critique revision that lands after it — see
+                        // editedSincePlanRef.
+                        editedSincePlanRef.current = true;
+                        setItinerary(committed);
+                      }
+                    }}
+                  />
+                )}
 
-              {!focus.target && hasProfile === false && !onboardingDismissed && (
-                <OnboardingCard
-                  answers={{
-                    group,
-                    pace,
-                    discovery,
-                    explorerStyle,
-                    energy,
-                    crowds,
-                    priorities: interests,
-                    topPriorities: starredInterests,
-                    // The wizard already asked; carry it so the saved profile starts out
-                    // matching what they just said rather than blank.
-                    accessibility: accessibility ?? NO_ACCESSIBILITY_NEEDS,
-                  }}
-                  onSaved={(dietary) => {
-                    setHasProfile(true);
-                    setOnboardingDismissed(true);
-                    setDietary(dietary);
-                  }}
-                  onDismiss={() => setOnboardingDismissed(true)}
-                />
-              )}
+                {!focus.target && hasProfile === false && !onboardingDismissed && (
+                  <OnboardingCard
+                    answers={{
+                      group,
+                      pace,
+                      discovery,
+                      explorerStyle,
+                      energy,
+                      crowds,
+                      priorities: interests,
+                      topPriorities: starredInterests,
+                      // The wizard already asked; carry it so the saved profile starts out
+                      // matching what they just said rather than blank.
+                      accessibility: accessibility ?? NO_ACCESSIBILITY_NEEDS,
+                    }}
+                    onSaved={(dietary) => {
+                      setHasProfile(true);
+                      setOnboardingDismissed(true);
+                      setDietary(dietary);
+                    }}
+                    onDismiss={() => setOnboardingDismissed(true)}
+                  />
+                )}
 
-              {!focus.target && (
-                <ItineraryCard
-                  itinerary={shownItinerary}
-                  budget={budget}
-                  destination={destination}
-                  onSelectStop={(stop) => {
-                    setRevealAnimation(false);
-                    selectStop(stop);
-                  }}
-                  // Read-only while the plan is still being written: a drag or an inline day edit
-                  // lands in `itinerary`, and the very next streamed stop would overwrite it.
-                  editable={!streamingPlan}
-                  activeDayIndex={activeDayIndex}
-                  unseenChangedDays={unseenChangedDays}
-                  onActiveDayChange={(next) => {
-                    setActiveDayIndex(next);
-                    // Looking at the day is what marks it read.
-                    setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
-                  }}
-                  onEditDay={handleEditDay}
-                  // Same window "Refine with AI" opens, just starting on the day whose icon was
-                  // clicked: one chat surface with day navigation, rather than a second
-                  // day-locked variant that looked identical but couldn't reach other days.
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
-                  onItineraryChange={handleRearrange}
-                  // The board only needs a name, a budget and the dates; pre-save there is no trip
-                  // row yet, so this is assembled from the form's own values.
-                  trip={{ id: "preview", destination, startDate, endDate, budget }}
-                  animateReveal={revealAnimation}
-                  panelCollapsed={planCollapsed}
-                  onMinimize={() => setPlanCollapsed(true)}
-                  onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
-                />
-              )}
+                {!focus.target && (
+                  <ItineraryCard
+                    itinerary={shownItinerary}
+                    budget={budget}
+                    destination={destination}
+                    onSelectStop={(stop) => {
+                      setRevealAnimation(false);
+                      selectStop(stop);
+                    }}
+                    // Read-only while the plan is still being written: a drag or an inline day edit
+                    // lands in `itinerary`, and the very next streamed stop would overwrite it.
+                    editable={!streamingPlan}
+                    activeDayIndex={activeDayIndex}
+                    unseenChangedDays={unseenChangedDays}
+                    onActiveDayChange={(next) => {
+                      setActiveDayIndex(next);
+                      // Looking at the day is what marks it read.
+                      setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
+                    }}
+                    onEditDay={handleEditDay}
+                    // Same window "Refine with AI" opens, just starting on the day whose icon was
+                    // clicked: one chat surface with day navigation, rather than a second
+                    // day-locked variant that looked identical but couldn't reach other days.
+                    onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
+                    onItineraryChange={handleRearrange}
+                    // The board only needs a name, a budget and the dates; pre-save there is no trip
+                    // row yet, so this is assembled from the form's own values.
+                    trip={{ id: "preview", destination, startDate, endDate, budget }}
+                    animateReveal={revealAnimation}
+                    panelCollapsed={planCollapsed}
+                    onMinimize={() => setPlanCollapsed(true)}
+                    onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
+                  />
+                )}
 
-              {/* The one thing that reports the background critique once the band is gone.
-                  Spec §5 keeps the progress strip on the list of what must survive, and Risk 3
-                  asks for the review to be "visibly in progress so a change is expected rather
-                  than startling" — but the literal answer, keeping the band up, means a status
-                  bar over a finished editable plan for another two minutes. A phrase in the
-                  footer sets the expectation at the cost of one line; the arriving change itself
-                  is announced by the day dots `markUnseenDays` sets from the `revised` hook.
-                  `!generating` rather than plain `reviewing`: the two overlap for ARRIVAL_HOLD_MS
-                  while the band is still up, and both saying it at once is noise. */}
-              {step === "result" && !focus.target && itinerary && reviewing && !generating && (
-                <p role="status" aria-live="polite" className="px-1 text-xs text-muted">
-                  Still reviewing this plan. A day or two may change in a minute.
-                </p>
-              )}
-              {/* `step === "result"`, because `itinerary` is not cleared when a traveller presses
-                  Back and plans a second trip: on trip B's generation this row would otherwise
-                  offer trip A's Keep and Refine under trip B's streaming card — and unlike a
-                  refine, a generate leaves the panel interactive (`busy={refining}` is false), so
-                  both would work. `save()` would promote trip A's draft row and `router.push`
-                  away without aborting the run, and `onRefine` would fire a second model call
-                  against trip A mid-generate. `itinerary` rather than `shownItinerary` on top of
-                  that, because Keep and Refine act on a finished plan and a half-written draft is
-                  not one.
+                {/* The one thing that reports the background critique once the band is gone.
+                    Spec §5 keeps the progress strip on the list of what must survive, and Risk 3
+                    asks for the review to be "visibly in progress so a change is expected rather
+                    than startling" — but the literal answer, keeping the band up, means a status
+                    bar over a finished editable plan for another two minutes. A phrase in the
+                    footer sets the expectation at the cost of one line; the arriving change itself
+                    is announced by the day dots `markUnseenDays` sets from the `revised` hook.
+                    `!generating` rather than plain `reviewing`: the two overlap for ARRIVAL_HOLD_MS
+                    while the band is still up, and both saying it at once is noise. */}
+                {step === "result" && !focus.target && itinerary && reviewing && !generating && (
+                  <p role="status" aria-live="polite" className="px-1 text-xs text-muted">
+                    Still reviewing this plan. A day or two may change in a minute.
+                  </p>
+                )}
+                {/* `step === "result"`, because `itinerary` is not cleared when a traveller presses
+                    Back and plans a second trip: on trip B's generation this row would otherwise
+                    offer trip A's Keep and Refine under trip B's streaming card — and unlike a
+                    refine, a generate leaves the panel interactive (`busy={refining}` is false), so
+                    both would work. `save()` would promote trip A's draft row and `router.push`
+                    away without aborting the run, and `onRefine` would fire a second model call
+                    against trip A mid-generate. `itinerary` rather than `shownItinerary` on top of
+                    that, because Keep and Refine act on a finished plan and a half-written draft is
+                    not one.
 
-                  **Deliberately NOT `!streamingPlan`, unlike its two neighbours above.** That
-                  term does real work on the card render and the Play button, which both act on
-                  the draft. Here it could only ever fire during a refine — where `step` is already
-                  `"result"` and `itinerary` is the *current* trip, so there is no stale-trip
-                  hazard left to guard — and it would unmount this row for the whole rework,
-                  losing its in-place busy state for no safety at all. Don't "fix" the
-                  inconsistency with its neighbours; the inconsistency is the point. */}
-              {step === "result" && !focus.target && itinerary && (
-                <FeedbackLoop
-                  onSave={save}
-                  onRefine={refine}
-                  saving={saving}
-                  refining={refining}
-                  draftState={draftState}
+                    **Deliberately NOT `!streamingPlan`, unlike its two neighbours above.** That
+                    term does real work on the card render and the Play button, which both act on
+                    the draft. Here it could only ever fire during a refine — where `step` is already
+                    `"result"` and `itinerary` is the *current* trip, so there is no stale-trip
+                    hazard left to guard — and it would unmount this row for the whole rework,
+                    losing its in-place busy state for no safety at all. Don't "fix" the
+                    inconsistency with its neighbours; the inconsistency is the point. */}
+                {step === "result" && !focus.target && itinerary && (
+                  <FeedbackLoop
+                    onSave={save}
+                    onRefine={refine}
+                    saving={saving}
+                    refining={refining}
+                    draftState={draftState}
+                  />
+                )}
+              </div>
+
+              {selectedStop && (
+                <PlaceDetailPanel
+                  stop={selectedStop}
+                  detail={detail}
+                  loading={detailLoading}
+                  error={detailError}
+                  onBack={closeDetail}
+                  upcomingStops={upcomingStopsAfter(shownItinerary, selectedStop)}
+                  onSelectUpcoming={selectStop}
                 />
               )}
             </div>
-
-            {selectedStop && (
-              <PlaceDetailPanel
-                stop={selectedStop}
-                detail={detail}
-                loading={detailLoading}
-                error={detailError}
-                onBack={closeDetail}
-                upcomingStops={upcomingStopsAfter(shownItinerary, selectedStop)}
-                onSelectUpcoming={selectStop}
-              />
-            )}
-          </div>
-        </DockedPanel>
+          </DockedPanel>
+        </div>
       )}
     </main>
   );

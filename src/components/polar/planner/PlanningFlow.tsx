@@ -1217,7 +1217,19 @@ function Review({ m, facts }: { m: PlannerModel; facts: TripFacts }) {
         ))}
       </dl>
 
-      <Section title="Stops picked ahead of time" hint="Notable places we found for these dates. Add any; we fit the rest around them." optional>
+      {/* The hint says "found" only when something was: with no suggestions (none near, the fetch
+          failed, or no OpenTripMap key) it claimed places the section then did not show. */}
+      <Section
+        title="Stops picked ahead of time"
+        hint={
+          m.poisLoading
+            ? "Looking for notable places for these dates."
+            : m.poisAvailable && m.pois.length > 0
+              ? "Notable places we found for these dates. Add any; we fit the rest around them."
+              : "No suggestions for these dates, so we pick every stop. Add any place you already want."
+        }
+        optional
+      >
         {m.poisLoading ? (
           <div className="pp-chips" aria-busy="true" aria-label="Finding notable spots">
             {[8, 10, 6, 9, 7].map((w, i) => (
@@ -1233,9 +1245,7 @@ function Review({ m, facts }: { m: PlannerModel; facts: TripFacts }) {
               </button>
             ))}
           </div>
-        ) : (
-          <p className="pp-hint">We’ll pick every stop for you. Add any must-sees below.</p>
-        )}
+        ) : null}
         <div className="flex gap-2">
           <input
             value={add}
