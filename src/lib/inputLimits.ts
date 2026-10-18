@@ -18,47 +18,76 @@ export const CAPS = {
   bodyBytes: 256 * 1024,
 } as const;
 
-export type CapCheck = { ok: true } | { ok: false; status: 400 | 413; error: string };
+export type CapFailure = { ok: false; status: 400 | 413; code: "too_long" | "bad_request"; error: string };
+export type CapCheck = { ok: true } | CapFailure;
 
-// Copy table SV-17.
+const MAX_DEPTH = 64;
+
+// Copy table SV-17 (text and itinerary strings), SV-20 (body bytes), SV-21/22 (day and stop
+// counts), SV-23 (unreadable body, or nested too deep).
 const tooLong = (n: number) =>
   `That’s longer than TripMate can read at once. Shorten it to under ${n} characters and send it again.`;
+const BODY_TOO_BIG = "That’s more than TripMate can read at once. Send less and try again.";
+const TOO_MANY_DAYS = `That plan has more than ${MAX_TRIP_DAYS} days, which is more than TripMate can read at once. Remove some and send it again.`;
+const TOO_MANY_STOPS = `A day in that plan has more than ${CAPS.stopsPerDay} stops, which is more than TripMate can read at once. Remove some and send it again.`;
+const UNREADABLE = "TripMate couldn’t read that request. Try again, and if it keeps happening, reload the page.";
 
-/** A non-string is ok: the route's own validation handles it. */
+const badRequest = (error: string): CapFailure => ({ ok: false, status: 400, code: "bad_request", error });
+
+/**
+ * A non-string is ok: the route's own validation handles it. `.length` counts UTF-16 code units,
+ * not characters, so an emoji counts as two.
+ */
 export function checkText(value: unknown, max: number): CapCheck {
-  return typeof value === "string" && value.length > max ? { ok: false, status: 413, error: tooLong(max) } : { ok: true };
+  return typeof value === "string" && value.length > max
+    ? { ok: false, status: 413, code: "too_long", error: tooLong(max) }
+    : { ok: true };
 }
 
-/** True when any string anywhere under `v` (plain objects and arrays) is over `max`. */
-function hasLongString(v: unknown, max: number): boolean {
-  if (typeof v === "string") return v.length > max;
-  if (Array.isArray(v)) return v.some((x) => hasLongString(x, max));
-  if (v && typeof v === "object") return Object.values(v).some((x) => hasLongString(x, max));
-  return false;
-}
-
-/** For a client-sent itinerary: day and stop counts, and every string in it. */
-export function checkItinerary(it: unknown): CapCheck {
-  const days = (it as { days?: unknown } | null)?.days;
-  if (Array.isArray(days)) {
-    if (days.length > MAX_TRIP_DAYS) return { ok: false, status: 400, error: "That plan has more days than TripMate can read." };
-    for (const d of days) {
-      const stops = (d as { stops?: unknown } | null)?.stops;
-      if (Array.isArray(stops) && stops.length > CAPS.stopsPerDay) {
-        return { ok: false, status: 400, error: "That plan has more stops in a day than TripMate can read." };
-      }
+/** Iterative (an explicit stack), so a hostile nesting depth cannot overflow the call stack. */
+function scan(root: unknown, max: number): "long" | "deep" | null {
+  const stack: [unknown, number][] = [[root, 0]];
+  while (stack.length) {
+    const [v, depth] = stack.pop()!;
+    if (typeof v === "string") {
+      if (v.length > max) return "long";
+    } else if (v && typeof v === "object") {
+      if (depth >= MAX_DEPTH) return "deep";
+      for (const x of Object.values(v)) stack.push([x, depth + 1]);
     }
   }
-  return hasLongString(it, CAPS.stringField) ? { ok: false, status: 400, error: tooLong(CAPS.stringField) } : { ok: true };
+  return null;
+}
+
+/**
+ * For a client-sent itinerary (`{ days }`, or a bare days array): day and stop counts, then every
+ * string in it. A non-array `days` or `stops` passes: route validation owns the shape.
+ */
+export function checkItinerary(it: unknown): CapCheck {
+  const days = Array.isArray(it) ? it : (it as { days?: unknown } | null)?.days;
+  if (Array.isArray(days)) {
+    if (days.length > MAX_TRIP_DAYS) return badRequest(TOO_MANY_DAYS);
+    for (const d of days) {
+      const stops = (d as { stops?: unknown } | null)?.stops;
+      if (Array.isArray(stops) && stops.length > CAPS.stopsPerDay) return badRequest(TOO_MANY_STOPS);
+    }
+  }
+  const found = scan(it, CAPS.stringField);
+  if (found === "deep") return badRequest(UNREADABLE);
+  return found ? { ok: false, status: 400, code: "too_long", error: tooLong(CAPS.stringField) } : { ok: true };
 }
 
 /**
  * Parse a JSON body, counting the bytes actually read. `content-length` is only a fast path: it is
  * client-supplied and a chunked request can omit it, so the stream is counted too (same shape as
- * importRequest.ts). Returns the parsed value, or a failed CapCheck.
+ * importRequest.ts). The parsed body sits under `value`, never at the top level, so a body that
+ * looks like a failure cannot be mistaken for one.
  */
-export async function readJsonCapped(req: Request, maxBytes: number = CAPS.bodyBytes): Promise<unknown | CapCheck> {
-  const over: CapCheck = { ok: false, status: 413, error: tooLong(maxBytes) };
+export async function readJsonCapped(
+  req: Request,
+  maxBytes: number = CAPS.bodyBytes
+): Promise<{ ok: true; value: unknown } | CapFailure> {
+  const over: CapFailure = { ok: false, status: 413, code: "too_long", error: BODY_TOO_BIG };
   if (Number(req.headers.get("content-length") ?? 0) > maxBytes) return over;
   const reader = req.body?.getReader();
   const chunks: Uint8Array[] = [];
@@ -76,12 +105,12 @@ export async function readJsonCapped(req: Request, maxBytes: number = CAPS.bodyB
     }
   }
   try {
-    return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(Buffer.concat(chunks))) };
   } catch {
-    return { ok: false, status: 400, error: "Invalid request body." } satisfies CapCheck;
+    return badRequest(UNREADABLE);
   }
 }
 
-export function tooLongResponse(check: Extract<CapCheck, { ok: false }>): NextResponse {
-  return NextResponse.json({ error: check.error, code: "too_long" }, { status: check.status });
+export function capFailureResponse(f: CapFailure): NextResponse {
+  return NextResponse.json({ error: f.error, code: f.code }, { status: f.status });
 }
