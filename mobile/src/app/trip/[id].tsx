@@ -931,6 +931,15 @@ function useChat(
         // day comes back as a rejection the traveler reads rather than a change they discover.
         dayIndex,
       });
+      if (edit && 'refusal' in edit) {
+        // The server's own sentence (out of scope, or too long). Same rollback as a failure —
+        // the turn never happened server-side — but the traveler reads why, not "check your
+        // connection".
+        setTurns((prior) => prior.slice(0, -1));
+        setDraft(body);
+        setFailure(edit.refusal);
+        return false;
+      }
       if (!edit) {
         // Dropped, not left greyed out: this array mirrors the conversation the *server* has, and
         // after a failure it has nothing. The sheet keeps the text so nothing is retyped.

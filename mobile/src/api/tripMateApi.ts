@@ -619,6 +619,11 @@ export async function saveProfile(profile: TravelerProfile): Promise<boolean> {
  * The route does NOT persist the plan — it returns it, and the caller writes it back with
  * `updateTripItinerary`. `undefined` is the transport failure, per the house rule; there is no
  * partial success to represent, since the model either answered or it did not.
+ *
+ * **A refusal is not a failure.** The server answers an off-topic ask (422) or an over-long one
+ * (413, or a 400 coded `too_long`/`bad_request`) with a sentence already written for the
+ * traveler, so it comes back as `{ refusal }` for the screen to show as it is. Mapping it to
+ * `undefined` would put the connection sentence over a connection that was fine.
  */
 export async function editTrip(params: {
   trip: TripSummary;
@@ -630,14 +635,21 @@ export async function editTrip(params: {
   syncedHash: string | null;
   /** The one day this turn may change, or omitted for the whole trip. */
   dayIndex?: number;
-}): Promise<TripEdit | undefined> {
+}): Promise<TripEdit | { refusal: string } | undefined> {
   try {
     const res = await fetchWithSession('/api/trip-edit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'chat', ...params }),
     });
-    if (!res.ok) return undefined;
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown } | null;
+      const refused =
+        res.status === 422 ||
+        res.status === 413 ||
+        (res.status === 400 && (body?.code === 'too_long' || body?.code === 'bad_request'));
+      return refused && typeof body?.error === 'string' ? { refusal: body.error } : undefined;
+    }
     return (await res.json()) as TripEdit;
   } catch {
     return undefined;

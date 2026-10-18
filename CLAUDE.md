@@ -129,6 +129,8 @@ Every model call goes through `runClaude()` in `src/lib/claude.ts`. That is the 
 
 Set **`LLM_TRANSPORT=api|cli`** in `.env.local`, or flip it mid-session with `POST /api/llm-mode {"mode":"cli"}` (`GET` the same route to see the mode, its source, and what each call type resolves to). **Mind the two names:** `LlmMode` is the type and `llmMode()` the function, but the environment variable is `LLM_TRANSPORT` and **nothing reads `LLM_MODE`** — `envMode()` (`src/lib/llmConfig.ts:61-65`) reads that one variable, and the comment above it records why the spellings differ.
 
+**Refusals and caps have one home each, and the route order is fixed.** What the planner will not answer lives in `src/lib/promptScope.ts` (the free pre-check, the scope block, the reply check) and what it will not read in `src/lib/inputLimits.ts`. `/api/trip-edit` runs them in one order — spend cap → input caps → free check → throttle → model → reply check — and the order is the design: a refusal that costs nothing must not cost an allowance, so the free check sits *before* the throttle, and a reply check can only run after the model has spoken. A free-check refusal therefore takes no allowance. Refused API turns are truncated back out of `llm_sessions`, so a refusal is never replayed as history; a CLI JSONL cannot be truncated, which is accepted in dev. The phone shows the same sentence: `editTrip` returns `{ refusal }` for a 422, 413 or coded 400.
+
 This is a deliberate, permanent dual-path design, not a migration in progress — both stay in service. The two paths are held to being indistinguishable *to callers*: same signature, same `ClaudeResult` including `sessionId`, same meaning for `timeoutMs`.
 
 Three things genuinely differ, and all three are deliberate:
