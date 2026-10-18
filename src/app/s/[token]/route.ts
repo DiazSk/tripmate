@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTripByShareToken } from "@/lib/db";
 import { renderTripDocument } from "@/lib/export/tripDocument";
+import { copyForRecipient } from "@/lib/sharedTrip";
 import { toTripDetail } from "@/lib/tripPayload";
 
 /**
@@ -61,7 +62,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     });
   }
 
-  const html = await renderTripDocument(toTripDetail(row));
+  // The sender's real spending stays with the sender, as it does in `toSharedTrip`.
+  const trip = toTripDetail(row);
+  const html = await renderTripDocument({ ...trip, itinerary: copyForRecipient(trip.itinerary) });
 
   return new NextResponse(html, {
     headers: {

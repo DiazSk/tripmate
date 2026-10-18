@@ -6,10 +6,13 @@ import {
   applyRevisionIfUnedited,
   createLlmSession,
   deleteTrip,
+  getGeneration,
   getLlmSession,
   getTrip,
   getTripByShareToken,
+  insertGeneration,
   insertTrip,
+  linkGenerationToTrip,
   setTripShareToken,
   updateTripItinerary,
   writeRevisionOver,
@@ -212,4 +215,21 @@ test("an edit that lands between the read and the write is never overwritten", (
   updateTripItinerary(trip.id, JSON.stringify({ tier: "comfort", days: edited }), [read.owner_id]);
   assert.equal(writeRevisionOver(read, revised), false);
   assert.equal(JSON.parse(getTrip(trip.id).itinerary_json).days[0].stops[0].name, "Haji Ali");
+});
+
+const generationFor = (run_id, trip_id) =>
+  insertGeneration({ run_id, trip_id, session_id: null, kind: "generate", destination: "Kyoto", context_json: "{}", prompt: "p", response: "r", model: "m", mode: "cli" });
+
+test("linkGenerationToTrip leaves a generation already linked elsewhere", () => {
+  generationFor("run-link-taken", "t1");
+  linkGenerationToTrip("run-link-taken", "t2");
+  assert.equal(getGeneration("run-link-taken").trip_id, "t1");
+});
+
+test("linkGenerationToTrip links an unlinked generation, and re-linking the same trip is a no-op", () => {
+  generationFor("run-link-free", null);
+  linkGenerationToTrip("run-link-free", "t2");
+  assert.equal(getGeneration("run-link-free").trip_id, "t2");
+  linkGenerationToTrip("run-link-free", "t2");
+  assert.equal(getGeneration("run-link-free").trip_id, "t2");
 });

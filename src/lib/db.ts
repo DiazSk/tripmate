@@ -1109,9 +1109,12 @@ export function getLatestGenerationForTrip(tripId: string): GenerationRow | unde
 }
 
 /** Attach a generation to the trip row that was eventually saved from it. Called by `POST
- *  /api/trips`, since the run exists before the trip does. */
+ *  /api/trips`, since the run exists before the trip does. **Links once:** a generation already
+ *  attached to a trip stays there, because the run id comes from the client and deleting an
+ *  account deletes its trips' generations — re-linking would let one person's trip claim, then
+ *  take down, another's records. */
 export function linkGenerationToTrip(runId: string, tripId: string): void {
-  db.prepare(`UPDATE generations SET trip_id = ? WHERE run_id = ?`).run(tripId, runId);
+  db.prepare(`UPDATE generations SET trip_id = ? WHERE run_id = ? AND (trip_id IS NULL OR trip_id = ?)`).run(tripId, runId, tripId);
 }
 
 export interface TraceRow {

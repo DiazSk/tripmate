@@ -30,7 +30,7 @@ export function toSharedTrip(row: TripRow, sharedBy: string | null): SharedTrip 
     startDate: trip.startDate,
     endDate: trip.endDate,
     budget: trip.budget,
-    itinerary: trip.itinerary,
+    itinerary: copyForRecipient(trip.itinerary),
     timezone: trip.timezone ?? null,
     sharedBy,
   };

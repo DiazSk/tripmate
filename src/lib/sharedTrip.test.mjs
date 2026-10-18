@@ -55,3 +55,28 @@ test("the shared payload carries the plan and none of the sender's own fields", 
   assert.equal(shared.sharedBy, "Maya");
   assert.equal(shared.itinerary.days[0].stops[0].name, "Amber Fort");
 });
+
+test("toSharedTrip strips actualCost and costState from stops and lodging", () => {
+  const row = {
+    destination: "Jaipur, India",
+    start_date: "2026-11-06",
+    end_date: "2026-11-12",
+    budget: 1800,
+    itinerary_json: JSON.stringify({
+      days: [{
+        date: "2026-11-06",
+        weather: "Clear",
+        lodging: { name: "Samode Haveli", cost: 210, note: "", actualCost: 230, costState: "spent" },
+        stops: [stop({ actualCost: 15, costState: "booked" })],
+      }],
+    }),
+    user_answers_json: null,
+    chat_session_id: null,
+    timezone: null,
+    share_token: "token-1",
+  };
+  const day = toSharedTrip(row, null).itinerary.days[0];
+  assert.equal("actualCost" in day.stops[0] || "costState" in day.stops[0], false);
+  assert.equal("actualCost" in day.lodging || "costState" in day.lodging, false);
+  assert.equal(day.stops[0].cost, 12);
+});
