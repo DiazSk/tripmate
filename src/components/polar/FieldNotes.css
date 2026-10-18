@@ -277,6 +277,10 @@
 .pb-out:disabled {
   opacity: 0.6;
 }
+/* A sign-out that failed says so under the button, on its own line, on the night ground. */
+.pb-who-text .inline-note.is-item {
+  display: flex;
+}
 .pb-figures {
   display: flex;
   gap: var(--wd-space-5);
@@ -552,8 +556,10 @@
   }
 }
 
-.pf-save-state.is-error {
-  color: var(--wd-alert-text);
+/* The save line, and above it the failure note when a save didn't land. */
+.pb-save .pf-save-state {
+  display: grid;
+  gap: 0.6em;
 }
 
 /* The home-city search is the shared one (the welcome uses it on the night ground), so its paper

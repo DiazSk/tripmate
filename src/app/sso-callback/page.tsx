@@ -16,7 +16,7 @@ export default function SSOCallbackPage() {
   if (!clerkClientConfigured()) {
     return (
       <main className="min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] text-sm text-muted">
-        Accounts aren&apos;t set up on this server yet.{" "}
+        Accounts aren&apos;t set up on this server yet. You can keep planning without one.{" "}
         <Link href="/" className="font-medium text-foreground underline underline-offset-4">
           Back to planning
         </Link>

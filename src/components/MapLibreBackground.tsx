@@ -5,6 +5,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { useMapCamera } from "@/lib/mapCamera";
 import { MapLibreRenderer, createMapLibreMap } from "@/lib/maplibreRenderer";
 import { dayPhase } from "@/lib/mapRoute";
+import InlineNote from "@/components/InlineNote";
 
 /**
  * The MapLibre GL JS half of the map layer — the flag-off alternative to `GlobeBackground`.
@@ -165,9 +166,12 @@ export default function MapLibreBackground({
       {/* OpenFreeMap and the DEM both want attribution, and MapLibre's own control is disabled so
           the app can place it in the same corner Cesium's credit container uses. */}
       <div className={`pointer-events-auto text-[0.6875rem] text-white/45 ${creditClassName}`}>
-        {failed ? (
-          "Map unavailable"
-        ) : (
+        {/* Copy row G-10: the cause, and that the plan doesn't need it. Kept mounted, empty until the
+            map fails, so the words are announced when they arrive. */}
+        <InlineNote size="item" tone="error">
+          {failed ? "The map couldn’t start in this browser. Your plan still works without it." : ""}
+        </InlineNote>
+        {failed ? null : (
           <>
             <a href="https://openfreemap.org/" rel="noreferrer" target="_blank">
               OpenFreeMap

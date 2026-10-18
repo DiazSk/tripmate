@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
+import InlineNote from "@/components/InlineNote";
 import Meridian from "@/components/Meridian";
 import TravelCard from "@/components/welcome/TravelCard";
 import { INTEREST_TAGS } from "@/components/InterestPicker";
@@ -38,7 +39,10 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
   const [issued] = useState(() => new Date());
   const [line, setLine] = useState<string | null>(null);
   const [cheer, setCheer] = useState(false);
-  const [unsaved, setUnsaved] = useState(false);
+  // Which writes failed, so the last step can name what to finish on the Profile (copy row S-18).
+  const [unsaved, setUnsaved] = useState({ name: false, answers: false });
+  // The name step's field note (S-19). Kept apart from `line`, which is Meri's voice, not an error.
+  const [nameNote, setNameNote] = useState("");
   const [busy, setBusy] = useState(false);
   const cheerTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(cheerTimer.current), []);
@@ -71,13 +75,18 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
     // Each write sends the whole profile, so a failed one is repaired by the next that succeeds.
     const ok = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: p }) })
       .then((r) => r.ok).catch(() => false);
-    if (!ok) setUnsaved(true);
+    if (!ok) setUnsaved((u) => ({ ...u, answers: true }));
   }
   const complete = (skipped: boolean) =>
     fetch("/api/onboarding/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ skipped }) }).catch(() => {});
 
   async function proceed() {
     if (busy) return;
+    // Copy row S-19: Continue explains itself instead of sitting disabled with nothing said.
+    if (step === "you" && !answers.name.trim()) {
+      setNameNote("Enter the name you’d like TripMate to use.");
+      return;
+    }
     setBusy(true);
     let a = answers;
     if (step === "you" && a.name.trim() && a.name.trim() !== user.name) {
@@ -86,7 +95,7 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: a.name.trim().slice(0, 40) }),
       }).catch(() => null);
-      if (!res?.ok) setUnsaved(true);
+      if (!res?.ok) setUnsaved((u) => ({ ...u, name: true }));
     }
     if (step === "rhythm") { a = { ...a, pace: a.pace ?? "balanced", crowds: a.crowds ?? "mixed" }; setAnswers(a); }
     if (PROFILE_STEPS.has(step)) await saveProfile(a);
@@ -128,11 +137,16 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
             {step === "you" && (
               <>
                 <h1 ref={heading} tabIndex={-1} className="font-display-xl text-[clamp(2rem,6vw,3.1rem)] leading-[1.06]">Hello, {firstName(answers.name)}.</h1>
+                {/* The note sits outside the label, so it is the field's description, not part of its name. */}
+                <div className={nameNote ? "grid gap-2" : "grid"}>
                 <label className="grid gap-2">
                   <span className="text-[0.6875rem] font-semibold tracking-[0.18em] text-muted uppercase">Your name</span>
-                  <input value={answers.name} maxLength={40} autoComplete="name" onChange={(e) => set({ name: e.target.value })}
+                  <input value={answers.name} maxLength={40} autoComplete="name" onChange={(e) => { set({ name: e.target.value }); setNameNote(""); }}
+                    aria-describedby="name-note" aria-invalid={nameNote ? true : undefined}
                     className="rounded-2xl border border-card-border bg-white/5 px-4 py-3.5 text-xl font-medium text-foreground focus:border-accent focus:ring-4 focus:ring-accent/15 focus:outline-none" />
                 </label>
+                <InlineNote id="name-note" size="field" tone="error">{nameNote}</InlineNote>
+                </div>
                 <div className="flex items-center gap-4">
                   <Avatar userId={user.id} name={answers.name} image={image} size={104} editable onChange={(img) => { setImage(img); if (img) react(photoLine(answers.name)); }} />
                   <div className="grid gap-1"><strong className="text-[0.95rem]">{image ? "Looking good." : "Add a face to the card"}</strong>
@@ -203,7 +217,13 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
               <>
                 <h1 ref={heading} tabIndex={-1} className="font-display-xl text-[clamp(2rem,6vw,3.1rem)] leading-[1.06]">All set, {firstName(answers.name)}.</h1>
                 <p className="font-display-xl max-w-[30ch] text-[1.35rem] leading-snug">{welcomeSummary(answers)}</p>
-                {unsaved && <p role="status" className="text-sm text-alert">Some answers didn&rsquo;t save. You can finish them on your Profile.</p>}
+                {(unsaved.name || unsaved.answers) && (
+                  <div role="status">
+                    <InlineNote size="section" tone="error" action={{ label: "Open your Profile", plain: true, onClick: () => { router.refresh(); router.push("/profile"); } }}>
+                      {unsaved.name && unsaved.answers ? "Your name and travel answers" : unsaved.name ? "Your name" : "Your travel answers"} didn&rsquo;t save. You can finish them on your Profile.
+                    </InlineNote>
+                  </div>
+                )}
               </>
             )}
           </section>
@@ -214,7 +234,7 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
                 <button type="button" onClick={() => { router.refresh(); router.push(next); }} className="rounded-full border border-card-border bg-white/5 px-5 py-3.5 font-semibold hover:bg-white/10">{next === "/trips" ? "See my trips" : "Continue where I was"}</button>
               </>
             ) : (
-              <button type="button" disabled={busy || (step === "you" && !answers.name.trim()) || (step === "who" && !answers.group) || (step === "matters" && !answers.loves.length)}
+              <button type="button" disabled={busy || (step === "who" && !answers.group) || (step === "matters" && !answers.loves.length)}
                 onClick={step === "welcome" ? () => go(1) : proceed}
                 className="rounded-full bg-accent px-5 py-4 font-semibold text-accent-foreground shadow-[0_8px_24px_rgb(40_185_129/0.22)] hover:bg-accent-hover disabled:bg-white/5 disabled:text-muted disabled:shadow-none">
                 {step === "welcome" ? "Let's begin" : step === "home" ? (answers.home ? "Finish my card" : "Skip this one") : "Continue"}

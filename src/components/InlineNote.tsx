@@ -6,7 +6,13 @@ import { formatWait, heldUntil, useHold } from "@/lib/actionHolds";
 import type { Bucket } from "@/lib/ipThrottle";
 import { formatClockTime, holdSentence, WAIT } from "@/lib/toastQueue";
 
-type Action = { label: string; onClick: () => void; busy?: boolean };
+type Action = {
+  label: string;
+  onClick: () => void;
+  busy?: boolean;
+  /** Section only: leave off the retry glyph, for an action that goes somewhere rather than tries again. */
+  plain?: boolean;
+};
 
 /**
  * A failure that belongs to something on screen, written on that thing (canvas "Errors · 3 Inline").
@@ -29,6 +35,7 @@ export default function InlineNote({
   id,
   title,
   action,
+  footer,
   live = true,
   children,
 }: {
@@ -40,6 +47,8 @@ export default function InlineNote({
   /** Section only: the block's name ("Weather for these dates"). */
   title?: string;
   action?: Action;
+  /** Section only: more ways forward (links), set beside `action` at the foot of the frame. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const titleId = useId();
@@ -60,17 +69,22 @@ export default function InlineNote({
           </div>
         )}
         <p className="inline-note-why">{children}</p>
-        {action && (
-          <button
-            type="button"
-            className="err-btn err-btn-quiet"
-            onClick={action.onClick}
-            disabled={action.busy}
-            aria-busy={action.busy || undefined}
-          >
-            <RotateCw aria-hidden="true" />
-            {action.label}
-          </button>
+        {(action || footer) && (
+          <div className="inline-note-actions">
+            {action && (
+              <button
+                type="button"
+                className="err-btn err-btn-quiet"
+                onClick={action.onClick}
+                disabled={action.busy}
+                aria-busy={action.busy || undefined}
+              >
+                {!action.plain && <RotateCw aria-hidden="true" />}
+                {action.label}
+              </button>
+            )}
+            {footer}
+          </div>
         )}
       </div>
     );

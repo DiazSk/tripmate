@@ -6,7 +6,7 @@ import { MotionConfig } from "framer-motion";
 import { MapCameraProvider } from "@/lib/mapCamera";
 import { resolveMapEngine } from "@/lib/mapEngine";
 import { ActiveItineraryProvider } from "@/lib/activeItinerary";
-import { ToastProvider } from "@/lib/toast";
+import { ToastProvider, useToast } from "@/lib/toast";
 import { StoryModeProvider, useStoryControls } from "@/lib/storyMode";
 import Navbar from "@/components/Navbar";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -110,6 +110,32 @@ function ShellBody({
   children: ReactNode;
 }) {
   const story = useStoryControls();
+  const toast = useToast();
+  const offlineToast = useRef<number | null>(null);
+  // Copy rows G-08 and G-09. Being offline is the one failure that is everywhere at once, so it is
+  // told once, when the connection drops, and told to stop when it comes back. Nothing here runs at
+  // load: a hard load while offline is the /offline page's job.
+  useEffect(() => {
+    const drop = () => {
+      if (offlineToast.current !== null) return;
+      offlineToast.current = toast.showError({
+        title: "You’re offline.",
+        detail: "Trips you’ve opened still read, but saving, planning and search wait for a connection.",
+      });
+    };
+    const back = () => {
+      if (offlineToast.current === null) return;
+      toast.dismiss(offlineToast.current);
+      offlineToast.current = null;
+      toast.show("You’re back online.");
+    };
+    window.addEventListener("offline", drop);
+    window.addEventListener("online", back);
+    return () => {
+      window.removeEventListener("offline", drop);
+      window.removeEventListener("online", back);
+    };
+  }, [toast]);
   /** True while the map search panel is expanded — see the note where `MapControls` is rendered. */
   const [searchOpen, setSearchOpen] = useState(false);
   return (

@@ -166,14 +166,6 @@
 .sp-link:disabled {
   opacity: 0.5;
 }
-.sp-error {
-  padding: 0.7em 0.85em;
-  font-size: 0.85em;
-  line-height: 1.4;
-  color: var(--wd-alert-text);
-  background: rgba(209, 15, 15, 0.05);
-  border-left: 2px solid currentColor;
-}
 .sp-wide {
   width: 100%;
 }

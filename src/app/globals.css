@@ -4276,6 +4276,11 @@ html[data-story-mode="true"] .marker-day-label {
 .inline-note.is-field svg {
   margin-top: 2px;
 }
+/* A field's action ("Sign in") keeps its own line of text rather than wrapping under a narrow note. */
+.inline-note.is-field .err-btn-text {
+  flex: none;
+  white-space: nowrap;
+}
 .inline-note.is-item {
   display: inline-flex;
   flex-wrap: wrap;
@@ -4323,6 +4328,12 @@ html[data-story-mode="true"] .marker-day-label {
   border: 1px solid color-mix(in srgb, var(--note-fg) 45%, transparent);
   border-radius: 2px;
   padding: 3px 7px;
+}
+.inline-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.625rem;
 }
 .inline-note-why {
   margin: 0;

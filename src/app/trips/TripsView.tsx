@@ -7,6 +7,8 @@ import { TripSummary } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import AccountReceipt from "@/components/AccountReceipt";
 import { formatDateRange, formatMoney } from "@/lib/format";
+import { failureFromResponse, failureFromThrown, type Failure } from "@/lib/failure";
+import { useToast } from "@/lib/toast";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { DRAFT_TTL_DAYS } from "@/lib/drafts";
 import { tripDays } from "@/lib/tiers";
@@ -166,33 +168,54 @@ export default function TripsView({
   // The trip the dialog is asking about, which doubles as the dialog's open state and lets the
   // prompt name the destination without a second lookup.
   const [pendingDelete, setPendingDelete] = useState<TripSummary | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Which trip a delete is in flight for, by id: a retry from a toast must not close or relabel a
+  // dialog that is open for a different trip.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deleting = deletingId !== null && deletingId === pendingDelete?.id;
+  const { showError } = useToast();
 
-  async function confirmDelete() {
-    if (!pendingDelete) return;
-    setDeleting(true);
-    setDeleteError(null);
+  /**
+   * Deletes `trip` and says why if it didn't happen (copy rows M-04 to M-06), as a toast: the dialog
+   * has closed and the card it was about is either gone or still on the wall. "Try again" asks
+   * again without the confirm, which was already answered.
+   */
+  async function deleteTrip(trip: TripSummary) {
+    const what = trip.status === "draft" ? "draft" : "trip";
+    setDeletingId(trip.id);
+    // Which list it came from is read off the row's own status, not off the tab that was open:
+    // a tab that stops being the source of truth for what a card *is* would leave a deleted trip
+    // on screen and a live one spliced out.
+    const removeById = (prev: TripSummary[]) => prev.filter((t) => t.id !== trip.id);
+    const gone = () => (trip.status === "draft" ? setDrafts(removeById) : setTrips(removeById));
+    const failed = (f: Failure) =>
+      showError({
+        title:
+          f.kind === "offline"
+            ? `You’re offline, so that ${what} wasn’t deleted.`
+            : `That ${what} wasn’t deleted: TripMate’s server had a problem.`,
+        detail: f.kind === "offline" ? "Try again once you’re back online." : "It’s still in your memories.",
+        action: { label: "Try again", onClick: () => void deleteTrip(trip) },
+      });
     try {
-      const res = await fetch(`/api/trips/${pendingDelete.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error);
+      const res = await fetch(`/api/trips/${trip.id}`, { method: "DELETE" });
+      if (res.ok) gone();
+      else {
+        const f = await failureFromResponse(res, "edit");
+        if (f.kind === "not_found") {
+          // Already gone elsewhere: the wall was out of date, so the postcard goes either way.
+          gone();
+          showError({
+            title: `That ${what} was already gone, so there was nothing to delete.`,
+            detail: "It may have been deleted in another tab or on another device.",
+          });
+        } else failed(f);
       }
-      // Which list it came from is read off the row's own status, not off the tab that was open:
-      // a tab that stops being the source of truth for what a card *is* would leave a deleted trip
-      // on screen and a live one spliced out.
-      const removeById = (prev: TripSummary[]) => prev.filter((t) => t.id !== pendingDelete.id);
-      if (pendingDelete.status === "draft") setDrafts(removeById);
-      else setTrips(removeById);
-      setPendingDelete(null);
     } catch (e) {
-      // The dialog closes on failure so the error underneath isn't hidden behind it; the card
-      // stays put, which is the honest reflection of a delete that didn't happen.
-      setPendingDelete(null);
-      setDeleteError(e instanceof Error && e.message ? e.message : "We couldn't delete that trip. Try again.");
+      failed(failureFromThrown(e));
     } finally {
-      setDeleting(false);
+      // Closed on failure too, so the toast isn't hidden behind it.
+      setPendingDelete((p) => (p?.id === trip.id ? null : p));
+      setDeletingId((id) => (id === trip.id ? null : id));
     }
   }
 
@@ -240,13 +263,6 @@ export default function TripsView({
             <div className="ma-receipt">
               <AccountReceipt />
             </div>
-            {/* A delete that failed reports here rather than inside the dialog, which has already
-                closed: the wall it refers to is what's on screen. */}
-            {deleteError && (
-              <p className="ma-error" role="alert">
-                {deleteError}
-              </p>
-            )}
             {/* Deliberately not `role="tablist"`: that role promises arrow-key navigation this
                 markup doesn't implement. Two toggle buttons in a named group is what it is. */}
             {showTabs && (
@@ -304,7 +320,7 @@ export default function TripsView({
         confirmLabel={pendingDelete?.status === "draft" ? "Discard draft" : "Delete trip"}
         pending={deleting}
         pendingLabel={pendingDelete?.status === "draft" ? "Discarding…" : "Deleting…"}
-        onConfirm={confirmDelete}
+        onConfirm={() => pendingDelete && void deleteTrip(pendingDelete)}
         onCancel={() => setPendingDelete(null)}
       />
     </main>

@@ -1,7 +1,7 @@
 /* Run: node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test src/lib/clerkError.test.mjs */
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import { clerkMessage, unsupportedStepMessage } from "./clerkError.ts";
+import { clerkMessage, unsupportedStepMessage, SIGN_IN_OFFLINE, SIGN_IN_UNEXPLAINED } from "./clerkError.ts";
 
 // unsupportedStepMessage warns for developers; keep that out of the test output.
 test.beforeEach(() => mock.method(console, "warn", () => {}));
@@ -14,15 +14,19 @@ test("prefers Clerk's long message from an API error", () => {
   );
 });
 
-test("falls back to the short message, then to the error's own message", () => {
+test("falls back to the short message, then to the error's long message", () => {
   assert.equal(clerkMessage({ errors: [{ message: "Incorrect" }] }), "Incorrect");
   assert.equal(clerkMessage({ longMessage: "Too many tries." }), "Too many tries.");
-  assert.equal(clerkMessage(new Error("Network down")), "Network down");
 });
 
-test("anything else reads as the fallback", () => {
-  assert.equal(clerkMessage(null), "That didn't work. Try again.");
-  assert.equal(clerkMessage({}, "Custom"), "Custom");
+test("a bare thrown error's own message is never shown", () => {
+  assert.equal(clerkMessage(new TypeError("Failed to fetch"), true), SIGN_IN_UNEXPLAINED);
+  assert.equal(clerkMessage(new TypeError("Failed to fetch"), false), SIGN_IN_OFFLINE);
+});
+
+test("nothing readable says offline when offline, and that the service gave no reason otherwise", () => {
+  assert.equal(clerkMessage(null, true), SIGN_IN_UNEXPLAINED);
+  assert.equal(clerkMessage({}, false), SIGN_IN_OFFLINE);
 });
 
 test("a sign-up stuck on fields TripMate doesn't collect names them", () => {

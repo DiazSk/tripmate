@@ -13,6 +13,7 @@ import { TIME_OF_DAY_ORDER, type TimeOfDay } from "@/lib/timeOfDay";
 import type { Itinerary, Stop } from "@/lib/types";
 import { devLabel } from "@/lib/devInspector";
 import SearchPinCard, { AddToDayButton } from "@/components/SearchPinCard";
+import InlineNote from "@/components/InlineNote";
 import { useAnchoredToMap } from "@/lib/useAnchoredToMap";
 import { forgetSearch, itineraryHighlights, recentSearches } from "@/lib/searchHistory";
 import { usePlaceSearch } from "@/lib/usePlaceSearch";
@@ -164,6 +165,7 @@ export default function MapSearchPanel({
     setHoveredId,
     selectedPlace,
     state,
+    throttledBy,
     provider,
     history,
     setHistory,
@@ -540,9 +542,16 @@ export default function MapSearchPanel({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!hasQuery && state !== "searching" && emptyState}
             {hasQuery && state === "throttled" && (
-              <p className="px-3 py-4 text-xs text-alert/75">
-                Search is busy right now: the free places index rate-limits. Try again in a moment.
-              </p>
+              // Copy rows G-12 to G-14: busy, offline, or the search didn't answer, each with a retry.
+              <div className="px-3 py-3">
+                <InlineNote size="section" tone="error" action={{ label: "Try again", onClick: () => void runSearch() }}>
+                  {throttledBy === "offline"
+                    ? "You’re offline, so the places search can’t run. Try again once you’re back online."
+                    : throttledBy === "server"
+                      ? "The places search didn’t answer. Try again in a minute."
+                      : "The places search is busy right now, so nothing came back for this view. Try again in a minute."}
+                </InlineNote>
+              </div>
             )}
             {hasQuery && state === "empty" && (
               <p className="px-3 py-4 text-xs text-muted">

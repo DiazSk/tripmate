@@ -19,6 +19,8 @@ import { monumentEms } from "@/lib/monumentFit";
 import { city } from "@/lib/memories";
 import { profileSentence } from "@/lib/profileSentence";
 import { useClerk } from "@clerk/nextjs";
+import InlineNote from "@/components/InlineNote";
+import { failureFromResponse, failureFromThrown, type Failure } from "@/lib/failure";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile } from "@/lib/travelerProfile";
 import type { ProfileStats } from "@/lib/profileStats";
@@ -200,18 +202,28 @@ function SignOutButton() {
   const { signOut } = useClerk();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // Copy rows F-15, F-16. Kept mounted, empty, so the note is read when its words arrive.
+  const [note, setNote] = useState("");
   return (
+    <>
     <button
       type="button"
       disabled={busy}
       className="pb-out"
+      aria-describedby="signout-note"
       onClick={async () => {
         setBusy(true);
+        setNote("");
         try {
           await signOut();
         } catch {
-          // A failed sign-out leaves the traveller signed in; put the button back so they can retry.
+          // A failed sign-out leaves the traveller signed in: say so, and put the button back so they can retry.
           setBusy(false);
+          setNote(
+            navigator.onLine
+              ? "You’re still signed in: the sign-in service didn’t answer. Press Sign out to try again."
+              : "You’re offline, so you’re still signed in. Press Sign out again once you’re back online.",
+          );
           return;
         }
         // `refresh()` rather than a reload: every owner-scoped server component on this route and
@@ -223,6 +235,10 @@ function SignOutButton() {
     >
       {busy ? "Signing out…" : "Sign out"}
     </button>
+    <InlineNote id="signout-note" size="item" tone="error">
+      {note}
+    </InlineNote>
+    </>
   );
 }
 
@@ -241,6 +257,13 @@ function StripTrip({ trip }: { trip: TripSummary }) {
       </Link>
     </li>
   );
+}
+
+/** Copy rows F-01 to F-03: why the profile didn't save, and that the answers are still on screen. */
+function saveFailureCopy(f: Failure): string {
+  if (f.kind === "offline") return "You’re offline, so your profile didn’t save. Your changes are still here; save once you’re back online.";
+  if (f.kind === "invalid") return "Your profile didn’t save: one answer didn’t reach TripMate in a form it could read. Reload the page and save again.";
+  return "Your profile didn’t save: TripMate’s server had a problem. Your changes are still here. Press Save profile to try again.";
 }
 
 /**
@@ -342,13 +365,15 @@ export default function ProfileForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Couldn't save your profile.");
+      if (!res.ok) {
+        setError(saveFailureCopy(await failureFromResponse(res, "edit")));
+        return;
+      }
       setBaseline(profile);
       setSaved(true);
     } catch (e) {
       // This form's whole purpose is saving; staying silent about a failure here would be a lie.
-      setError(e instanceof Error ? e.message : "Couldn't save your profile.");
+      setError(saveFailureCopy(failureFromThrown(e)));
     } finally {
       setSaving(false);
     }
@@ -455,9 +480,7 @@ export default function ProfileForm({
 
   const saveLine = saving
     ? "Saving…"
-    : error
-      ? error
-      : saved
+    : saved
         ? "Saved. Every new plan starts from this."
         : dirty
           ? "You have changes that aren't saved yet."
@@ -494,10 +517,16 @@ export default function ProfileForm({
               </li>
             ))}
           </ol>
-          <div className={`pf-save pb-save${dirty || error ? " is-up" : ""}`} role="region" aria-label="Save your profile">
-            <p className={`pf-save-state${error ? " is-error" : ""}`} role="status">
-              {saveLine}
-            </p>
+          {/* Light: the bar is paper, so the note takes the light alert colour. */}
+          <div className={`pf-save pb-save${dirty || error ? " is-up" : ""}`} role="region" aria-label="Save your profile" data-appearance="light">
+            <div className="pf-save-state" role="status">
+              {error && (
+                <InlineNote size="section" tone="error">
+                  {error}
+                </InlineNote>
+              )}
+              <p>{saveLine}</p>
+            </div>
             <div className="pf-save-actions">
               {dirty && !saving && (
                 <button type="button" className="tm-quiet" onClick={() => { setProfile(baseline); setError(null); }}>

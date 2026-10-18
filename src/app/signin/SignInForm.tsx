@@ -6,15 +6,12 @@ import Link from "next/link";
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 
 import GoogleMark from "@/components/GoogleMark";
+import InlineNote from "@/components/InlineNote";
 import { SignInPassFrame } from "./SignInPassFrame";
 import { clerkMessage, unsupportedStepMessage } from "@/lib/clerkError";
 import { safeNextPath } from "@/lib/safeNext";
-
-/**
- * The shortest password Clerk accepts — this instance's own setting, mirrored so the browser can say
- * so before the request. Change it with the Clerk dashboard, not on its own.
- */
-const PASSWORD_MIN = 15;
+import { signInReason } from "@/lib/signInReason";
+import { PASSWORD_MIN, signInProblems } from "@/lib/signInValidation";
 
 /** What the code field is for. `client-trust` is Clerk's Device Trust: a password sign-in from a new browser. */
 type CodePurpose = "verify-signup" | "sign-in-code" | "client-trust" | "reset";
@@ -50,12 +47,11 @@ export default function SignInForm() {
   const [purpose, setPurpose] = useState<CodePurpose | null>(null);
   const [busy, setBusy] = useState(false);
   // `/signin/finish` sends a traveller back here with `?error=account` when Clerk signed them in
-  // but this server saw no account for the session.
-  const [error, setError] = useState<string | null>(
-    params.get("error") === "account"
-      ? "Signed in with Clerk, but this server couldn't find your account. Try again."
-      : null,
-  );
+  // but this server saw no account for the session; `/sso-callback` with `?error=sso` when Apple or
+  // Google asked for a step this form can't show.
+  const [error, setError] = useState<string | null>(() => signInReason(params));
+  // Per-field notes (S-10 to S-12), kept apart from `error`, which is about the whole attempt.
+  const [fieldError, setFieldError] = useState<{ email?: string; password?: string }>({});
 
   const creating = mode === "up";
 
@@ -81,6 +77,9 @@ export default function SignInForm() {
 
   async function submitPassword(e: React.FormEvent) {
     e.preventDefault();
+    const problems = signInProblems(email, password);
+    setFieldError(problems);
+    if (problems.email || problems.password) return;
     setBusy(true);
     setError(null);
     if (creating) {
@@ -160,7 +159,7 @@ export default function SignInForm() {
     await step(() =>
       signIn.sso({
         strategy,
-        redirectCallbackUrl: `/sso-callback?next=${encodeURIComponent(next)}`,
+        redirectCallbackUrl: `/sso-callback?next=${encodeURIComponent(next)}&provider=${strategy === "oauth_apple" ? "apple" : "google"}`,
         redirectUrl: finishUrl,
       }),
     );
@@ -176,10 +175,23 @@ export default function SignInForm() {
       ? "Your trips and travel profile stay with you, on this browser and on your phone."
       : "Sign in to find your trips wherever you are.";
 
+  // Section failure for the whole attempt. The wrapper stays mounted so a screen reader announces
+  // the words when they arrive.
+  const failure = (
+    <div aria-live="polite">
+      {error && (
+        <InlineNote size="section" tone="error">
+          {error}
+        </InlineNote>
+      )}
+    </div>
+  );
+
   return (
     <SignInPassFrame>
       <article className="sp-pass" aria-labelledby="sp-title">
-        <section className="sp-main">
+        {/* Light: the pass is paper, so its notes take the light alert colour. */}
+        <section className="sp-main" data-appearance="light">
           <header className="sp-head">
             <p className="tm-eyebrow sp-stage-word">{stage}</p>
             {/* Two toggle buttons in a named group, as `/trips` does: no tab keyboard contract is
@@ -194,6 +206,7 @@ export default function SignInForm() {
                     onClick={() => {
                       setMode(m);
                       setError(null);
+                      setFieldError({});
                     }}
                   >
                     {m === "in" ? "Sign in" : "New account"}
@@ -250,11 +263,7 @@ export default function SignInForm() {
                   <p className="sp-hint">At least {PASSWORD_MIN} characters.</p>
                 </div>
               )}
-              {error && (
-                <p className="sp-error" role="alert">
-                  {error}
-                </p>
-              )}
+              {failure}
               <button type="submit" disabled={busy} className="tm-signal tm-signal-lg sp-wide">
                 {busy ? "One moment…" : "Continue"}
               </button>
@@ -272,7 +281,7 @@ export default function SignInForm() {
             </form>
           ) : (
             <>
-              <form onSubmit={submitPassword} className="sp-fields">
+              <form onSubmit={submitPassword} className="sp-fields" noValidate>
                 {creating && (
                   <div className="sp-field">
                     <label htmlFor="name" className="sp-label">
@@ -285,7 +294,23 @@ export default function SignInForm() {
                   <label htmlFor="email" className="sp-label">
                     Email
                   </label>
-                  <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sp-input" />
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldError((f) => ({ ...f, email: undefined }));
+                    }}
+                    aria-describedby="email-note"
+                    aria-invalid={fieldError.email ? true : undefined}
+                    className="sp-input"
+                  />
+                  <InlineNote id="email-note" size="field" tone="error">
+                    {fieldError.email ?? ""}
+                  </InlineNote>
                 </div>
                 <div className="sp-field">
                   <label htmlFor="password" className="sp-label">
@@ -300,11 +325,19 @@ export default function SignInForm() {
                     autoComplete={creating ? "new-password" : "current-password"}
                     minLength={PASSWORD_MIN}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFieldError((f) => ({ ...f, password: undefined }));
+                    }}
+                    aria-describedby={creating ? "password-hint password-note" : "password-note"}
+                    aria-invalid={fieldError.password ? true : undefined}
                     className="sp-input"
                   />
+                  <InlineNote id="password-note" size="field" tone="error">
+                    {fieldError.password ?? ""}
+                  </InlineNote>
                   {creating ? (
-                    <p className="sp-hint">At least {PASSWORD_MIN} characters. A sentence you will remember works well.</p>
+                    <p id="password-hint" className="sp-hint">At least {PASSWORD_MIN} characters. A sentence you will remember works well.</p>
                   ) : (
                     <div className="sp-links">
                       <button type="button" className="sp-link" onClick={emailMeACode} disabled={busy}>
@@ -316,11 +349,7 @@ export default function SignInForm() {
                     </div>
                   )}
                 </div>
-                {error && (
-                  <p className="sp-error" role="alert">
-                    {error}
-                  </p>
-                )}
+                {failure}
                 <button type="submit" disabled={busy} className="tm-signal tm-signal-lg sp-wide">
                   {busy ? "One moment…" : creating ? "Create account" : "Sign in"}
                 </button>
@@ -353,6 +382,7 @@ export default function SignInForm() {
                   onClick={() => {
                     setMode(creating ? "in" : "up");
                     setError(null);
+                    setFieldError({});
                   }}
                   className="sp-link"
                 >

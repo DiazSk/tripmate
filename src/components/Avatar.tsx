@@ -1,8 +1,28 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import InlineNote from "@/components/InlineNote";
 import { avatarTint, initialsFor } from "@/lib/avatar";
 import { squareJpeg } from "@/lib/avatarImage";
+import { failureFromResponse, failureFromThrown, type Failure } from "@/lib/failure";
+
+type Note = { text: string; signIn?: boolean };
+
+/** Copy rows F-05, F-10, F-11 (and the server's own sentence for a photo it refused, F-07 to F-09). */
+function uploadNote(f: Failure): Note {
+  if (f.kind === "invalid") return { text: f.message };
+  if (f.kind === "signed_out") return { text: "Photos are kept with an account, so sign in to add one.", signIn: true };
+  if (f.kind === "offline") return { text: "You’re offline, so your photo didn’t save. Try again once you’re back online." };
+  return { text: "Your photo didn’t save: TripMate’s server had a problem. Try again." };
+}
+
+/** Copy rows F-06, F-13, F-14. */
+function removeNote(f: Failure): Note {
+  if (f.kind === "signed_out") return { text: "You’ve been signed out, so your photo can’t be changed. Sign in and try again.", signIn: true };
+  if (f.kind === "offline") return { text: "You’re offline, so your photo wasn’t removed. Try again once you’re back online." };
+  return { text: "Your photo wasn’t removed: TripMate’s server had a problem. Try again." };
+}
 
 /**
  * A traveller's face: their photo, else their initials on a disc tinted from their account id (the
@@ -26,20 +46,34 @@ export default function Avatar({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Note | null>(null);
   const [menu, setMenu] = useState(false);
+  const router = useRouter();
+  const noteId = useId();
 
   async function upload(file: File) {
     setBusy(true);
     setError(null);
+    let body: Awaited<ReturnType<typeof squareJpeg>>;
     try {
-      const body = await squareJpeg(file);
+      body = await squareJpeg(file);
+    } catch {
+      // Copy row F-12: the browser could not decode or re-encode it. Nothing was sent.
+      setError({ text: "This browser couldn’t prepare that photo. Try a JPEG or PNG." });
+      setBusy(false);
+      return;
+    }
+    try {
       const res = await fetch("/api/avatar", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const json = (await res.json()) as { image?: string; error?: string };
-      if (!res.ok || !json.image) throw new Error(json.error ?? "Couldn't save that photo. Try again.");
-      onChange?.(json.image);
+      if (!res.ok) {
+        setError(uploadNote(await failureFromResponse(res, "edit")));
+        return;
+      }
+      const json = (await res.json().catch(() => ({}))) as { image?: string };
+      if (!json.image) setError(uploadNote({ kind: "server" }));
+      else onChange?.(json.image);
     } catch (e) {
-      setError(e instanceof Error && e.message !== "encode" ? e.message : "Couldn't save that photo. Try again.");
+      setError(uploadNote(failureFromThrown(e)));
     } finally {
       setBusy(false);
     }
@@ -51,10 +85,10 @@ export default function Avatar({
     setError(null);
     try {
       const res = await fetch("/api/avatar", { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      onChange?.(null);
-    } catch {
-      setError("Couldn't remove that photo. Try again.");
+      if (!res.ok) setError(removeNote(await failureFromResponse(res, "edit")));
+      else onChange?.(null);
+    } catch (e) {
+      setError(removeNote(failureFromThrown(e)));
     } finally {
       setBusy(false);
     }
@@ -89,6 +123,7 @@ export default function Avatar({
         type="button"
         onClick={() => (image ? setMenu((m) => !m) : input.current?.click())}
         aria-label={image ? "Change or remove your photo" : "Add a photo"}
+        aria-describedby={noteId}
         className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
       >
         {disc}
@@ -106,7 +141,18 @@ export default function Avatar({
         hidden
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }}
       />
-      {error && <p role="alert" className="absolute top-full left-0 mt-2 w-56 text-xs text-alert">{error}</p>}
+      {/* Kept mounted, empty, so the words are read when they arrive. Under the photo, and out of the
+          layout (absolute), so a failure never moves the page. */}
+      <div className="absolute top-full left-0 z-10 mt-2 w-64">
+        <InlineNote
+          id={noteId}
+          size="field"
+          tone="error"
+          action={error?.signIn ? { label: "Sign in", onClick: () => router.push(`/signin?next=${encodeURIComponent(window.location.pathname)}`) } : undefined}
+        >
+          {error?.text ?? ""}
+        </InlineNote>
+      </div>
     </div>
   );
 }

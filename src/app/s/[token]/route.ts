@@ -24,6 +24,29 @@ import { toTripDetail } from "@/lib/tripPayload";
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * Copy row G-19, for a link that is revoked or never was. A bare line of plain text told the person
+ * holding it nothing about what to do, and they are usually a friend in a group chat who has no
+ * account. Self-contained for the reason the shared document is: no framework, no network, nothing
+ * that can itself fail. Static, so there is nothing to escape.
+ */
+const UNAVAILABLE_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Shared trip not available · TripMate</title>
+<style>
+body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:1.25rem;box-sizing:border-box;background:#090b10;color:#fff;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{width:100%;max-width:34rem;display:grid;justify-items:start;gap:.75rem;padding:1.25rem 1.375rem;border:1px dashed rgba(255,255,255,.28);border-radius:.25rem}
+h1{margin:0;font-size:1.0625rem;font-weight:600}
+p{margin:0;font-size:.9375rem;color:rgba(255,255,255,.86)}
+a{display:inline-flex;align-items:center;height:2.5rem;padding:0 1.125rem;border-radius:2px;background:#ff7e15;color:#1f2a44;font-weight:600;font-size:.9rem;text-decoration:none}
+a:focus-visible{outline:2px solid #ff7e15;outline-offset:3px}
+</style></head>
+<body><main>
+<h1>This shared trip isn&rsquo;t available.</h1>
+<p>Its owner may have stopped sharing it; ask them for a new link.</p>
+<a href="/">Plan your own trip</a>
+</main></body></html>`;
+
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
@@ -32,9 +55,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   // the trip exists and that the holder once had access to it, which is more than a withdrawn
   // link should give back.
   if (!row) {
-    return new NextResponse("This link isn't active.", {
+    return new NextResponse(UNAVAILABLE_PAGE, {
       status: 404,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
     });
   }
 

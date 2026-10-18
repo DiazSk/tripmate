@@ -1,13 +1,24 @@
+/** Copy rows S-02 and S-03: Clerk threw and gave nothing a traveller could read. */
+export const SIGN_IN_OFFLINE = "You’re offline, so you couldn’t be signed in. Try again once you’re back online.";
+export const SIGN_IN_UNEXPLAINED =
+  "Sign-in didn’t finish, and the sign-in service didn’t say why. Try again, or email yourself a code instead.";
+
 /**
- * The sentence to show for a failed Clerk call. Clerk's own wording, not a rewrite: it already
- * separates a wrong password from an unknown email from a rate limit, and those are different
- * things to do next.
+ * The sentence to show for a failed Clerk call (copy rows S-01 to S-03). Clerk's own wording when it
+ * has some, not a rewrite: it already separates a wrong password from an unknown email from a rate
+ * limit, and those are different things to do next. A bare thrown error carries `e.message`
+ * ("Failed to fetch", "Network Error"), which is a browser's word for a dropped request and says
+ * nothing to a traveller, so it is never shown: offline says so, anything else says the service gave
+ * no reason.
  */
-export function clerkMessage(error: unknown, fallback = "That didn't work. Try again."): string {
-  if (!error || typeof error !== "object") return fallback;
-  const e = error as { errors?: { message?: string; longMessage?: string }[]; longMessage?: string; message?: string };
-  const first = e.errors?.[0];
-  return first?.longMessage || first?.message || e.longMessage || e.message || fallback;
+export function clerkMessage(error: unknown, online = typeof navigator === "undefined" ? true : navigator.onLine): string {
+  if (error && typeof error === "object") {
+    const e = error as { errors?: { message?: string; longMessage?: string }[]; longMessage?: string };
+    const first = e.errors?.[0];
+    const readable = first?.longMessage || first?.message || e.longMessage;
+    if (readable) return readable;
+  }
+  return online ? SIGN_IN_UNEXPLAINED : SIGN_IN_OFFLINE;
 }
 
 /** Clerk's field names, said the way a traveller would read them. */
