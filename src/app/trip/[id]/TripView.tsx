@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { preload } from "react-dom";
 import { fitMessage } from "@/components/AnchorReceipt";
 import { useStoryControls } from "@/lib/storyMode";
@@ -17,7 +17,8 @@ import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import { DEFAULT_MAP_ENGINE, MAPLIBRE_STYLE_URL } from "@/lib/mapEngine";
 import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
-import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
+import { changedDayNumbers, clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
+import { onDraftRevision } from "@/lib/draftRevision";
 
 import "@/components/polar/PolarLanding.css";
 import "@/components/polar/trip/TripBoard.css";
@@ -148,8 +149,13 @@ export default function TripView({
     warmStory({ itinerary, dayIndex, destination: trip.destination, tripId: trip.id });
   }, [trip, itinerary, activeDayIndex, warmStory]);
 
+  /** Set by the first write from this page: from then on a late critique revision is older than
+   *  what the traveller has, and is dropped (see the effect below). */
+  const editedRef = useRef(false);
+
   async function persist(updated: Itinerary) {
     if (id === "preview") return;
+    editedRef.current = true;
     const res = await fetch(`/api/trips/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -168,13 +174,44 @@ export default function TripView({
   }
 
   /**
+   * A critique revision for a plan that has just opened here, still being checked when it did.
+   *
+   * The server has already written it to this row, unless the row had been edited first
+   * (`applyRevisionIfUnedited`), and `announceDraftRevision` is how the stream that carried it says
+   * so. The row is re-read rather than the stream's days trusted, because the row is what holds:
+   * an edit made in another tab, or one that beat the revision there, is what it shows. The days it
+   * differs on from the plan on screen get the dots a chat turn leaves. A write from this page since
+   * it opened outranks it, since that write may still be on its way and is the later intent.
+   */
+  useEffect(
+    () =>
+      onDraftRevision(id, () => {
+        if (editedRef.current || !itinerary) return;
+        fetch(`/api/trips/${id}`)
+          .then((r) => (r.ok ? (r.json() as Promise<Trip>) : null))
+          .then((row) => {
+            if (!row?.itinerary || editedRef.current) return;
+            const changed = changedDayNumbers(itinerary.days, row.itinerary.days);
+            setTrip(row);
+            setItinerary(row.itinerary);
+            if (changed.length) setUnseenChangedDays((prev) => markUnseenDays(changed, activeDayIndex, prev));
+          })
+          .catch((e) => console.error("[trip] revised plan re-read failed", e));
+      }),
+    // Re-subscribed as these change, so the handler always compares against the plan on screen.
+    // Safe: the mailbox holds a revision while nobody is subscribed.
+    [id, itinerary, activeDayIndex]
+  );
+
+  /**
    * Promotes the draft this page is showing to a kept trip.
    *
    * A draft opens here as a fully working trip — the chat, the drag board, the cost inputs and
    * `persist` above all key off the row, not off its status — so the only thing missing was a way
    * to say "keep this" from the page the traveler actually lands on when they reopen a draft.
-   * Sends the current itinerary with the flip for the same reason `save()` on the home view does:
-   * one request, so the status and the plan it applies to can't disagree.
+   * Sends the status alone. Every edit on this page is already persisted as it is made, so the row
+   * holds the plan; sending this page's copy as well could write the old plan over a critique
+   * revision that landed on the row a moment before this page heard about it.
    */
   async function keepTrip() {
     if (!trip || !itinerary) return;
@@ -184,7 +221,10 @@ export default function TripView({
       const res = await fetch(`/api/trips/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itinerary, status: "saved" }),
+        // Status only, so Keep never writes this page's copy over a revision that landed after it
+        // loaded. The one exception is a page that edited: its row already differs from the plan, so
+        // no revision can land on it, and re-sending recovers an edit whose own save had failed.
+        body: JSON.stringify(editedRef.current ? { itinerary, status: "saved" } : { status: "saved" }),
       });
       if (!res.ok) throw new Error("We couldn't keep this trip. Try again.");
       // Local, not a reload: the row is unchanged apart from the one field, and re-fetching the

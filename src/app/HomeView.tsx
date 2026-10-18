@@ -54,6 +54,7 @@ import { upcomingStopsAfter } from "@/lib/itinerary";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
+import { announceDraftRevision } from "@/lib/draftRevision";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
@@ -339,9 +340,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    */
   const [draftTripId, setDraftTripId] = useState<string | null>(null);
   const [draftState, setDraftState] = useState<DraftState>(null);
-  /** The in-flight draft insert, so a Save pressed in the first moments after arrival waits for
-   *  the id instead of racing it and inserting a duplicate row. */
-  const draftWriteRef = useRef<Promise<string | null> | null>(null);
   /** The edit that is waiting out the coalescing timer, if any — the flush effect's only input.
    *  Holds the trip id and session alongside the plan so it stays a complete, self-contained
    *  request even if `draftTripId` has since moved on. */
@@ -1095,11 +1093,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         editedSincePlanRef.current = false;
         planned?.(plan);
       } else if (event === "revised") {
-        const revision = JSON.parse(data) as { days: DayPlan[]; issues: string[] };
-        // Critique replaces the whole day set. If the traveller has touched the plan since it
-        // opened, their edit is the more recent intent and the replacement is dropped — the
-        // issues list is still worth having either way.
-        if (!editedSincePlanRef.current) revised?.(revision.days);
+        const revision = JSON.parse(data) as { days: DayPlan[]; issues: string[]; tripId?: string | null };
+        // With a `tripId` the server has already written the revision to the draft the plan opened
+        // as, and the trip page on screen (this view has usually unmounted by now) is the one to
+        // show it. Without one there was no draft row, so the plan is on the result view below.
+        if (revision.tripId) {
+          announceDraftRevision(revision.tripId);
+        } else if (!editedSincePlanRef.current) {
+          // Critique replaces the whole day set. If the traveller has touched the plan since it
+          // opened, their edit is the more recent intent and the replacement is dropped — the
+          // issues list is still worth having either way.
+          revised?.(revision.days);
+        }
       } else if (event === "done") {
         result = JSON.parse(data) as T;
       } else if (event === "error") {
@@ -1147,7 +1152,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     void flyToTypedDestination();
 
     /**
-     * Swaps from the loading view to the interactive plan, once. Called either from `planned`
+     * Swaps from the loading view to the plan's trip page (or, when its draft row could not be
+     * written, to the result view here), once. Called either from `planned`
      * the instant the stream's `plan` event lands, or — on the plain-fallback path, which never
      * sends a `plan` event at all — after `runStreamed` resolves with the final result.
      *
@@ -1168,6 +1174,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // hard cut. Peak-end weights these few hundred milliseconds far more heavily than the
       // middle minute, and they used to be spent on nothing. ItineraryCard's own staggered
       // reveal takes over from here.
+      // From here until the draft insert settles, a revision is held rather than shown.
+      insertPending = true;
       await settle(ARRIVAL_HOLD_MS);
       if (abortRef.current !== owner) return;
       // Every side effect of "the plan arrived" belongs here, not after `await runStreamed(…)`.
@@ -1188,8 +1196,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         /* nothing to clean up if storage was never writable */
       }
       window.history.replaceState(null, "", window.location.pathname);
-      setDraftItinerary(null);
-      setCoordsDay(null);
       // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
       // previous run's id in place for even one render would point the autosave effect at the
       // old draft row and overwrite the plan it holds with this new one. Both updates batch, so
@@ -1197,18 +1203,43 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setDraftTripId(null);
       setDraftState(null);
       persistedDraftRef.current = null;
-      draftWriteRef.current = null;
-      setItinerary(plan);
+      // Null, not the previous run's plan, while the insert lands: `writeDraft` arms the autosave
+      // effect with the new row's id, and a stale itinerary beside it would be PATCHed into it.
+      setItinerary(null);
+      // **A finished plan opens on its trip page, as a draft.** The writing screen stays up for
+      // the insert (one cached geocode and a row, well under a second) and the router then moves
+      // to the page every kept trip uses: the board, the draft notice and Keep. The critique is
+      // still running; its revision lands on this row server-side, and the trip page is told
+      // through `announceDraftRevision` above. `writeDraft` swallows its own failures.
+      const tripId = await writeDraft(plan, runId, sessionId);
+      insertPending = false;
+      if (abortRef.current !== owner) return;
+      if (tripId) {
+        // A revision that beat the insert found no row to land on (see `earlyRevision`). The row
+        // holds exactly the plan just inserted and nobody has seen it yet, so it is written here,
+        // through the ordinary PATCH, before the page that reads it opens. Fail-soft: the plan
+        // still opens if this does not land.
+        if (earlyRevision) {
+          await patchDraft(tripId, { ...plan, days: earlyRevision }, sessionId)
+            .then((r) => {
+              if (!r.ok) throw new Error(`PATCH ${r.status}`);
+            })
+            .catch((e) => console.error("[home] early revision write failed", e));
+        }
+        router.push(`/trip/${tripId}`);
+        return;
+      }
+      // No draft row, so nowhere to open it: the result view, as before drafts existed. `save()`
+      // inserts the trip outright from here, and the revision below lands on this view. The
+      // streamed draft stays on the map until here, so the wait for the insert shows no blank map.
+      setDraftItinerary(null);
+      setCoordsDay(null);
+      setItinerary(earlyRevision ? { ...plan, days: earlyRevision } : plan);
       setLastRunId(runId);
       setLastSessionId(sessionId);
       setRevealAnimation(true);
       setStep("result");
       setGenerating(false);
-      // Not awaited. The plan is already on screen and the traveler can read, edit or refine it
-      // while this lands; blocking the arrival on a database insert would add a pause to the one
-      // moment of this flow that should feel instant. `writeDraft` swallows its own failures, so
-      // there is nothing here to catch — the promise is kept only so `save()` can await it.
-      draftWriteRef.current = writeDraft(plan, runId, sessionId);
     };
 
     let planShown = false;
@@ -1217,6 +1248,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
      *  local has touched the plan since (see `editedSincePlanRef`), so this is still what is on
      *  screen when it does. */
     let plannedDays: DayPlan[] | null = null;
+    /** Set while `showPlan` holds the arrival and waits for the draft insert. A revision arriving then has no row to land
+     *  on server-side (the frame comes without a `tripId`) and no view to land on either, so it is
+     *  held in `earlyRevision` for `showPlan` to apply once the insert settles. The critique takes
+     *  minutes and the insert well under a second, so this is a guard against a drop rather than a
+     *  path anyone is expected to take. */
+    let insertPending = false;
+    let earlyRevision: DayPlan[] | null = null;
     try {
       const data = await runStreamed<{
         itinerary: Itinerary;
@@ -1242,6 +1280,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
             void showPlan(abortRef.current, plan.itinerary, plan.runId ?? null, plan.sessionId ?? null);
           },
           revised: (days) => {
+            if (insertPending) {
+              earlyRevision = days;
+              return;
+            }
             // A day set swapped out silently under someone mid-read is the startling outcome the
             // spec's Risk 3 named. Reuse the dot the chat already uses for "this day changed while
             // you were looking elsewhere" rather than inventing a second indicator.
@@ -1503,12 +1545,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setSaving(true);
     setError(null);
     try {
-      // Await the draft insert rather than racing it. Without this, a Save pressed in the first
-      // moment after arrival reads `draftTripId` as null and falls through to the insert below —
-      // two rows for one plan, one of which nobody opens again.
-      const draftId = draftTripId ?? (draftWriteRef.current ? await draftWriteRef.current : null);
+      // A finished plan leaves for its trip page once its draft row exists, so this view is shown
+      // with a row only in the moment before that navigation; usually there is none and the plan
+      // is inserted outright below. Kept for that moment.
+      const draftId = draftTripId;
 
-      // The ordinary path: the plan is already a row, so keeping it is a promotion. It carries the
+      // With a row: the plan is already a row, so keeping it is a promotion. It carries the
       // current itinerary too, which both flushes an edit the autosave timer hasn't written yet and
       // makes the status flip and the plan it applies to one atomic request.
       if (draftId) {

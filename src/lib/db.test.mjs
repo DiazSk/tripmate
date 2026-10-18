@@ -3,6 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   appendLlmSessionTurns,
+  applyRevisionIfUnedited,
   createLlmSession,
   deleteTrip,
   getLlmSession,
@@ -13,7 +14,10 @@ import {
   insertTrip,
   setTripShareToken,
   updateTrace,
+  updateTripItinerary,
+  writeRevisionOver,
 } from "./db.ts";
+import { normalizeDays } from "./itinerary.ts";
 
 test("createLlmSession/getLlmSession round-trip the messages array", () => {
   const id = createLlmSession([{ role: "user", content: "hi" }]);
@@ -165,4 +169,58 @@ test("parallel processes can migrate one fresh database file without colliding",
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/* --- a late critique revision landing on the draft --- */
+
+// Written the way a model writes them: a string cost and no tags, both of which the trip page's
+// normalising read rewrites.
+const stop = (name) => ({ name, lat: 19.07, lng: 72.87, cost: "10", category: "food" });
+const planned = [{ date: "2026-11-10", weather: "", stops: [stop("Crawford Market")] }];
+const revised = [{ date: "2026-11-10", weather: "", stops: [stop("Gateway of India")] }];
+const draftFor = (runId, days) =>
+  insertTrip({
+    id: `revision-test-${++seq}`,
+    destination: "Mumbai",
+    start_date: "2026-11-10",
+    end_date: "2026-11-10",
+    budget: 100,
+    itinerary_json: JSON.stringify({ tier: "comfort", days }),
+    run_id: runId,
+    status: "draft",
+  });
+
+test("a revision replaces the days of a draft nobody has touched, and keeps the rest", () => {
+  const trip = draftFor("run-untouched", planned);
+  assert.equal(applyRevisionIfUnedited("run-untouched", planned, revised), trip.id);
+  const stored = JSON.parse(getTrip(trip.id).itinerary_json);
+  assert.equal(stored.days[0].stops[0].name, "Gateway of India");
+  assert.equal(stored.tier, "comfort");
+});
+
+test("a Keep that echoed the plan back through the trip page's normalising read is not an edit", () => {
+  // The page holds `toTripDetail`'s normalised copy, and Keep PATCHes that back.
+  const trip = draftFor("run-kept", JSON.parse(JSON.stringify(normalizeDays(planned))));
+  assert.equal(applyRevisionIfUnedited("run-kept", planned, revised), trip.id);
+});
+
+test("an edit made before the revision lands is never overwritten", () => {
+  const edited = [{ ...planned[0], stops: [stop("Crawford Market"), stop("Haji Ali")] }];
+  const trip = draftFor("run-edited", edited);
+  assert.equal(applyRevisionIfUnedited("run-edited", planned, revised), null);
+  assert.equal(JSON.parse(getTrip(trip.id).itinerary_json).days[0].stops.length, 2);
+});
+
+test("a run with no trip row yet writes nothing", () => {
+  assert.equal(applyRevisionIfUnedited("run-without-trip", planned, revised), null);
+});
+
+test("an edit that lands between the read and the write is never overwritten", () => {
+  const trip = draftFor("run-interleaved", planned);
+  const read = getTrip(trip.id);
+  // The traveller's PATCH arrives after the row was read and compared, before the write.
+  const edited = [{ ...planned[0], stops: [stop("Haji Ali")] }];
+  updateTripItinerary(trip.id, JSON.stringify({ tier: "comfort", days: edited }), [read.owner_id]);
+  assert.equal(writeRevisionOver(read, revised), false);
+  assert.equal(JSON.parse(getTrip(trip.id).itinerary_json).days[0].stops[0].name, "Haji Ali");
 });

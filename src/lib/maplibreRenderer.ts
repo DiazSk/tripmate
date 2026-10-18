@@ -896,6 +896,7 @@ export class MapLibreRenderer implements MapRenderer {
         map.setPaintProperty(layer, `${prop}-transition` as PaintKey, { duration: NIGHT_LENS_MS, delay: 0 });
         map.setPaintProperty(layer, prop as PaintKey, value);
       }
+      this.redrapeTerrain();
       return;
     }
     if (!this.dayPaint) return;
@@ -905,6 +906,35 @@ export class MapLibreRenderer implements MapRenderer {
       map.setPaintProperty(layer, prop as PaintKey, value);
     }
     this.dayPaint = null;
+    this.redrapeTerrain();
+  }
+
+  /**
+   * Makes a paint change reach the ground under 3D terrain, for the length of the lens's fade.
+   *
+   * **MapLibre does not redraw the ground for a paint change.** With terrain on, every background,
+   * fill and line layer is drawn once into a texture per terrain tile and draped over the DEM
+   * (`RenderToTexture`), and a tile's texture is redrawn only when the set of source tiles under it
+   * changes, never when a paint property does. So the lens only reached the tiles the camera
+   * happened to bring in while it changed, and lifting it left every tile still in view at night:
+   * a dark trapezoid of ground (the shape of a tile set in perspective) under a day map whose labels
+   * and buildings, drawn live, had lifted. Seen on the result view after a generate, and the same
+   * lift runs when a finished plan leaves for its trip page.
+   *
+   * Released every frame of the fade so the textures follow it, then once more after it ends.
+   * `map.terrain` is typed public; the release is MapLibre's own (`TerrainTileManager.releaseAllRTT`,
+   * what it calls on a style reload).
+   * Both the RTT draping and `releaseAllRTT` are MapLibre internals (6.6): re-check on a major upgrade.
+   */
+  private redrapeTerrain() {
+    const end = performance.now() + NIGHT_LENS_MS + 100;
+    const tick = () => {
+      if (!this.isAlive()) return;
+      this.map.terrain?.tileManager.releaseAllRTT();
+      this.map.triggerRepaint();
+      if (performance.now() < end) requestAnimationFrame(tick);
+    };
+    tick();
   }
 
   requestRender() {

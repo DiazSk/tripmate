@@ -6,7 +6,9 @@ import { staleDraftCutoff } from "./drafts";
 import { LEGACY_OWNER, isValidOwnerId, newOwnerId, readableOwners, writableOwners } from "./owner";
 import { anchorKey } from "./anchors";
 import { avatarUrl } from "./avatar";
-import type { TripStatus } from "./types";
+import { normalizeDays } from "./itinerary";
+import { tripEndDate } from "./tripDays";
+import type { DayPlan, TripStatus } from "./types";
 
 /**
  * **`libsql`, not `better-sqlite3`, and the API below is deliberately identical.**
@@ -893,6 +895,61 @@ export function updateTripItinerary(
     db
       .prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ? ${scope}`)
       .run(itineraryJson, id, ...owners).changes > 0
+  );
+}
+
+/**
+ * Lands a critique revision on the trip made from `runId`, if nobody has edited it since.
+ *
+ * The critique finishes minutes after the plan was handed over, and by then the traveller is on
+ * the trip page (or anywhere else) with the draft row the plan became. The server keeps running
+ * the critique after the client has gone, so this is where its result is kept rather than
+ * dropped. **The row is the edit detector**: every write to `itinerary_json` is a traveller's
+ * PATCH, so a row whose days still equal the plan's has not been touched and one that differs
+ * has, and the edit wins. Compared through `normalizeDays`, which the trip page reads through and
+ * which is idempotent, so a Keep that echoes the unedited plan back does not count as an edit.
+ *
+ * The write is conditional on the row still holding the exact string that was compared
+ * (`writeRevisionOver`), so an edit that lands between the read and the write is never overwritten
+ * even if this ever stops being one synchronous block. Returns the id it wrote, or null when there
+ * was no row or the row had been edited.
+ */
+export function applyRevisionIfUnedited(
+  runId: string,
+  plannedDays: DayPlan[],
+  revisedDays: DayPlan[]
+): string | null {
+  const planned = JSON.stringify(normalizeDays(plannedDays));
+  const rows = db
+    .prepare(`SELECT id, itinerary_json, start_date, end_date FROM trips WHERE run_id = ?`)
+    .all(runId) as RevisionTarget[];
+  for (const row of rows) {
+    if (JSON.stringify(normalizeDays(JSON.parse(row.itinerary_json).days)) !== planned) continue;
+    if (writeRevisionOver(row, revisedDays)) return row.id;
+  }
+  return null;
+}
+
+type RevisionTarget = { id: string; itinerary_json: string; start_date: string; end_date: string };
+
+/**
+ * The write half of `applyRevisionIfUnedited`: lands `revisedDays` only if the row still holds
+ * `row.itinerary_json` byte for byte, and says whether it did. Exported for its test, which edits
+ * the row between the read and this write.
+ */
+export function writeRevisionOver(row: RevisionTarget, revisedDays: DayPlan[]): boolean {
+  // The end date moves with the day count, as `updateTripItinerary` keeps it: critique is told to
+  // keep the dates but is not stopped from returning fewer days.
+  const endDate = revisedDays.length ? tripEndDate(row.start_date, revisedDays.length) : row.end_date;
+  return (
+    db
+      .prepare(`UPDATE trips SET itinerary_json = ?, end_date = ? WHERE id = ? AND itinerary_json = ?`)
+      .run(
+        JSON.stringify({ ...JSON.parse(row.itinerary_json), days: revisedDays }),
+        endDate,
+        row.id,
+        row.itinerary_json
+      ).changes > 0
   );
 }
 

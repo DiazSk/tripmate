@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { itineraryTimeoutMs, parseJsonResponse, runClaude } from "@/lib/claude";
-import { insertRun } from "@/lib/db";
+import { applyRevisionIfUnedited, insertRun } from "@/lib/db";
 import { buildRebalancePrompt } from "@/lib/itineraryPrompt";
 import { normalizeDays } from "@/lib/itinerary";
 import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
@@ -176,13 +176,30 @@ export async function POST(req: NextRequest) {
         }
       }, 20_000);
       const onStage = (event: StageEvent) => safeEnqueue("stage", event);
+      /** The plan as it went over the wire, for the revision below to recognise it on the draft. */
+      let planned: { runId: string; days: DayPlan[] } | null = null;
       const live = {
         onStop: (stop: StreamedStop) => safeEnqueue("stop", stop),
         onDayCoords: (dayIndex: number, coords: Record<string, { lat: number; lon: number }>) =>
           safeEnqueue("day-coords", { dayIndex, coords }),
-        onPlan: (result: Awaited<ReturnType<typeof runGeneration>>) => safeEnqueue("plan", result),
-        onRevised: (revision: { days: DayPlan[]; issues: string[] }) =>
-          safeEnqueue("revised", revision),
+        onPlan: (result: Awaited<ReturnType<typeof runGeneration>>) => {
+          planned = { runId: result.runId, days: structuredClone(result.itinerary.days) };
+          safeEnqueue("plan", result);
+        },
+        // The critique lands minutes after the plan, usually after the client has moved to the
+        // draft's trip page or left altogether, and this keeps running either way. So the
+        // revision is written to that draft here, unless the traveller has edited it since, and
+        // `tripId` tells a still-listening client it was. Without a row (the draft insert failed)
+        // the client applies it to the result view as before. A failed write is not a failed run.
+        onRevised: (revision: { days: DayPlan[]; issues: string[] }) => {
+          let tripId: string | null = null;
+          try {
+            if (planned) tripId = applyRevisionIfUnedited(planned.runId, planned.days, revision.days);
+          } catch (err) {
+            console.error("[itinerary] revision write failed", err);
+          }
+          safeEnqueue("revised", { ...revision, tripId });
+        },
         onSketch: (days: SketchDay[]) => safeEnqueue("sketch", { days }),
       };
       try {

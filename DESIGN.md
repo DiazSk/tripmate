@@ -880,7 +880,7 @@ clamp reaches zero. `opacity: 0` hides a control from the eye and from nothing e
 compressed, a real pointer at the lower half of the Download link landed on an invisible `<a download>`
 floating over the compact title strip, and it was still a tab stop.
 
-The card now renders only on the `/` result view; the trip page uses the board. Money is a figure in
+The card now renders only on the `/` result view, which a new plan reaches only when its draft row could not be written (a finished plan opens on its trip page); the trip page uses the board. Money is a figure in
 white on night with no hue of its own, the over-budget line is alert red with the word "over", and the
 day tab you are on is the only signal-coloured thing in the panel. The
 Total row is no longer a filled slab in the action colour — a solid button-coloured bar whose entire

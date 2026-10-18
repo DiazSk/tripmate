@@ -66,13 +66,17 @@ export async function PATCH(
   }
 
   const { itinerary, status, chatSessionId } = await req.json();
-  if (!itinerary) {
+  // A bare `{ status: "saved" }` is a Keep that leaves the plan as the row has it: the trip page
+  // persists every edit as it is made, so it has nothing to send, and sending its copy anyway could
+  // write the old plan over a critique revision that landed on the row a moment before. Every
+  // caller that sends an itinerary is handled exactly as before.
+  if (!itinerary && status !== "saved") {
     return NextResponse.json({ error: "Missing itinerary" }, { status: 400 });
   }
 
   // Same guard as POST, because this writes to the same column by the same means — an edit can
   // put a placeless stop into a trip that saved clean.
-  const rejection = itineraryRejection(itinerary);
+  const rejection = itinerary ? itineraryRejection(itinerary) : null;
   if (rejection) return NextResponse.json({ error: rejection }, { status: 400 });
 
   // `status` is write-once and one-way: a draft can be kept, a kept trip cannot be un-kept here.
@@ -86,10 +90,10 @@ export async function PATCH(
   // itinerary being saved, and the days are consecutive dates from the (immutable) start date. So
   // the end date is computable, and computing it means an edit that added or removed a day can't
   // leave `trips.end_date` disagreeing with the plan stored beside it.
-  const days = Array.isArray(itinerary.days) ? itinerary.days : [];
+  const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
   const endDate = days.length ? tripEndDate(trip.start_date, days.length) : undefined;
 
-  updateTripItinerary(id, JSON.stringify(itinerary), owners, endDate);
+  if (itinerary) updateTripItinerary(id, JSON.stringify(itinerary), owners, endDate);
   // After the itinerary write, not before. Promotion is the traveler saying "keep this plan", and
   // the plan they mean is the one in this request body — flipping the status first would leave a
   // window where a saved trip holds the pre-edit itinerary if the write then failed.
@@ -103,7 +107,7 @@ export async function PATCH(
   return NextResponse.json({
     ok: true,
     endDate: endDate ?? trip.end_date,
-    days: days.length,
+    days: itinerary ? days.length : (JSON.parse(trip.itinerary_json).days?.length ?? 0),
     status: promote ? "saved" : trip.status,
   });
 }
