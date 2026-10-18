@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { itineraryTimeoutMs, parseJsonResponse, runClaude } from "@/lib/claude";
+import { itineraryTimeoutMs, ModelTimeoutError, parseJsonResponse, runClaude } from "@/lib/claude";
 import { applyRevisionIfUnedited, insertRun } from "@/lib/db";
 import { buildRebalancePrompt } from "@/lib/itineraryPrompt";
 import { normalizeDays } from "@/lib/itinerary";
@@ -10,8 +10,9 @@ import { GenerationParams, runGeneration } from "@/lib/generationRunner";
 import { StageEvent } from "@/lib/generationStages";
 import type { StreamedStop } from "@/lib/streamingItinerary";
 import type { SketchDay } from "@/lib/sketch";
-import { isThrottled } from "@/lib/ipThrottle";
-import { isOverDailyCap } from "@/lib/spendCap";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse, modelFailureResponse, TIMEOUT_SENTENCES } from "@/lib/limitResponse";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 
 const GENERATION_ERROR = "The planner didn't finish. Try generating again.";
 
@@ -27,19 +28,23 @@ function sseFrame(event: string, data: unknown): Uint8Array {
 }
 
 export async function POST(req: NextRequest) {
-  if (isThrottled(req)) {
-    return NextResponse.json(
-      { error: "Too many requests. Slow down and try again shortly." },
-      { status: 429 }
-    );
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    body = null;
   }
-  if (isOverDailyCap()) {
-    return NextResponse.json(
-      { error: "Demo budget for today has been used up. Try again tomorrow." },
-      { status: 503 }
-    );
+  // Before the throttle: a body that cannot be read is not a request for anything.
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
-  const body = await req.json();
+  // Read first so the refusal can name the action: a refine or a rebalance is a change to a plan
+  // the traveller already has, and is held to the edit allowance, not the planning one.
+  const bucket = body.rebalance || body.previousItinerary ? "edit" : "plan";
+  const limit = throttle(req, bucket);
+  if (limit.limited) return limitResponse(limit, bucket);
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
   const {
     destination,
     startDate,
@@ -91,7 +96,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ days, runId });
     } catch (err) {
       console.error("[itinerary]", err);
-      return NextResponse.json({ error: GENERATION_ERROR }, { status: 500 });
+      return modelFailureResponse(err, GENERATION_ERROR, "edit");
     }
   }
 
@@ -141,7 +146,7 @@ export async function POST(req: NextRequest) {
       // written for a developer reading a trace, not for someone waiting on a plan, so the
       // real one goes to the server log and the client gets a recovery step.
       console.error("[itinerary]", err);
-      return NextResponse.json({ error: GENERATION_ERROR }, { status: 500 });
+      return modelFailureResponse(err, GENERATION_ERROR, bucket);
     }
   }
 
@@ -207,7 +212,13 @@ export async function POST(req: NextRequest) {
         safeEnqueue("done", result);
       } catch (err) {
         console.error("[itinerary]", err);
-        safeEnqueue("error", { error: GENERATION_ERROR });
+        // The stream's status is already 200, so the timeout code rides in the event instead.
+        safeEnqueue(
+          "error",
+          err instanceof ModelTimeoutError
+            ? { error: TIMEOUT_SENTENCES[bucket], code: "timeout" }
+            : { error: GENERATION_ERROR }
+        );
       } finally {
         clearInterval(keepalive);
         try {

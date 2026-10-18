@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ImageInput } from "./claude";
 import type { ExtractSource } from "./importExtract";
 import { classifyItem, parseGoogleMapsUrl, readLink, resolveFinalUrl, type ImportItem } from "./importSources";
-import { isThrottled } from "./ipThrottle";
-import { isOverDailyCap } from "./spendCap";
+import { throttle } from "./ipThrottle";
+import { capResponse, limitResponse } from "./limitResponse";
+import { dailyCapResumesAt } from "./spendCap";
 import type { Anchor } from "./types";
 
 /**
@@ -21,16 +22,14 @@ const MEDIA = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export async function readImportRequest(
   req: NextRequest,
-  bucket: string
+  bucket: "import" | "import-plan"
 ): Promise<{ items: ImportItem[]; destination: string | null } | NextResponse> {
-  if (isThrottled(req, { bucket, max: 30 })) {
-    // One import is one short model call; a traveller shares several screenshots in a row;
-    // the daily spend cap (isOverDailyCap) stays the real backstop.
-    return NextResponse.json({ error: "Too many requests. Slow down and try again shortly." }, { status: 429 });
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json({ error: "Demo budget for today has been used up. Try again tomorrow." }, { status: 503 });
-  }
+  // One import is one short model call; a traveller shares several screenshots in a row, so the
+  // allowance is 30 (LIMITS); the daily spend cap stays the real backstop.
+  const limit = throttle(req, bucket);
+  if (limit.limited) return limitResponse(limit, bucket);
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "That's a lot at once. Try fewer screenshots." }, { status: 413 });
   }

@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { runClaude } from "@/lib/claude";
 import { cheapModel } from "@/lib/llmConfig";
-import { isThrottled } from "@/lib/ipThrottle";
-import { isOverDailyCap } from "@/lib/spendCap";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse } from "@/lib/limitResponse";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 import { geocodeAnchors } from "@/lib/anchorGeocode";
 import { fetchAnchorHours } from "@/lib/anchorHours";
 import { fetchPoiOsmTags } from "@/lib/poiDetails";
@@ -35,12 +36,10 @@ import type { Anchor } from "@/lib/types";
 const FILL_TIMEOUT_MS = 60_000;
 
 export async function POST(req: NextRequest) {
-  if (isThrottled(req, { bucket: "import-plan-complete", max: 30 })) {
-    return NextResponse.json({ error: "Too many requests. Slow down and try again shortly." }, { status: 429 });
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json({ error: "Demo budget for today has been used up. Try again tomorrow." }, { status: 503 });
-  }
+  const limit = throttle(req, "import-plan-complete");
+  if (limit.limited) return limitResponse(limit, "import-plan-complete");
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
   let body: unknown;
   try {
     body = await req.json();

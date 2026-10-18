@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   DEFAULT_TIMEOUT_MS,
   itineraryTimeoutMs,
+  ModelTimeoutError,
   parseJsonResponse,
   runClaude,
   type SessionOption,
@@ -17,9 +18,10 @@ import {
   itineraryFingerprint,
 } from "@/lib/editPrompt";
 import { applyPatch, PatchOp } from "@/lib/itineraryPatch";
-import { isThrottled } from "@/lib/ipThrottle";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse, modelFailureResponse } from "@/lib/limitResponse";
 import { loadSkill } from "@/lib/skill";
-import { isOverDailyCap } from "@/lib/spendCap";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
 
 interface EditResponse {
@@ -60,18 +62,10 @@ function daysModified(ops: PatchOp[], rejected: { op: PatchOp }[]): number[] {
  * the UI. Raw model output never leaves this route.
  */
 export async function POST(req: NextRequest) {
-  if (isThrottled(req)) {
-    return NextResponse.json(
-      { error: "Too many requests. Slow down and try again shortly." },
-      { status: 429 }
-    );
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json(
-      { error: "Demo budget for today has been used up. Try again tomorrow." },
-      { status: 503 }
-    );
-  }
+  const limit = throttle(req, "edit");
+  if (limit.limited) return limitResponse(limit, "edit");
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
   const body = await req.json();
   const { mode, trip, itinerary, tripId, userAnswers, sessionId, syncedHash } = body as {
     mode: "chat" | "element";
@@ -207,7 +201,9 @@ export async function POST(req: NextRequest) {
       // generated on another device, the home dir was cleaned, or persistence was off when it
       // ran. That must read as "start a fresh conversation", never as a failed edit — losing the
       // traveler's message because a file expired would be the worst outcome here.
-      if (!resumedFrom) throw err;
+      // A timeout is not a missing session: rebuilding would spend a second time limit before the
+      // traveller heard anything.
+      if (!resumedFrom || err instanceof ModelTimeoutError) throw err;
       console.warn(`[trip-edit] session ${resumedFrom} unusable, rebuilding`, err);
       const { messages, dayIndex } = body as {
         messages: { role: "user" | "assistant"; content: string }[];
@@ -300,6 +296,6 @@ export async function POST(req: NextRequest) {
     // Logged, not returned — see the same guard in `/api/trip-generate`. A raw `err.message` from
     // here carries model, prompt and session internals to the browser.
     console.error("[trip-edit]", err);
-    return NextResponse.json({ error: "Edit failed" }, { status: 500 });
+    return modelFailureResponse(err, "Edit failed", "edit");
   }
 }

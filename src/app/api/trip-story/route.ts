@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonResponse, runClaude } from "@/lib/claude";
-import { isThrottled } from "@/lib/ipThrottle";
-import { isOverDailyCap } from "@/lib/spendCap";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse } from "@/lib/limitResponse";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 import { getStoryScript, insertRun, saveStoryScript } from "@/lib/db";
 import { readOwnTrip } from "@/lib/ownerRequest";
 import {
@@ -104,18 +105,10 @@ export async function POST(req: NextRequest) {
   // already written — free, served from `trip_stories` — still spent one of the three requests per
   // ten minutes, and the fourth replay fell back to reading the plan aloud. Only a request that is
   // about to call the model is counted or capped now.
-  if (isThrottled(req)) {
-    return NextResponse.json(
-      { error: "Too many requests. Slow down and try again shortly." },
-      { status: 429 }
-    );
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json(
-      { error: "Demo budget for today has been used up. Try again tomorrow." },
-      { status: 503 }
-    );
-  }
+  const limit = throttle(req, "story");
+  if (limit.limited) return limitResponse(limit, "story");
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
 
   const runId = randomUUID();
   insertRun({ id: runId, kind: "story", destination, tripId: tripId ?? null });

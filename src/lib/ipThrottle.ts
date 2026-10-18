@@ -4,10 +4,32 @@
  * from burning through the whole cap alone. In-memory and per-process: resets on redeploy, which
  * is fine since the spend cap survives restarts (it's DB-backed) and this doesn't need to.
  *
- * Separate buckets exist because a cheap route must not spend the model routes' budget, or be held to it.
+ * One bucket per action, because a cheap route must not spend the model routes' budget, or be held
+ * to it, and because a refusal has to name the action it refused (limitResponse.ts says which).
  */
-const WINDOW_MS = 10 * 60 * 1000;
-const MAX_PER_WINDOW = 3;
+export type Bucket =
+  | "plan"
+  | "edit"
+  | "place-detail"
+  | "story"
+  | "import"
+  | "import-plan"
+  | "import-plan-complete"
+  | "geocode-place";
+
+export const LIMITS: Record<Bucket, { max: number; windowMinutes: number }> = {
+  plan: { max: 3, windowMinutes: 10 },
+  edit: { max: 6, windowMinutes: 10 },
+  "place-detail": { max: 10, windowMinutes: 10 },
+  story: { max: 6, windowMinutes: 10 },
+  import: { max: 30, windowMinutes: 10 },
+  "import-plan": { max: 30, windowMinutes: 10 },
+  "import-plan-complete": { max: 30, windowMinutes: 10 },
+  "geocode-place": { max: 60, windowMinutes: 10 },
+};
+
+/** The longest window, which is how long any key can still matter to the sweep. */
+const SWEEP_AFTER_MS = Math.max(...Object.values(LIMITS).map((l) => l.windowMinutes)) * 60_000;
 
 /** Bounds the map: a stream of distinct IPs (real or forged) cannot grow it without limit. */
 const MAX_KEYS = 10_000;
@@ -27,16 +49,19 @@ const recentByBucketAndIp = new Map<string, number[]>();
  * switch to the deployment's trusted hop instead of guessing here.
  */
 export function clientIp(req: { headers: { get(name: string): string | null } }): string | null {
-  const real = req.headers.get("x-real-ip")?.trim();
-  if (real) return real;
-  const forwarded = req.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || null;
+  const ip = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  // Loopback is no signal either: `next start` forwards a direct request as `x-forwarded-for: ::1`,
+  // so every local caller would share one bucket and an ordinary dev session would trip it.
+  // Without `x-real-ip`, a forged loopback `x-forwarded-for` sits out too, which is no worse than
+  // the rotation that header already allows.
+  if (!ip || /^(127\.|::1$|::ffff:127\.)/.test(ip)) return null;
+  return ip;
 }
 
 /** Drops every key whose window has emptied, then, if still over the cap, the oldest-inserted. */
 function sweep(now: number): void {
   for (const [key, times] of recentByBucketAndIp) {
-    if (times.every((t) => now - t >= WINDOW_MS)) recentByBucketAndIp.delete(key);
+    if (times.every((t) => now - t >= SWEEP_AFTER_MS)) recentByBucketAndIp.delete(key);
   }
   for (const key of recentByBucketAndIp.keys()) {
     if (recentByBucketAndIp.size <= MAX_KEYS) break;
@@ -44,10 +69,20 @@ function sweep(now: number): void {
   }
 }
 
-export function isThrottled(
+export type ThrottleResult =
+  | { limited: false }
+  | { limited: true; retryAfterSeconds: number; limit: number; windowMinutes: number };
+
+/**
+ * Whether this request is over its bucket's limit. Only an accepted request is recorded: a refused
+ * one must not push the wait further out, or a traveller retrying at the countdown's end would
+ * find it reset. So the wait is fixed by the oldest accepted request in the window.
+ */
+export function throttle(
   req: { headers: { get(name: string): string | null } },
-  opts: { bucket?: string; max?: number } = {}
-): boolean {
+  bucket: Bucket,
+  now = Date.now()
+): ThrottleResult {
   // **Gated on having a per-IP signal, not on the transport.** It used to require
   // `LLM_TRANSPORT === "api"`, on the reasoning that only the deployed environment both has an
   // `x-forwarded-for` and costs money. The first half of that is the real condition and the
@@ -58,16 +93,19 @@ export function isThrottled(
   // Absent header still means sit out, for the original reason: a direct localhost request has
   // no signal, every caller would share one bucket, and a normal dev session would trip this.
   const ip = clientIp(req);
-  if (!ip) return false;
-  const bucket = opts.bucket ?? "model";
-  const max = opts.max ?? MAX_PER_WINDOW;
+  if (!ip) return { limited: false };
+  const { max, windowMinutes } = LIMITS[bucket];
+  const windowMs = windowMinutes * 60_000;
   const key = `${bucket}:${ip}`;
-  const now = Date.now();
-  const recent = (recentByBucketAndIp.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
+  const recent = (recentByBucketAndIp.get(key) ?? []).filter((t) => now - t < windowMs);
+  if (recent.length >= max) {
+    recentByBucketAndIp.set(key, recent);
+    return { limited: true, retryAfterSeconds: Math.ceil((recent[0] + windowMs - now) / 1000), limit: max, windowMinutes };
+  }
   recent.push(now);
   recentByBucketAndIp.set(key, recent);
   if (recentByBucketAndIp.size > MAX_KEYS) sweep(now);
-  return recent.length > max;
+  return { limited: false };
 }
 
 /** For tests only. */

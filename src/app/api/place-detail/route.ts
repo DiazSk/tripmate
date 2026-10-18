@@ -4,8 +4,9 @@ import { parseJsonResponse, runClaude } from "@/lib/claude";
 import { buildPlaceDetailPrompt } from "@/lib/itineraryPrompt";
 import { compactItinerary } from "@/lib/editPrompt";
 import { getTrip, insertRun } from "@/lib/db";
-import { isThrottled } from "@/lib/ipThrottle";
-import { isOverDailyCap } from "@/lib/spendCap";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse, modelFailureResponse } from "@/lib/limitResponse";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 import { Itinerary, PlaceDetail } from "@/lib/types";
 
 /**
@@ -36,18 +37,10 @@ function locateStop(
 }
 
 export async function POST(req: NextRequest) {
-  if (isThrottled(req)) {
-    return NextResponse.json(
-      { error: "Too many requests. Slow down and try again shortly." },
-      { status: 429 }
-    );
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json(
-      { error: "Demo budget for today has been used up. Try again tomorrow." },
-      { status: 503 }
-    );
-  }
+  const limit = throttle(req, "place-detail");
+  if (limit.limited) return limitResponse(limit, "place-detail");
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
   const { name, destination, lat, lng, tripId } = await req.json();
 
   if (!name || !destination || typeof lat !== "number" || typeof lng !== "number") {
@@ -98,6 +91,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ detail, runId });
   } catch (err) {
     console.error("[place-detail]", err);
-    return NextResponse.json({ error: "Failed to load place detail" }, { status: 500 });
+    return modelFailureResponse(err, "Failed to load place detail", "place-detail");
   }
 }

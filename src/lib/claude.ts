@@ -3,6 +3,7 @@ import { accessSync, constants, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
+import { ModelTimeoutError } from "./modelTimeout";
 import { appendLlmSessionTurns, createLlmSession, getLlmSession, insertTrace, updateTrace } from "./db";
 import { computeCostUsd } from "./modelPricing";
 import {
@@ -303,6 +304,8 @@ export interface ClaudeResult {
  */
 export type { ClaudeCallType };
 
+export { ModelTimeoutError };
+
 /** A screenshot, base64-encoded, for the chaos-in import. Never persisted anywhere. */
 export interface ImageInput {
   mediaType: "image/jpeg" | "image/png" | "image/webp";
@@ -548,7 +551,7 @@ function runClaudeViaCli(
       settled = true;
       child.kill();
       updateTrace(traceId, { status: "timeout", durationMs: Date.now() - startedAt });
-      reject(new Error(`claude CLI timed out after ${timeoutMs}ms`));
+      reject(new ModelTimeoutError(`claude CLI timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
     child.on("error", (err) => {
@@ -844,7 +847,7 @@ function runClaudeViaApi(
         cacheCreationInputTokens: response.usage.cache_creation_input_tokens,
       });
       // A null cost means `model` has no entry in DEFAULT_PRICES — this call's spend is then
-      // invisible to getSpendSince() (cost_usd stays NULL), so the daily cap silently stops
+      // invisible to getSpendRowsSince() (cost_usd stays NULL), so the daily cap silently stops
       // covering it. No trace row field for this today; a warn is the only signal.
       if (costUsd === null) {
         console.warn(`[claude] no price entry for model "${model}"; spend cap cannot see this call's cost`);
@@ -875,7 +878,7 @@ function runClaudeViaApi(
       const durationMs = Date.now() - startedAt;
       if (controller.signal.aborted) {
         updateTrace(traceId, { status: "timeout", durationMs });
-        throw new Error(`claude API call timed out after ${timeoutMs}ms`);
+        throw new ModelTimeoutError(`claude API call timed out after ${timeoutMs}ms`);
       }
       const message = err instanceof Error ? err.message : String(err);
       // AuthenticationError is a real 401 (an invalid/rejected key). A simply-*missing* key never

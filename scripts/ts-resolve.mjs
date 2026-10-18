@@ -10,8 +10,10 @@ import { pathToFileURL } from "node:url";
  * itinerary.test.mjs only got away with it because its subject has no runtime imports.
  *
  * This hook appends the extension Node won't infer, and nothing else: relative specifiers with no
- * extension are retried as `.ts`, then as `/index.ts`. Registered via `--import` in the `test`
- * script, so it affects the test runner only — the dev server and the build never load it.
+ * extension are retried as `.ts`, then as `/index.ts`. One bare case too: `next/server` is a CJS
+ * file Node will only find as `next/server.js`, so `next/<name>` is retried with `.js` — that is
+ * what lets a module returning a `NextResponse` (limitResponse.ts) be tested. Registered via
+ * `--import` in the `test` script, so it affects the test runner only — the dev server and the build never load it.
  */
 register(
   `data:text/javascript,
@@ -19,6 +21,7 @@ register(
     try {
       return await next(specifier, context);
     } catch (err) {
+      if (/^next\\/[a-z]+$/.test(specifier)) return await next(specifier + ".js", context);
       if (!specifier.startsWith(".") || /\\.[a-z]+$/.test(specifier)) throw err;
       for (const suffix of [".ts", "/index.ts", ".tsx"]) {
         try {

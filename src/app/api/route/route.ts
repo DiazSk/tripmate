@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { type Pt, type RoutableMode, routableMode, routeLegs } from "@/lib/osrmRoute";
 import type { TransportMode } from "@/lib/types";
 import { clientIp } from "@/lib/ipThrottle";
+import { routeLimitSentence } from "@/lib/limitResponse";
 
 /**
  * `GET ?profile=walk|bike|drive&stops=lat,lng|lat,lng[|…]` → the real road-network route between
@@ -49,7 +50,8 @@ const MAX_PER_MINUTE = 60;
 const WINDOW_MS = 60_000;
 const hits = new Map<string, { count: number; windowStart: number }>();
 
-function throttled(req: NextRequest): boolean {
+/** Seconds until this client's window reopens, or 0 when the request is allowed. */
+function throttled(req: NextRequest): number {
   const key = clientIp(req) ?? "unknown";
   const now = Date.now();
   const seen = hits.get(key);
@@ -57,10 +59,10 @@ function throttled(req: NextRequest): boolean {
     hits.set(key, { count: 1, windowStart: now });
     // Bounded so a stream of distinct forwarded-for values cannot grow this without limit.
     if (hits.size > 5_000) for (const [k, v] of hits) if (now - v.windowStart >= WINDOW_MS) hits.delete(k);
-    return false;
+    return 0;
   }
   seen.count += 1;
-  return seen.count > MAX_PER_MINUTE;
+  return seen.count > MAX_PER_MINUTE ? Math.ceil((seen.windowStart + WINDOW_MS - now) / 1000) : 0;
 }
 
 /**
@@ -100,10 +102,19 @@ function parseProfile(raw: string | null): RoutableMode {
 }
 
 export async function GET(req: NextRequest) {
-  if (throttled(req)) {
+  const retryAfterSeconds = throttled(req);
+  if (retryAfterSeconds) {
+    // The same body as limitResponse (ipThrottle buckets) minus `bucket`: this limiter is not one
+    // of them. Sentence is copy row SV-09.
     return NextResponse.json(
-      { error: "Too many route requests. Slow down and try again shortly." },
-      { status: 429, headers: { "Retry-After": "10" } }
+      {
+        error: routeLimitSentence(retryAfterSeconds),
+        code: "rate_limited",
+        retryAfterSeconds,
+        limit: MAX_PER_MINUTE,
+        windowMinutes: 1,
+      },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
     );
   }
 

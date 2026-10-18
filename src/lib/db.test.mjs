@@ -7,13 +7,10 @@ import {
   createLlmSession,
   deleteTrip,
   getLlmSession,
-  getSpendSince,
   getTrip,
   getTripByShareToken,
-  insertTrace,
   insertTrip,
   setTripShareToken,
-  updateTrace,
   updateTripItinerary,
   writeRevisionOver,
 } from "./db.ts";
@@ -35,14 +32,6 @@ test("appendLlmSessionTurns adds to the stored history without dropping earlier 
 
 test("getLlmSession returns undefined for an id that was never created", () => {
   assert.equal(getLlmSession("does-not-exist"), undefined);
-});
-
-test("getSpendSince sums cost_usd for traces at or after the cutoff", () => {
-  const cutoff = new Date(Date.now() - 60_000).toISOString();
-  const before = getSpendSince(cutoff);
-  const id = insertTrace({ type: "generate", prompt: "p", model: "claude-sonnet-4-5" });
-  updateTrace(id, { status: "ok", costUsd: 1.5 });
-  assert.equal(getSpendSince(cutoff), before + 1.5);
 });
 
 /* The one property that cannot be checked from inside a single test: that this file, and the

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateItinerary } from "@/lib/generateItinerary";
-import { isThrottled } from "@/lib/ipThrottle";
-import { isOverDailyCap } from "@/lib/spendCap";
+import { throttle } from "@/lib/ipThrottle";
+import { capResponse, limitResponse } from "@/lib/limitResponse";
+import { dailyCapResumesAt } from "@/lib/spendCap";
 
 /**
  * Steps 5 + 6. The work itself lives in `generateItinerary()` so the dev benchmark harness can
@@ -9,18 +10,10 @@ import { isOverDailyCap } from "@/lib/spendCap";
  * validation in, JSON out.
  */
 export async function POST(req: NextRequest) {
-  if (isThrottled(req)) {
-    return NextResponse.json(
-      { error: "Too many requests. Slow down and try again shortly." },
-      { status: 429 }
-    );
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json(
-      { error: "Demo budget for today has been used up. Try again tomorrow." },
-      { status: 503 }
-    );
-  }
+  const limit = throttle(req, "plan");
+  if (limit.limited) return limitResponse(limit, "plan");
+  const capped = dailyCapResumesAt();
+  if (capped) return capResponse(capped);
   const { reconciled, poiDetails, tripId, destination } = await req.json();
   if (!reconciled || !poiDetails) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { geocodeAnchors } from "@/lib/anchorGeocode";
-import { isThrottled } from "@/lib/ipThrottle";
+import { throttle } from "@/lib/ipThrottle";
+import { limitResponse } from "@/lib/limitResponse";
 import { geocodeDestinationCached } from "@/lib/serverFetchCached";
 
 /**
@@ -15,8 +16,9 @@ export async function GET(req: NextRequest) {
   }
   const place = req.nextUrl.searchParams.get("place")?.trim().slice(0, 200);
   // Only the place form fans out to Photon and Overpass, so only it is held to a per-IP cap.
-  if (place && isThrottled(req, { bucket: "geocode-place", max: 60 })) {
-    return NextResponse.json({ error: "Too many lookups. Try again shortly." }, { status: 429 });
+  if (place) {
+    const limit = throttle(req, "geocode-place");
+    if (limit.limited) return limitResponse(limit, "geocode-place");
   }
 
   try {

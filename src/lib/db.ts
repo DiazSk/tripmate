@@ -406,6 +406,8 @@ db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_share_token ON trips (share_token) WHERE share_token IS NOT NULL`
 );
 addColumnIfMissing("llm_traces", "cost_usd", "REAL");
+// The daily cap reads the last 24h of spend on every model request (getSpendRowsSince).
+db.exec(`CREATE INDEX IF NOT EXISTS idx_llm_traces_created ON llm_traces (created_at, cost_usd)`);
 
 export interface TripRow {
   id: string;
@@ -1131,9 +1133,11 @@ export function insertTrace(params: {
   prompt: string;
   model: string;
   runId?: string;
+  /** For tests that need spend at a known time; a real trace is stamped now. */
+  createdAt?: string;
 }): string {
   const id = randomUUID();
-  const created_at = new Date().toISOString();
+  const created_at = params.createdAt ?? new Date().toISOString();
   db.prepare(
     `INSERT INTO llm_traces (id, type, prompt, model, run_id, status, created_at)
      VALUES (@id, @type, @prompt, @model, @runId, 'pending', @created_at)`
@@ -1701,11 +1705,14 @@ export function appendLlmSessionTurns(id: string, newTurns: unknown[]): void {
 /** Sum of `cost_usd` for traces created at or after `isoCutoff`. Built from a caller-supplied ISO
  *  string, never SQLite's `datetime('now', ...)` — see the CLAUDE.md gotcha on comparing ISO
  *  ("...T...Z") timestamps against SQLite's space-separated `datetime()` output. */
-export function getSpendSince(isoCutoff: string): number {
-  const row = db
-    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) as total FROM llm_traces WHERE created_at >= ?`)
-    .get(isoCutoff) as { total: number };
-  return row.total;
+/** Each costed trace at or after the cutoff, oldest first. ISO-to-ISO compare (see CLAUDE.md). */
+export function getSpendRowsSince(isoCutoff: string): { created_at: string; cost_usd: number }[] {
+  return db
+    .prepare(
+      `SELECT created_at, cost_usd FROM llm_traces
+       WHERE created_at >= ? AND cost_usd IS NOT NULL ORDER BY created_at`
+    )
+    .all(isoCutoff) as { created_at: string; cost_usd: number }[];
 }
 
 /**
