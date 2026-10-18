@@ -242,7 +242,7 @@ export default function WritingThePlan({
                     <span className="wtp-n">{String(i + 1).padStart(2, "0")}</span>
                     {s.label}
                     <span className={`wtp-word${state === "active" ? " is-active" : ""}`}>
-                      {state === "done" ? "Done" : state === "active" ? "Now" : state === "failed" ? "Not run" : "Waiting"}
+                      {state === "done" ? "Done" : state === "active" ? "Now" : state === "failed" ? "Skipped" : "Waiting"}
                     </span>
                   </li>
                 );

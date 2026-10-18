@@ -320,8 +320,16 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
               <form className="tm-fb-glass tm-fb-form" onSubmit={submit} noValidate>
                 <label className={`tm-fb-field tm-fb-where${errors.where ? " has-err" : ""}`}>
                   <span>Where</span>
-                  <input className="tm-fb-input" value={where} onChange={(e) => setWhere(e.target.value)} placeholder="A city, region or country" aria-invalid={!!errors.where} maxLength={120} />
-                  {errors.where && <em>{errors.where}</em>}
+                  <input
+                    className="tm-fb-input"
+                    value={where}
+                    onChange={(e) => setWhere(e.target.value)}
+                    placeholder="A city, region or country"
+                    aria-invalid={!!errors.where}
+                    aria-describedby={errors.where ? "tm-fb-where-error" : undefined}
+                    maxLength={120}
+                  />
+                  {errors.where && <em id="tm-fb-where-error">{errors.where}</em>}
                 </label>
                 <DateRangeFields
                   value={dates}

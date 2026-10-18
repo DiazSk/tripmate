@@ -41,12 +41,12 @@ export async function POST(req: NextRequest) {
       }
       const found = new Set((parsed?.places ?? []).map((p) => p.sourceIndex));
       for (const idx of imageIndices) {
-        if (!found.has(idx)) unread.push({ index: idx, reason: "Couldn't read this screenshot" });
+        if (!found.has(idx)) unread.push({ index: idx, reason: "No places found in this screenshot. Try one where the names are visible." });
       }
     } catch (err) {
       console.error("[import] extract failed", err);
-      for (const idx of imageIndices) unread.push({ index: idx, reason: "Couldn't read this screenshot" });
-      for (const s of sources) unread.push({ index: s.index, reason: "Couldn't read this" });
+      for (const idx of imageIndices) unread.push({ index: idx, reason: "This screenshot couldn’t be read just now. Press Find the places to try it again." });
+      for (const s of sources) unread.push({ index: s.index, reason: "This couldn’t be read just now. Press Find the places to try it again." });
     }
   }
 

@@ -25,11 +25,11 @@ import type { PlanPrefill } from "@/lib/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import { useStoryControls } from "@/lib/storyMode";
 import { PlayIcon } from "@/components/icons";
-import ErrorNote from "@/components/ErrorNote";
+import InlineNote, { HeldNote } from "@/components/InlineNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
 import { capsuleDays } from "@/lib/planProgress";
-import { closestTier, isTripTooLong, MAX_TRIP_DAYS, perPersonBudget, tripDays, TierId, TIERS } from "@/lib/tiers";
+import { closestTier, perPersonBudget, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
   AccessibilityNeeds,
   Anchor,
@@ -63,6 +63,18 @@ import type { StageProgress } from "@/lib/generationStages";
 import { buildDestinationFacts } from "@/lib/destinationFacts";
 import { formatDateRange } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { shouldFallBack } from "@/lib/streamRetry";
+import { useToast } from "@/lib/toast";
+import type { Bucket } from "@/lib/ipThrottle";
+import {
+  failureFromResponse,
+  failureFromStreamError,
+  failureFromThrown,
+  formatResumeTime,
+  holdFromFailure,
+  isAbort,
+  type Failure,
+} from "@/lib/failure";
 
 /* Five `next/dynamic` boundaries, the same `{ ssr: false }` idiom AppShell uses for the globe.
    None of these renders on the landing step — the landing renders `<PolarLanding>` and nothing
@@ -93,14 +105,106 @@ const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), 
 // Behind its own boundary for the same reason: it is only on stage while a plan is being written.
 const WritingThePlan = dynamic(() => import("@/components/polar/WritingThePlan"), { ssr: false });
 
-/** Fallback shown only when the thrown error carries no message of its own. */
-function errorMessage(e: unknown, fallback: string): string {
-  return e instanceof Error && e.message ? e.message : fallback;
+/** Why a run failed. `dropped` is this page's own: the connection died under a stream that had
+ *  opened (or under the one automatic retry), which `failure.ts` cannot tell from a server fault. */
+type RunFailure = Failure | { kind: "dropped" };
+
+/** Thrown by `runStreamed` and `save` so the catch knows what failed, never a sentence to print. */
+class RunError extends Error {
+  constructor(readonly failure: RunFailure) {
+    super(failure.kind);
+  }
 }
 
-/** A cancelled fetch, which is a user decision rather than a failure to report back to them. */
-function isAbort(e: unknown): boolean {
-  return e instanceof DOMException && e.name === "AbortError";
+function runFailureOf(e: unknown): RunFailure {
+  if (e instanceof RunError) return e.failure;
+  const f = failureFromThrown(e);
+  // Online, a TypeError out of fetch or the stream reader is the socket dying, not a server answer.
+  // One thrown by our own event handling never gets here as a TypeError: `runStreamed` wraps it.
+  return f.kind === "server" && e instanceof TypeError ? { kind: "dropped" } : f;
+}
+
+/** A failure written where it happened (the planner's bar, the result panel). `hold` counts the
+ *  `{mm:ss}` in `text` down and then says `resolved`. */
+type Note = { text: string; hold?: { bucket: Bucket; resolved: string } };
+
+/** Copy rows P-33..P-36, P-38, P-39. P-37 (the limit) is a toast, raised by `generate`. */
+function planFailureText(f: RunFailure, destination: string): string {
+  const d = destination.trim();
+  switch (f.kind) {
+    case "offline":
+      return `You’re offline, so your ${d} plan couldn’t be written. Your answers are kept. Press Plan my trip when you’re back online.`;
+    case "dropped":
+      return `The connection dropped while your ${d} plan was being written. Your answers are kept. Press Plan my trip to try again.`;
+    case "timeout":
+      return `Writing your ${d} plan took longer than TripMate allows, so it stopped. Your answers are kept. Press Plan my trip to try again.`;
+    case "daily_cap":
+      return `Planning is paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. Your answers are kept, and your saved trips and the map still work.`;
+    case "invalid":
+      return "TripMate couldn’t read your trip details. Go back to Basics, check the destination, dates and budget, then press Plan my trip.";
+    default:
+      return `TripMate hit a problem writing your ${d} plan and stopped. Your answers are kept. Press Plan my trip to try again.`;
+  }
+}
+
+/** Copy row W-04's {causeShort}: the notification's reason, for a tab the traveller isn't looking at. */
+function causeShort(f: RunFailure): string {
+  switch (f.kind) {
+    case "offline":
+      return "You went offline.";
+    case "dropped":
+      return "The connection dropped.";
+    case "timeout":
+      return "It took too long.";
+    case "rate_limited":
+      return "You’ve planned 3 trips in 10 minutes.";
+    case "daily_cap":
+      return `Planning is paused for everyone until ${formatResumeTime(f.resumesAt)}.`;
+    default:
+      return "TripMate hit a problem.";
+  }
+}
+
+/** Copy rows W-05..W-10: a rework that didn't land. The plan on screen is the one from before. */
+function refineFailureNote(f: RunFailure): Note {
+  switch (f.kind) {
+    case "offline":
+      return { text: "You’re offline, so your change wasn’t made. Your current plan is unchanged. Press Rework the plan when you’re back online." };
+    case "dropped":
+      return { text: "The connection dropped while TripMate was reworking the plan. Your current plan is unchanged. Press Rework the plan to try again." };
+    case "timeout":
+      return { text: "Reworking the plan took longer than TripMate allows, so it stopped. Your current plan is unchanged. Try again, or ask for one change at a time." };
+    case "rate_limited":
+      return {
+        text: "You’ve asked TripMate for 6 changes in the last 10 minutes, which is the limit. Your current plan is unchanged. You can ask for another in {mm:ss}.",
+        hold: { bucket: f.bucket, resolved: "You can ask for changes again." },
+      };
+    case "daily_cap":
+      return {
+        text: `Changes by TripMate are paused for everyone until ${formatResumeTime(f.resumesAt)}. It has reached its limit for the day; it isn’t anything you did. Your plan is unchanged, and you can still keep it and edit it by hand on its trip page.`,
+      };
+    default:
+      return { text: "TripMate hit a problem reworking the plan. Your current plan is unchanged. Press Rework the plan to try again." };
+  }
+}
+
+/** Copy rows W-11..W-15: Keep this trip didn't keep it. */
+function keepFailureText(f: RunFailure, plan: Itinerary): string {
+  if (f.kind === "offline") return "You’re offline, so this trip wasn’t kept. Leave this tab open and press Keep this trip once you’re back online.";
+  if (f.kind === "not_found") {
+    return "This plan’s draft was removed, perhaps in another tab, so it couldn’t be kept. Press Keep this trip to save it as a new trip.";
+  }
+  if (f.kind === "invalid") {
+    // The server names the stop in a sentence for developers; the same check here names it for the traveller.
+    for (const [d, day] of plan.days.entries()) {
+      const stop = day.stops.find((x) => !Number.isFinite(x.lat) || !Number.isFinite(x.lng));
+      if (stop) {
+        return `${stop.name} on day ${d + 1} has no place on the map, so this plan can’t be kept yet. Ask TripMate to replace that stop, then keep it.`;
+      }
+    }
+    return "This plan came back incomplete, so it can’t be kept. Rework the plan, or plan the trip again.";
+  }
+  return "TripMate couldn’t keep this trip: its server had a problem. Your plan is still here. Press Keep this trip to try again.";
 }
 
 /** The same three mappings `pickGroup` applies when a traveler actively changes group type,
@@ -277,6 +381,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // `rawFetchLoading` only gates the POI picker's own loading state.
   const [rawFetch, setRawFetch] = useState<RawFetch | null>(null);
   const [rawFetchLoading, setRawFetchLoading] = useState(false);
+  // The bundle's fetch itself failed (copy row P-31), which `rawFetch === null` alone can't say.
+  const [rawFetchFailed, setRawFetchFailed] = useState(false);
   // Parsed festivals/shopping from the same fire-and-forget warmer below. Kept because the
   // model call has already been paid for — the alternative, fetching destination facts when
   // the loader appears, would mean a second model call for data already sitting in cache.
@@ -421,7 +527,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // lives with the map chrome in `AppShell`. Same commit path the result card's own drag-and-drop
   // uses, so a café added from the map is saved exactly like a dragged stop.
   usePublishItinerary(itinerary, handleRearrange);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Note | null>(null);
+  const { showError } = useToast();
 
   const {
     destinationCoords,
@@ -857,15 +964,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setPlanStep(next);
   }
 
-  /** Cross-field rules the browser's own constraint validation can't express. */
-  function validate(): string | null {
-    if (endDate < startDate) return "End date must be on or after the start date.";
-    if (isTripTooLong(startDate, endDate)) {
-      return `Trips over ${MAX_TRIP_DAYS} days aren't supported. Please choose a shorter date range.`;
-    }
-    return null;
-  }
-
   /** The Step 2b answers, in one place — generation, save and the edit loop must all see the
    *  identical profile or the edit loop starts re-asking what planning already knew. */
   function currentAnswers() {
@@ -912,11 +1010,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * permission and always runs; the Notification is gated on `permitted` (granted at opt-in,
    * see handleNotifyToggle) since firing an unpermitted one throws.
    */
-  function notifyGenerationDone(ok: boolean, permitted: boolean) {
+  function notifyGenerationDone(ok: boolean, permitted: boolean, cause = "") {
     if (typeof document === "undefined" || !document.hidden) return;
 
     const original = document.title;
-    document.title = ok ? "✅ Itinerary ready!" : "⚠️ Generation failed";
+    // Copy row W-03 for the failure.
+    document.title = ok ? "✅ Itinerary ready!" : "Your plan wasn’t written · TripMate";
     const restoreTitle = () => {
       if (!document.hidden) {
         document.title = original;
@@ -926,9 +1025,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     document.addEventListener("visibilitychange", restoreTitle);
 
     if (permitted && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      // Copy row W-04 for the failure.
       const n = new Notification(
-        ok ? "Your itinerary is ready!" : "Itinerary generation failed",
-        { body: ok ? "Click to view your trip." : "Something went wrong. Tap to try again." }
+        ok ? "Your itinerary is ready!" : `Your ${destination.trim()} plan wasn’t written.`,
+        { body: ok ? "Click to view your trip." : `${cause} Open TripMate to try again.` }
       );
       n.onclick = () => {
         window.focus();
@@ -960,7 +1060,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   /**
    * Posts to /api/itinerary with `?stream=1` and updates `stages` as real progress frames
    * arrive via readEventStream. Falls back to the plain (non-streaming) POST if the stream
-   * never opens at all — a network error or non-200 status before any bytes arrive. Once
+   * never opens at all — a network error before any response. A refusal (429, 503) is never
+   * retried, since that would spend the allowance twice. Once
    * streaming has genuinely started, a mid-generation failure is never retried: it would
    * spend another two minutes and a second pair of model calls with no visibility to the
    * traveler that it's happening again.
@@ -974,6 +1075,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * richer events arrive.
    */
   async function runStreamed<T>(
+    /** The allowance this run spends: `plan` for a generate, `edit` for a refine. */
+    bucket: "plan" | "edit",
     body: Record<string, unknown>,
     hooks?: { planned?: (result: T) => void; revised?: (days: DayPlan[]) => void }
   ): Promise<T> {
@@ -990,9 +1093,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
-      return data as T;
+      if (!res.ok) throw new RunError(await failureFromResponse(res, bucket));
+      return (await res.json()) as T;
     };
 
     let res: Response;
@@ -1005,21 +1107,25 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       });
     } catch (e) {
       // An abort must not fall through to the non-streaming retry — that would silently start
-      // the whole two-minute call again immediately after the user asked it to stop.
-      if (controller.signal.aborted) throw e;
+      // the whole two-minute call again immediately after the user asked it to stop. Offline, the
+      // retry could only fail the same way.
+      if (!shouldFallBack({ aborted: controller.signal.aborted, online: navigator.onLine })) throw e;
       return plainFallback();
     }
 
-    if (!res.ok || !res.body) {
-      return plainFallback();
-    }
+    // A refusal is an answer, not a dropped stream, and is never retried: a 429 or a 503 sent again
+    // as a plain POST would spend the allowance a second time on a request already refused. Only a
+    // stream that never opened gets the one retry (`shouldFallBack`, tested in streamRetry.test.mjs).
+    if (shouldFallBack({ response: res, aborted: false, online: true })) return plainFallback();
+    if (!res.ok) throw new RunError(await failureFromResponse(res, bucket));
+    const stream = res.body!;
 
     let result: T | null = null;
-    let failure: string | null = null;
+    let failure: Failure | null = null;
     // Whether a `plan` event has already landed — gates the `error` branch below (Ruling B):
     // a background-critique failure after the plan is on screen must not undo it.
     let planReceived = false;
-    await readEventStream(res.body, (event, data) => {
+    const onEvent = (event: string, data: string) => {
       if (event === "stage") {
         const parsed = JSON.parse(data) as StageEvent;
         setStages((prev) =>
@@ -1041,7 +1147,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           // day never closes until the last stop lands. `|| keep` because the frame is fail-soft:
           // a model that omitted the field sends `""`, which must not blank a date already held.
           days[dayIndex] = { ...days[dayIndex], date: date || days[dayIndex].date, stops };
-          // `tier` is guaranteed set by the time generate() runs (validate() rejects otherwise),
+          // `tier` is guaranteed set by the time generate() runs (the planner's own checks reject otherwise),
           // but it is not narrowed here, and Itinerary["tier"] is required.
           return { tier: (prev?.tier ?? tier) as Itinerary["tier"], days };
         });
@@ -1108,30 +1214,37 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       } else if (event === "done") {
         result = JSON.parse(data) as T;
       } else if (event === "error") {
-        const parsed = JSON.parse(data) as { error: string };
+        const parsed = JSON.parse(data) as { error: string; code?: string };
         // Ruling B: once `plan` is on the wire the traveler already has a working, interactive
         // itinerary. A critique-pass failure at that point is a lost background refinement, not
         // a lost trip — it must not fail the run out from under a plan already being read.
         if (planReceived) {
           console.error("[home] background review failed", parsed.error);
         } else {
-          failure = parsed.error;
+          failure = failureFromStreamError(parsed, bucket);
         }
+      }
+    };
+    // Whatever our own handling throws (a malformed frame, a bug in `planned` or `revised`) is our
+    // fault, not a dropped connection: wrapped here, so only the reader's own errors stay TypeErrors.
+    await readEventStream(stream, (event, data) => {
+      try {
+        onEvent(event, data);
+      } catch (e) {
+        console.error("[home] stream event failed", e);
+        throw new RunError({ kind: "server" });
       }
     });
 
-    if (failure) throw new Error(failure);
-    if (!result) throw new Error("The planner didn't finish. Try generating again.");
+    if (failure) throw new RunError(failure);
+    // The stream closed with neither a plan nor an error: the connection went, not the planner.
+    if (!result) throw new RunError({ kind: "dropped" });
     return result;
   }
 
   async function generate() {
-    const invalid = validate();
-    if (invalid) {
-      setError(invalid);
-      return;
-    }
-
+    // The dates were checked on the planner's own fields before this runs (PlanningFlow's
+    // `validateBasics`, copy rows P-04, P-05, P-07, P-08).
     setGenerating(true);
     setError(null);
     // Back to the map for the new trip. Without this, a traveler who opened the plan on their
@@ -1261,6 +1374,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         runId?: string | null;
         sessionId?: string | null;
       }>(
+        "plan",
         {
           destination,
           startDate,
@@ -1337,8 +1451,20 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         if (planShown) {
           console.error("[home] background review failed", e);
         } else {
-          setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
-          notifyGenerationDone(false, notifyOnDone);
+          const f = runFailureOf(e);
+          if (f.kind === "rate_limited") {
+            // Copy rows P-37, P-37a: a toast that counts the hold down while "Plan my trip" waits.
+            holdFromFailure(f);
+            showError({
+              title: "You’ve planned 3 trips in the last 10 minutes, which is the limit.",
+              detail: "Your answers are kept. You can plan another in {mm:ss}.",
+              hold: f.bucket,
+              resolved: { title: "You can plan another trip now." },
+            });
+          } else {
+            setError({ text: planFailureText(f, destination) });
+          }
+          notifyGenerationDone(false, notifyOnDone, causeShort(f));
         }
       }
     } finally {
@@ -1362,7 +1488,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         itinerary: Itinerary;
         runId?: string | null;
         sessionId?: string | null;
-      }>({
+      }>("edit", {
         destination,
         startDate,
         endDate,
@@ -1384,7 +1510,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setDraftItinerary(null);
       setCoordsDay(null);
       if (!isAbort(e)) {
-        setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
+        const f = runFailureOf(e);
+        if (f.kind === "rate_limited") holdFromFailure(f);
+        setError(refineFailureNote(f));
       }
     } finally {
       setRefining(false);
@@ -1465,7 +1593,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       return data.id as string;
     } catch (e) {
       console.error("[home] draft save failed", e);
-      setDraftState("failed");
+      setDraftState(failureFromThrown(e).kind === "offline" ? "offline" : "failed");
       return null;
     }
   }
@@ -1506,7 +1634,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         })
         .catch((e) => {
           console.error("[home] draft autosave failed", e);
-          setDraftState("failed");
+          setDraftState(failureFromThrown(e).kind === "offline" ? "offline" : "failed");
         });
     }, DRAFT_AUTOSAVE_MS);
     // Restarted on every change, which is what coalesces a run of drags into one write.
@@ -1559,8 +1687,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ itinerary, chatSessionId: lastSessionId, status: "saved" }),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Failed to save trip");
+        if (!res.ok) throw new RunError(await failureFromResponse(res, "edit"));
         // This request carried the itinerary, so there is nothing pending any more — recorded
         // before the navigation so the unmount flush doesn't re-send a plan that just saved.
         persistedDraftRef.current = itinerary;
@@ -1586,11 +1713,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           userAnswers: currentAnswers(),
         }),
       });
+      if (!res.ok) throw new RunError(await failureFromResponse(res, "edit"));
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save trip");
       router.push(`/trip/${data.id}`);
     } catch (e) {
-      setError(errorMessage(e, "We couldn't save this trip. Try again."));
+      const f = runFailureOf(e);
+      // The draft row is gone (copy row W-13): the next Keep inserts the plan as a new trip, and
+      // the footer stops saying it is saved as a draft.
+      if (f.kind === "not_found") {
+        setDraftTripId(null);
+        setDraftState(null);
+      }
+      setError({ text: keepFailureText(f, itinerary) });
       setSaving(false);
     }
   }
@@ -1616,11 +1750,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  trip-fetch bundles in the background; review generates. */
   function advancePlan() {
     if (planStep === "basics") {
-      const invalid = validate();
-      if (invalid) {
-        setError(invalid);
-        return;
-      }
       setError(null);
       // Fire-and-forget: warms the destination_context cache (festivals/safety/
       // shopping/trends) while the user answers the next two steps, so the
@@ -1640,14 +1769,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // candidate POIs, ...) is ready well before the profile step's POI picker
       // needs it. Never awaited here — it must not block advancing the wizard.
       setRawFetchLoading(true);
+      setRawFetchFailed(false);
       fetch("/api/trip-fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destination, startDate, endDate }),
       })
         .then((r) => r.json())
-        .then((data) => setRawFetch(data.rawFetch ?? null))
-        .catch(() => {})
+        .then((data) => {
+          setRawFetch(data.rawFetch ?? null);
+          setRawFetchFailed(!data.rawFetch);
+        })
+        .catch(() => setRawFetchFailed(true))
         .finally(() => setRawFetchLoading(false));
       goToStep("group");
       return;
@@ -1719,7 +1852,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     onJump: goToStep,
     onNext: advancePlan,
     onBack: () => window.history.back(),
-    error,
+    error: error?.text ?? null,
     destination,
     setDestination: (v) => {
       setDestination(v);
@@ -1789,6 +1922,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setConstraintsNote,
     pois: rawFetch?.candidatePois.pois ?? [],
     poisAvailable: rawFetch?.candidatePois.available ?? false,
+    poisFailed: rawFetchFailed,
     poisLoading: rawFetchLoading,
     selectedPois,
     togglePoi,
@@ -1929,8 +2063,21 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           >
             <div className="space-y-6" {...devLabel("ResultPanel")}>
               {/* refine()/save() can fail after the card is already showing — this is the
-                  only place either error would otherwise have nowhere to render. */}
-              {error && <ErrorNote>{error}</ErrorNote>}
+                  only place either error would otherwise have nowhere to render (copy rows
+                  W-05..W-15). Always mounted, so a note put in it is announced; on the panel's own
+                  glass, since this slot sits straight on the map. */}
+              <div aria-live="polite" className={error ? "glass-itinerary rounded-2xl" : undefined}>
+                {error &&
+                  (error.hold ? (
+                    <HeldNote size="section" bucket={error.hold.bucket} resolved={error.hold.resolved}>
+                      {error.text}
+                    </HeldNote>
+                  ) : (
+                    <InlineNote size="section" tone="error">
+                      {error.text}
+                    </InlineNote>
+                  ))}
+              </div>
 
               {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active
                   day and this panel's scroll position both survive the round trip instead of

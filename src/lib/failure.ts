@@ -79,3 +79,22 @@ export function failureFromThrown(
 export function holdFromFailure(f: Failure): void {
   if (f.kind === "rate_limited") holdAction(f.bucket, Date.now() + f.retryAfterSeconds * 1000);
 }
+
+/**
+ * Copy table `{resumeTime}`: when the daily cap lifts, as the traveller's own clock says it —
+ * "about 9:40 tomorrow morning", "about 3:15 this afternoon", "about 11:20 tonight".
+ */
+export function formatResumeTime(at: Date, now: Date = new Date()): string {
+  const h = at.getHours();
+  const time = `${h % 12 || 12}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const part = h < 12 ? "morning" : h < 17 ? "afternoon" : h < 21 ? "evening" : "night";
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(at) - day(now)) / 86_400_000);
+  const when =
+    days <= 0
+      ? part === "night" ? "tonight" : `this ${part}`
+      : days === 1
+        ? `tomorrow ${part}`
+        : `${at.toLocaleDateString([], { weekday: "long" })} ${part}`;
+  return `about ${time} ${when}`;
+}

@@ -2,6 +2,9 @@
 
 import { useId } from "react";
 import { Check, CircleAlert, RotateCw } from "lucide-react";
+import { formatWait, heldUntil, useHold } from "@/lib/actionHolds";
+import type { Bucket } from "@/lib/ipThrottle";
+import { formatClockTime, holdSentence, WAIT } from "@/lib/toastQueue";
 
 type Action = { label: string; onClick: () => void; busy?: boolean };
 
@@ -26,11 +29,14 @@ export default function InlineNote({
   id,
   title,
   action,
+  live = true,
   children,
 }: {
   size: "field" | "item" | "section";
   tone: "error" | "ok" | "muted";
   id?: string;
+  /** Field and item only: false inside a list that is already a live region, so it isn't read twice. */
+  live?: boolean;
   /** Section only: the block's name ("Weather for these dates"). */
   title?: string;
   action?: Action;
@@ -43,14 +49,16 @@ export default function InlineNote({
   if (size === "section") {
     return (
       <div id={id} className={cls} role="group" aria-labelledby={title ? titleId : undefined}>
-        <div className="inline-note-head">
-          {title && (
+        {/* Only a block that failed to load names itself through `title`; a note about an action
+            that didn't land (a plan not written, a change not made) has no title and no tag. */}
+        {title && (
+          <div className="inline-note-head">
             <p id={titleId} className="inline-note-title">
               {title}
             </p>
-          )}
-          {tone === "error" && <span className="inline-note-tag">Couldn&rsquo;t load</span>}
-        </div>
+            {tone === "error" && <span className="inline-note-tag">Couldn&rsquo;t load</span>}
+          </div>
+        )}
         <p className="inline-note-why">{children}</p>
         {action && (
           <button
@@ -70,7 +78,7 @@ export default function InlineNote({
 
   if (size === "field") {
     return (
-      <p id={id} className={cls} aria-live="polite">
+      <p id={id} className={cls} aria-live={live ? "polite" : undefined}>
         {glyph}
         <span>{children}</span>
       </p>
@@ -78,11 +86,14 @@ export default function InlineNote({
   }
 
   return (
-    <span id={id} className={cls} aria-live="polite">
-      <span className="inline-note-status">
-        {glyph}
-        {children}
-      </span>
+    <span id={id} className={cls} aria-live={live ? "polite" : undefined}>
+      {/* Empty while there is nothing to say, so a note kept mounted to be announced shows nothing. */}
+      {children ? (
+        <span className="inline-note-status">
+          {glyph}
+          {children}
+        </span>
+      ) : null}
       {action && (
         <button
           type="button"
@@ -95,5 +106,39 @@ export default function InlineNote({
         </button>
       )}
     </span>
+  );
+}
+
+/**
+ * An inline note for a limit: `children` carries `{mm:ss}`, counted down for the eye only, while a
+ * screen reader gets the sentence once with the end as a clock time (copy row P-37a). At zero it
+ * says `resolved` in the ok tone.
+ */
+export function HeldNote({
+  size,
+  bucket,
+  resolved,
+  id,
+  children,
+}: {
+  size: "field" | "item" | "section";
+  bucket: Bucket;
+  resolved: string;
+  id?: string;
+  children: string;
+}) {
+  const { secondsLeft } = useHold(bucket);
+  if (secondsLeft === null) {
+    return (
+      <InlineNote size={size} tone="ok" id={id}>
+        {resolved}
+      </InlineNote>
+    );
+  }
+  return (
+    <InlineNote size={size} tone="error" id={id}>
+      <span aria-hidden="true">{children.replace(WAIT, formatWait(secondsLeft))}</span>
+      <span className="sr-only">{holdSentence(children, formatClockTime(heldUntil(bucket) ?? 0))}</span>
+    </InlineNote>
   );
 }

@@ -865,19 +865,19 @@
 }
 .pp-money.has-value .pp-money-sign { color: #fff; }
 
-/* A failure the traveller has to act on (a generation that did not finish), above the bar. */
-.pp-alert {
-  margin: 0 calc(var(--wd-pad) + 3em) 0.75em var(--wd-pad);
-  max-width: 44em;
-  padding: 0.8em 1.1em;
-  border: 1px solid rgba(255, 107, 107, 0.45);
-  border-radius: var(--wd-radius-card);
-  background: rgba(9, 11, 16, 0.7);
-  color: var(--alert-on-night);
-  font-size: 0.9em;
+/* A failure the traveller has to act on (a generation that did not finish): an InlineNote section
+   across the top of the sticky bar. The bar wraps only while a note is showing, so Basics keeps its
+   caption and Next on one row. Empty, the region is taken out of the row rather than hidden: it has
+   to stay in the accessibility tree for the note to be announced when it arrives. */
+.pp-bar:has(.pp-alert:not(:empty)) {
+  flex-wrap: wrap;
 }
-@media (max-width: 760px) {
-  .pp-alert {
-    margin-right: var(--wd-pad);
-  }
+.pp-alert:not(:empty) {
+  flex: 1 0 100%;
+}
+.pp-alert:empty {
+  position: absolute;
+}
+.pp-alert .inline-note {
+  background: rgba(9, 11, 16, 0.94);
 }

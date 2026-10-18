@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import "../PolarLanding.css";
 import "./PlanningFlow.css";
-import { DateRangeFields } from "../DateRangeFields";
+import { addDays, DateRangeFields, shortDate } from "../DateRangeFields";
+import InlineNote, { HeldNote } from "@/components/InlineNote";
+import { formatWait, useHold } from "@/lib/actionHolds";
+import { failureFromResponse, failureFromThrown, formatResumeTime, holdFromFailure, isAbort, type Failure } from "@/lib/failure";
 import { TimeField, time12 } from "./TimeField";
 import { INTEREST_TAGS } from "@/components/InterestPicker";
 import { DIETARY_TAGS } from "@/components/DietaryPicker";
@@ -158,6 +161,8 @@ export type PlannerModel = {
 
   pois: CandidatePoi[];
   poisAvailable: boolean;
+  /** The suggestions fetch itself failed (copy row P-31), as against fetching fine and finding none. */
+  poisFailed: boolean;
   poisLoading: boolean;
   selectedPois: CandidatePoi[];
   togglePoi: (p: CandidatePoi) => void;
@@ -240,6 +245,14 @@ export default function PlanningFlow({ model: m }: { model: PlannerModel }) {
       return next;
     });
   const title = useRef<HTMLHeadingElement>(null);
+  // The planner remounts after a failed generation with `m.error` already set, and a live region
+  // that is born holding its text is often not read. So the region mounts empty and the words land a
+  // moment later, as a change it announces. Focus stays where the step puts it.
+  const [shownError, setShownError] = useState<string | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setShownError(m.error), 100);
+    return () => clearTimeout(t);
+  }, [m.error]);
 
   // Each step opens at its title, for a screen reader as much as the eye, and at the top of the form:
   // Next, Back and the stepper all land here, and so does opening the planner from partway down the
@@ -256,13 +269,19 @@ export default function PlanningFlow({ model: m }: { model: PlannerModel }) {
     if (!m.startDate) e.start = "When do you arrive?";
     else if (!m.endDate) e.end = "When do you leave?";
     else if (m.endDate < m.startDate) e.end = "Leave on or after the day you arrive.";
-    else if (facts.days > MAX_TRIP_DAYS) e.end = `Trips can be up to ${MAX_TRIP_DAYS} days.`;
+    else if (facts.days > MAX_TRIP_DAYS)
+      e.end = `Trips can be up to ${MAX_TRIP_DAYS} days, so leave by ${shortDate(addDays(m.startDate, MAX_TRIP_DAYS - 1))}.`;
     if (!m.budget) e.budget = "Roughly what do you want to spend? A total is fine.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
   function next() {
-    if (m.step === "basics" && !validateBasics()) return;
+    // Review re-checks the basics too (copy rows P-07, P-08): a restored draft can reach it with dates
+    // that no longer hold, and the fix belongs on the date field, so that is where it is said.
+    if ((m.step === "basics" || m.step === "review") && !validateBasics()) {
+      if (m.step !== "basics") m.onJump("basics");
+      return;
+    }
     setErrors({});
     m.onNext();
   }
@@ -326,12 +345,16 @@ export default function PlanningFlow({ model: m }: { model: PlannerModel }) {
                 <TripCard {...facts} />
               </div>
 
-              {m.error && (
-                <p role="alert" className="pp-alert">
-                  {m.error}
-                </p>
-              )}
               <div className="pp-bar">
+                {/* Copy rows P-33..P-39: why the plan wasn't written, on the sticky bar above the button
+                    that tries again, so it is in view wherever the review has been scrolled to. */}
+                <div className="pp-alert" aria-live="polite">
+                  {shownError && (
+                    <InlineNote size="section" tone="error" id="pp-plan-error">
+                      {shownError}
+                    </InlineNote>
+                  )}
+                </div>
                 {index > 0 ? (
                   <button type="button" onClick={m.onBack} className="tm-glass">
                     ← Back
@@ -339,9 +362,13 @@ export default function PlanningFlow({ model: m }: { model: PlannerModel }) {
                 ) : (
                   <span className="tm-caption">Free · no account needed · drafts until you keep them</span>
                 )}
-                <button type="submit" className="tm-signal tm-signal-lg">
-                  {m.step === "review" ? "Plan my trip" : "Next"}
-                </button>
+                {m.step === "review" ? (
+                  <PlanButton describedBy={shownError ? "pp-plan-error" : undefined} />
+                ) : (
+                  <button type="submit" className="tm-signal tm-signal-lg">
+                    Next
+                  </button>
+                )}
               </div>
             </form>
         </>
@@ -356,6 +383,17 @@ export default function PlanningFlow({ model: m }: { model: PlannerModel }) {
 }
 
 /* ───────────────────────── pieces ───────────────────────── */
+
+/** "Plan my trip", held while the plan limit's wait runs (copy row P-37): the wait in the label, and
+ *  back to itself at zero. */
+function PlanButton({ describedBy }: { describedBy?: string }) {
+  const { secondsLeft } = useHold("plan");
+  return (
+    <button type="submit" className="tm-signal tm-signal-lg" disabled={secondsLeft !== null} aria-describedby={describedBy}>
+      {secondsLeft === null ? "Plan my trip" : `Plan my trip in ${formatWait(secondsLeft)}`}
+    </button>
+  );
+}
 
 function Section({ title, hint, optional, children }: { title: string; hint?: string; optional?: boolean; children: ReactNode }) {
   return (
@@ -677,12 +715,60 @@ function splitText(text: string): Pending[] {
   return [...urls.map((url) => ({ kind: "url" as const, url })), ...(rest ? [{ kind: "text" as const, text: rest }] : [])];
 }
 type SavedPlace = { id: string; name: string; lat: number | null; lng: number | null; city: string | null; source: string };
+/** A line under the saved places. `error` lines are failures; `held` ones count a limit down. */
+type Note = { text: string; error?: "item" | "section"; held?: { bucket: "import" | "geocode-place"; resolved: string } };
+/* Mirrors importRequest.ts (server code, so not importable here), for copy row P-17. */
+const MAX_IMAGES = 20;
+const MAX_OTHER = 20;
+
+/** Copy rows P-11..P-17: why the places weren't read. The list stays as it was in every case. */
+function importNote(f: Failure | "too_big" | "too_many"): Note {
+  if (f === "too_many")
+    return { error: "section", text: `Up to ${MAX_IMAGES} screenshots and ${MAX_OTHER} links or notes at a time. Remove some and try again.` };
+  if (f === "too_big") return { error: "section", text: "That’s more than 10 MB of screenshots at once. Add fewer, or smaller ones." };
+  switch (f.kind) {
+    case "offline":
+      return { error: "section", text: "You’re offline, so TripMate couldn’t read your places. Your list is kept. Press Find the places again when you’re back online." };
+    case "rate_limited":
+      return {
+        text: "You’ve asked TripMate to read places 30 times in the last 10 minutes, which is the limit. Your list is kept. You can read it again in {mm:ss}.",
+        held: { bucket: "import", resolved: "You can read your places now." },
+      };
+    case "daily_cap":
+      return {
+        error: "section",
+        text: `Reading places is paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. Your list is kept, and you can still answer the rest of the questions.`,
+      };
+    case "invalid":
+      return { error: "section", text: "Your list didn’t reach TripMate in a form it could read. Reload the page and try again." };
+    default:
+      return { error: "section", text: "TripMate couldn’t read your places just now: its server had a problem. Your list is kept. Try Find the places again." };
+  }
+}
+function NoteLine({ n }: { n: Note }) {
+  if (n.held) {
+    return (
+      <HeldNote size="section" bucket={n.held.bucket} resolved={n.held.resolved}>
+        {n.text}
+      </HeldNote>
+    );
+  }
+  if (n.error) {
+    return (
+      <InlineNote size={n.error} tone="error" live={false}>
+        {n.text}
+      </InlineNote>
+    );
+  }
+  return <>{n.text}</>;
+}
 
 function SavedPlaces({ m }: { m: PlannerModel }) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<Pending[]>([]);
   const [busy, setBusy] = useState(false);
-  const [notes, setNotes] = useState<string[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const importHold = useHold("import").secondsLeft;
   const [dragging, setDragging] = useState(false);
   const [saved, setSaved] = useState<SavedPlace[]>([]);
   // Keys this destination's lookup has answered for (found or not). A chip with no coordinates that
@@ -706,7 +792,7 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
   async function read() {
     const items = [...images, ...(text.trim() ? splitText(text) : [])];
     if (items.length === 0) {
-      setNotes(["Paste a link, a list or a note first, or add a screenshot."]);
+      setNotes([{ text: "Paste a link, a list or a note first, or add a screenshot." }]);
       return;
     }
     setBusy(true);
@@ -720,11 +806,18 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
           items: items.map((p) => (p.kind === "image" ? { kind: "image", mediaType: p.mediaType, data: p.data } : p)),
         }),
       });
-      const json = (await res.json()) as { error?: string; destinationGuess?: string | null; places?: Anchor[]; unread?: { index: number; reason: string }[] };
       if (!res.ok) {
-        setNotes([json.error ?? "Couldn't read these right now."]);
+        if (res.status === 413) {
+          const imageCount = items.filter((p) => p.kind === "image").length;
+          setNotes([importNote(imageCount > MAX_IMAGES || items.length - imageCount > MAX_OTHER ? "too_many" : "too_big")]);
+          return;
+        }
+        const f = await failureFromResponse(res, "import");
+        holdFromFailure(f);
+        setNotes([importNote(f)]);
         return;
       }
+      const json = (await res.json()) as { destinationGuess?: string | null; places?: Anchor[]; unread?: { index: number; reason: string }[] };
       const incoming = json.places ?? [];
       // Only a geocoded batch was looked up: with no city to search near, nothing was.
       if (m.destination.trim() || json.destinationGuess) markLooked(incoming.map((p) => p.name));
@@ -740,11 +833,15 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
       });
       if (json.destinationGuess && !m.destination.trim()) m.setDestination(json.destinationGuess);
       const summary = foundSummary(incoming.filter((p) => p.lat !== null).length, incoming.length, city || cityOf(json.destinationGuess ?? ""));
-      setNotes([...(summary ? [summary] : []), ...(json.unread ?? []).map((u) => u.reason)]);
-      setImages([]);
-      setText("");
-    } catch {
-      setNotes(["Couldn't read these right now."]);
+      // Copy rows P-18..P-23: each entry that wasn't read says why, and stays in the box so Find the
+      // places can try it again; the rest leave it, read.
+      const unread = json.unread ?? [];
+      setNotes([...(summary ? [{ text: summary }] : []), ...unread.map((u) => ({ text: u.reason, error: "item" as const }))]);
+      const left = items.filter((_, i) => unread.some((u) => u.index === i));
+      setImages(left.filter((p) => p.kind === "image"));
+      setText(left.map((p) => (p.kind === "url" ? p.url : p.kind === "text" ? p.text : "")).filter(Boolean).join("\n"));
+    } catch (e) {
+      if (!isAbort(e)) setNotes([importNote(failureFromThrown(e))]);
     } finally {
       setBusy(false);
     }
@@ -822,8 +919,8 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
             Or drop screenshots here
           </button>
           <input ref={file} type="file" accept="image/*" multiple className="sr-only" tabIndex={-1} onChange={(e) => void take(Array.from(e.target.files ?? []))} />
-          <button type="button" onClick={() => void read()} disabled={busy} className="tm-fb-quiet">
-            {busy ? <span className="pp-pulse">Reading…</span> : "Find the places"}
+          <button type="button" onClick={() => void read()} disabled={busy || importHold !== null} className="tm-fb-quiet">
+            {busy ? <span className="pp-pulse">Reading…</span> : importHold !== null ? `Find the places in ${formatWait(importHold)}` : "Find the places"}
           </button>
         </div>
       </div>
@@ -833,7 +930,9 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
         {/* Keyed by distance from the end, which stays put when a note is prepended, so an old line
             is not re-mounted and announced again. */}
         {notes.map((n, i) => (
-          <li key={notes.length - i}>{n}</li>
+          <li key={notes.length - i}>
+            <NoteLine n={n} />
+          </li>
         ))}
       </ul>
       {m.anchors.length > 0 && (
@@ -876,10 +975,15 @@ function AnchorChip({
   city: string;
   looked: boolean;
   onLooked: (name: string) => void;
-  onNote: (note: string) => void;
+  onNote: (note: Note) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
+  // Copy rows P-25, P-26: a lookup that didn't answer, said on this chip.
+  const [lookError, setLookError] = useState<string | null>(null);
+  const held = useHold("geocode-place").secondsLeft;
+  const wait = held === null ? "" : ` in ${formatWait(held)}`;
+  const errorId = `pp-look-${anchorKey(a.name).replace(/[^a-z0-9]+/g, "-")}`;
   const found = a.lat !== null && a.lng !== null;
   const state = found ? "is-found" : looked ? "is-missing" : "is-unlooked";
   // The destination's city only for what this destination's lookup found; a library place keeps its own.
@@ -896,24 +1000,37 @@ function AnchorChip({
     const name = raw.trim();
     if (!name || looking) return;
     if (!m.destination.trim()) {
-      onNote("Pick a destination first, then look it up.");
+      onNote({ text: "Pick a destination first, then look it up." });
       return;
     }
     setLooking(true);
+    setLookError(null);
     let hit: { lat: number; lng: number; area: string | null } | null = null;
-    let answered = false;
+    let failure: Failure | null = null;
     try {
       const res = await fetch(`/api/geocode?${new URLSearchParams({ destination: m.destination, place: name })}`);
       // Only 200 and 404 are answers. 429, 5xx, a 400 (no destination yet) or a 422 (the destination
       // itself could not be placed) are a failure to look, and the place is not called missing for them.
       if (res.ok) hit = await res.json();
-      answered = res.ok || res.status === 404;
-    } catch {
-      // Offline or aborted: the same failure to look.
+      else if (res.status !== 404) failure = await failureFromResponse(res, "geocode-place");
+    } catch (e) {
+      failure = failureFromThrown(e);
     }
     setLooking(false);
-    if (!answered) {
-      onNote("Couldn’t look just now — try again.");
+    if (failure) {
+      if (failure.kind === "rate_limited") {
+        holdFromFailure(failure);
+        onNote({
+          text: "You’ve looked up 60 places in the last 10 minutes, which is the limit. You can look again in {mm:ss}.",
+          held: { bucket: "geocode-place", resolved: "You can look places up again." },
+        });
+      } else {
+        setLookError(
+          failure.kind === "offline"
+            ? `You’re offline, so ${name} wasn’t looked up. Try again once you’re back online.`
+            : `The map’s place lookup didn’t answer, so ${name} isn’t checked yet. It hasn’t been marked missing. Try Look up again.`
+        );
+      }
       return; // Nothing renamed; an open editor keeps its text and its focus.
     }
     const key = anchorKey(name);
@@ -927,7 +1044,7 @@ function AnchorChip({
         : prev.map((x) => (x.name === a.name ? { ...x, name, lat: hit?.lat ?? null, lng: hit?.lng ?? null, area: hit?.area ?? undefined } : x))
     );
     onLooked(name);
-    onNote(hit ? `Found ${name}${hit.area ? ` — ${hit.area}` : ""}.` : `Still couldn’t find ${name}. Try a nearby landmark or street.`);
+    onNote({ text: hit ? `Found ${name}${hit.area ? ` — ${hit.area}` : ""}.` : `Still couldn’t find ${name}. Try a nearby landmark or street.` });
     setDraft(null);
     refocus(survivor?.name ?? name);
   }
@@ -981,8 +1098,14 @@ function AnchorChip({
             readOnly={looking}
             aria-busy={looking}
           />
-          <button type="button" className="pp-anchor-text" onClick={() => void lookAgain(draft)} disabled={looking || !draft.trim()}>
-            {looking ? <span className="pp-pulse">Looking…</span> : "Look again"}
+          <button
+            type="button"
+            className="pp-anchor-text"
+            onClick={() => void lookAgain(draft)}
+            disabled={looking || !draft.trim() || held !== null}
+            aria-describedby={lookError ? errorId : undefined}
+          >
+            {looking ? <span className="pp-pulse">Looking…</span> : `Look again${wait}`}
           </button>
         </span>
       )}
@@ -992,9 +1115,23 @@ function AnchorChip({
         </button>
       )}
       {!found && !looked && draft === null && (
-        <button type="button" className="pp-anchor-text" aria-label={`Look up ${a.name}`} aria-busy={looking} onClick={() => void lookAgain(a.name)}>
-          {looking ? <span className="pp-pulse">Looking…</span> : "Look up"}
+        <button
+          type="button"
+          className="pp-anchor-text"
+          aria-label={`Look up ${a.name}`}
+          aria-busy={looking}
+          aria-describedby={lookError ? errorId : undefined}
+          disabled={held !== null}
+          onClick={() => void lookAgain(a.name)}
+        >
+          {looking ? <span className="pp-pulse">Looking…</span> : `Look up${wait}`}
         </button>
+      )}
+      {/* Kept mounted (empty until a lookup fails), so the words arriving are announced. */}
+      {!found && (
+        <InlineNote size="item" tone="error" id={errorId}>
+          {lookError}
+        </InlineNote>
       )}
       <button type="button" aria-label={`Remove ${a.name}`} onClick={() => m.setAnchors((prev) => prev.filter((x) => x.name !== a.name))}>
         ×
@@ -1226,7 +1363,9 @@ function Review({ m, facts }: { m: PlannerModel; facts: TripFacts }) {
             ? "Looking for notable places for these dates."
             : m.poisAvailable && m.pois.length > 0
               ? "Notable places we found for these dates. Add any; we fit the rest around them."
-              : "No suggestions for these dates, so we pick every stop. Add any place you already want."
+              : m.poisFailed
+                ? "Suggestions didn’t load, so TripMate will pick every stop. Add any place you already want."
+                : "No suggestions for these dates, so we pick every stop. Add any place you already want."
         }
         optional
       >

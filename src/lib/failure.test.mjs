@@ -68,3 +68,12 @@ test("thrown errors never leak their message", () => {
     assert.ok(!JSON.stringify(f).includes("Failed to fetch") && !JSON.stringify(f).includes("boom"));
   }
 });
+
+test("formatResumeTime says the cap's end on the traveller's clock", async () => {
+  const { formatResumeTime } = await import("./failure.ts");
+  const now = new Date(2026, 9, 17, 10, 0);
+  assert.equal(formatResumeTime(new Date(2026, 9, 17, 15, 15), now), "about 3:15 this afternoon");
+  assert.equal(formatResumeTime(new Date(2026, 9, 17, 23, 20), now), "about 11:20 tonight");
+  assert.equal(formatResumeTime(new Date(2026, 9, 18, 9, 40), now), "about 9:40 tomorrow morning");
+  assert.equal(formatResumeTime(new Date(2026, 9, 18, 0, 5), now), "about 12:05 tomorrow morning");
+});

@@ -104,18 +104,18 @@ export async function gatherSources(items: ImportItem[]): Promise<GatheredSource
         return;
       }
       if (kind === "instagram") {
-        unread.push({ index, reason: "Instagram links need a screenshot" });
+        unread.push({ index, reason: "Instagram doesn’t let TripMate open its links. Add a screenshot of the post instead." });
         return;
       }
       if (kind === "gmaps") {
         const place = parseGoogleMapsUrl(item.url) ?? parseGoogleMapsUrl((await resolveFinalUrl(item.url)) ?? "");
         if (place) direct.push({ index, anchor: { name: place.name, lat: place.lat, lng: place.lng, priority: "want", source: "import" } });
-        else unread.push({ index, reason: "Couldn't open this link" });
+        else unread.push({ index, reason: "This map link doesn’t say which place it is. Paste the place’s name, or a screenshot." });
         return;
       }
       const link = await readLink(item.url);
       if (link) sources.push({ index, kind, text: [link.title, link.text].filter(Boolean).join("\n") });
-      else unread.push({ index, reason: "Couldn't open this link" });
+      else unread.push({ index, reason: "This page didn’t open for TripMate. It may be private or down. Paste the place names instead." });
     })
   );
   // Images are pushed before any await, so they are already in item order; links finish in any

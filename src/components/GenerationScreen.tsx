@@ -271,7 +271,7 @@ export default function GenerationScreen({
                           : state === "active"
                             ? "now"
                             : state === "failed"
-                              ? "not run"
+                              ? "skipped"
                               : "waiting"}
                       </p>
                     </div>

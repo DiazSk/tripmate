@@ -15,7 +15,7 @@ import { MAX_TRIP_DAYS } from "@/lib/tiers";
 const DAY = 86_400_000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 const ms = (d: string) => Date.parse(`${d}T00:00:00Z`);
-const addDays = (d: string, n: number) => iso(ms(d) + n * DAY);
+export const addDays = (d: string, n: number) => iso(ms(d) + n * DAY);
 /** Today in the visitor's own zone, as `YYYY-MM-DD`. */
 export const todayISO = () => {
   const n = new Date();

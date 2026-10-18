@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { devLabel } from "@/lib/devInspector";
+import InlineNote from "@/components/InlineNote";
+import { formatWait, useHold } from "@/lib/actionHolds";
 
 const primaryButtonClass =
   "inline-flex min-h-11 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
@@ -12,7 +14,7 @@ const ghostButtonClass =
  * Where the plan's automatic draft has got to. `null` means no draft is being tracked at all, so
  * the reassurance line is simply absent — the state this footer shipped in.
  */
-export type DraftState = "pending" | "saved" | "failed" | null;
+export type DraftState = "pending" | "saved" | "failed" | "offline" | null;
 
 /**
  * The one line that tells the traveler their plan is not riding on this button.
@@ -23,21 +25,23 @@ export type DraftState = "pending" | "saved" | "failed" | null;
  * exactly the traveler who never learned it was there. So the state is stated, including when it
  * fails: the failed copy points at the button, which really is the only path left in that case.
  *
- * `role="status"` rather than a bare <p>: the text changes under the traveler without them acting,
- * so a screen reader has to be told, and politely enough not to interrupt the card's own reveal.
+ * An item-sized InlineNote (copy rows W-16..W-18), which is a polite live region: the text changes
+ * under the traveler without them acting, so a screen reader has to be told, and politely enough not
+ * to interrupt the card's own reveal.
  */
 function DraftNote({ state }: { state: DraftState }) {
   if (!state) return null;
-  const failed = state === "failed";
+  const failed = state === "failed" || state === "offline";
   return (
-    <p
-      role="status"
-      className={`mt-0.5 text-xs ${failed ? "text-alert" : "text-muted"}`}
-    >
-      {state === "pending" && "Saving a draft…"}
-      {state === "saved" && "Saved as a draft. Find it under Drafts in My memories."}
-      {failed && "We couldn't save a draft of this. Keep it to be sure it sticks."}
-    </p>
+    <div className="mt-0.5">
+      <InlineNote size="item" tone={failed ? "error" : "muted"}>
+        {state === "pending" && "Saving a draft…"}
+        {state === "saved" && "Saved as a draft. Find it under Drafts in My memories."}
+        {state === "failed" && "A draft of this plan didn’t save, so it isn’t in your memories yet. Press Keep this trip to save it."}
+        {state === "offline" &&
+          "You’re offline, so this plan isn’t saved yet. Leave this tab open and press Keep this trip once you’re back online."}
+      </InlineNote>
+    </div>
   );
 }
 
@@ -67,6 +71,8 @@ export default function FeedbackLoop({
   }, [showFeedback]);
 
   const busy = saving || refining;
+  // Copy row W-09: Rework waits out the edit limit, the wait in its label.
+  const held = useHold("edit").secondsLeft;
 
   return (
     <div className="glass-itinerary rounded-2xl p-5 sm:p-6" {...devLabel("FeedbackLoop")}>
@@ -125,10 +131,10 @@ export default function FeedbackLoop({
                 setFeedback("");
                 setShowFeedback(false);
               }}
-              disabled={!feedback.trim() || busy}
+              disabled={!feedback.trim() || busy || held !== null}
               className={primaryButtonClass}
             >
-              {refining ? "Reworking…" : "Rework the plan"}
+              {refining ? "Reworking…" : held !== null ? `Rework the plan in ${formatWait(held)}` : "Rework the plan"}
             </button>
           </div>
         </div>
