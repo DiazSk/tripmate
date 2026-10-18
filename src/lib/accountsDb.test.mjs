@@ -13,6 +13,7 @@ import {
   insertTrace,
   insertTrip,
   insertTripArtifacts,
+  isAccountOwnerId,
   listSavedPlaces,
   listTrips,
   putAvatar,
@@ -140,4 +141,11 @@ test("deleteAccountData removes a generation that was never linked to its trip",
 
   assert.equal(deleteAccountData("user_acc_unlinked"), true);
   assert.equal(rawDb.prepare(`SELECT COUNT(*) AS n FROM generations WHERE run_id = ?`).get(runId).n, 0);
+});
+
+test("isAccountOwnerId is true only for an account's owner id", () => {
+  const a = getOrCreateAccount("user_acc_is_owner");
+  assert.equal(isAccountOwnerId(a.owner_id), true);
+  assert.equal(isAccountOwnerId(randomUUID()), false);
+  assert.equal(isAccountOwnerId("local"), false);
 });

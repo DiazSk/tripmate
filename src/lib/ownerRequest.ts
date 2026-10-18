@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { clerkConfigured } from "./clerkConfig";
-import { getAccountImage, getOrCreateAccount, getTrip, type TripRow } from "./db";
+import { getAccountImage, getOrCreateAccount, getTrip, isAccountOwnerId, type TripRow } from "./db";
 import { OWNER_COOKIE, readableOwners, resolveOwnerId } from "./owner";
 
 /**
@@ -44,7 +44,11 @@ export async function currentOwner(): Promise<RequestOwner> {
   if (userId) return { id: getOrCreateAccount(userId).owner_id, signedIn: true };
 
   const store = await cookies();
-  return { id: resolveOwnerId(store.get(OWNER_COOKIE)?.value), signedIn: false };
+  const id = resolveOwnerId(store.get(OWNER_COOKIE)?.value);
+  // An account's id arriving as an anonymous credential (the `X-TripMate-Owner` header, or a
+  // cookie) is someone who learned it, not the account. A throwaway id reads nothing, owns nothing.
+  if (isAccountOwnerId(id)) return { id: crypto.randomUUID(), signedIn: false };
+  return { id, signedIn: false };
 }
 
 export interface AccountView {

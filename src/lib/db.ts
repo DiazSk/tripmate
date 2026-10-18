@@ -1530,6 +1530,11 @@ export function clerkUserForOwner(ownerId: string): string | null {
   return row?.clerk_user_id ?? null;
 }
 
+/** Whether an owner id belongs to a Clerk account rather than an anonymous cookie or device. */
+export function isAccountOwnerId(ownerId: string): boolean {
+  return !!db.prepare(`SELECT 1 FROM accounts WHERE owner_id = ?`).get(ownerId);
+}
+
 /**
  * The account for a Clerk user, created on first sight. Read first: this runs on every signed-in
  * request, and against Turso an unconditional insert is a write round trip each time. Only a miss
@@ -1809,7 +1814,7 @@ export function deleteSavedPlace(ownerId: string, id: string): boolean {
  * traveller would notice was wrong.
  */
 export function claimAnonymousOwner(fromOwnerId: string, toOwnerId: string): number {
-  // Four refusals, and each is a different way to destroy data rather than move it.
+  // Five refusals, and each is a different way to destroy data rather than move it.
   //
   // `LEGACY_OWNER` as the source is the dangerous one: it is a *shared* bucket holding every row
   // written before ownership existed, visible to everybody. Claiming it would hand one arbitrary
@@ -1818,6 +1823,9 @@ export function claimAnonymousOwner(fromOwnerId: string, toOwnerId: string): num
   if (fromOwnerId === toOwnerId) return 0;
   if (fromOwnerId === LEGACY_OWNER || toOwnerId === LEGACY_OWNER) return 0;
   if (!isValidOwnerId(fromOwnerId) || !isValidOwnerId(toOwnerId)) return 0;
+  // An account's id is not a source: a signed-in caller could name any account's id (it appears in
+  // its avatar URL) and move that account's trips into their own. Only anonymous ids are claimable.
+  if (isAccountOwnerId(fromOwnerId)) return 0;
 
   db.prepare("BEGIN").run();
   try {

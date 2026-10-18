@@ -7,6 +7,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import {
   claimAnonymousOwner,
+  getOrCreateAccount,
   insertTrip,
   listSavedPlaces,
   listTrips,
@@ -116,4 +117,14 @@ test("a place the account already saved does not break the claim", () => {
   const names = listSavedPlaces(user, true).map((r) => r.name).sort();
   assert.deepEqual(names, ["Fushimi Inari", "Gion"]);
   assert.equal(listSavedPlaces(anon, true).length, 0);
+});
+
+test("claim refuses an id that belongs to another account", () => {
+  const x = getOrCreateAccount(`user_${randomUUID()}`);
+  const y = getOrCreateAccount(`user_${randomUUID()}`);
+  const t = trip(y.owner_id);
+
+  assert.equal(claimAnonymousOwner(y.owner_id, x.owner_id), 0);
+  assert.equal(listTrips("saved", y.owner_id, true).some((r) => r.id === t.id), true);
+  assert.equal(listTrips("saved", x.owner_id, true).length, 0);
 });
