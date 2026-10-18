@@ -38,6 +38,8 @@ export default function ErrorDialog({
   title: string;
   why: React.ReactNode;
   now: React.ReactNode;
+  /** The safe choice (signal, focused, what Esc and a backdrop click pick). Keep the handler
+   *  idempotent: a second Esc can call it again when it leaves the dialog open. */
   primary: Choice;
   secondary: Choice;
   detail?: string;

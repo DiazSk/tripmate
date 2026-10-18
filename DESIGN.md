@@ -1072,8 +1072,8 @@ toward neutral just underexposes the photo and reads as a dimmed screen. Alphas 
 route arcs, not just the ground — the arcs live inside the Cesium canvas and get multiplied too.
 
 ### Confirm Dialog
-The app's one modal, and deliberately its only one: it exists for actions that cannot be undone and
-nothing else. Native `<dialog>` driven by `showModal()`, which buys the four things a modal has to get
+The app's modal for actions that cannot be undone and nothing else (the one other modal is the Error
+dialog, below, for a failure that blocks). Native `<dialog>` driven by `showModal()`, which buys the four things a modal has to get
 right — a focus trap, Esc-to-close, the rest of the page going `inert`, and top-layer rendering. The
 panel is `.glass-itinerary` over a real `::backdrop` (black at 0.55 with a 4px blur) rather than a
 sibling overlay div, so it cannot be covered and needs no z-index in a shell that already stacks four
@@ -1081,6 +1081,42 @@ layers. `open` cannot be an attribute — `<dialog open>` renders *non*-modally,
 focus trap and no backdrop — so an effect must translate the prop into imperative calls, and Esc's
 `cancel` event must be routed back through `onCancel` or the element closes while the parent still
 thinks it is open.
+
+### Error messages: Toast, Error dialog, Inline note
+Three patterns, chosen in this order: **inline** unless the failure has no place on screen, **toast**
+unless it blocks, **dialog** only then. Copy is a table row each (`docs/superpowers/plans/2026-10-17-error-messages-copy.md`);
+no screen shows a status code, `e.message` from a fetch, or "something went wrong". Glyph plus words,
+never colour alone, at 11px or more. The alert text on dark glass is the token `--alert-on-night`
+(`#ffb3b3`, 11.1:1 on deep); on a light surface it is `--wd-alert-text`; positive on night is
+`{colors.tag-positive-fg}`. Shared buttons are `.err-btn` in three weights: signal, quiet, text.
+
+- **Toast (error kind)** (`.toast-error`, from `useToast().showError`): night glass, a 2px alert rule on
+  its left edge, a glyph, a title, an optional detail and at most one text action, with a dismiss ×. It
+  stacks top centre under the navbar (three at most, the oldest dropped; shifted clear of the trip
+  page's search sheet and board), in a polite `role="status"` region that is always mounted, and it stays
+  until dismissed or resolved; success toasts keep their 3.2s fade. A **hold toast** is a limit with a
+  countdown: `{mm:ss}` in the detail counts down for the eye only, a thin bar drains beneath it, and a
+  screen reader hears the sentence once with the end as a clock time. At zero it swaps to its
+  `resolved` copy, or goes if it has none.
+- **Error dialog** (`ErrorDialog`): the Confirm dialog's native `<dialog>`, re-dressed as `role="alertdialog"`
+  on night glass at 32.5rem. A warning glyph and eyebrow, the outcome as a 26px title, then **Why**
+  (the cause, and what was or wasn't lost) and **Now** (what the buttons do). Two buttons: the safe
+  choice is signal, takes focus on open, and is what Esc and a backdrop click pick. `pending` relabels
+  it and makes both choices ignore presses. The trip page's failed save is its only user.
+- **Inline note** (`InlineNote`): the failure written on the thing that failed, in three sizes. `field`
+  sits under its control (`aria-describedby` from the control); `item` rides a row or chip with its own
+  text action; `section` stands in for a block that could not load, a dashed frame in the block's own
+  space with a "Couldn't load" tag, the why and a retry. Polite, never moves focus, and kept mounted so
+  a change is announced. `HeldNote` is its limit form, counting down and resolving to the ok tone.
+- **Page error** (`PageError`): the section note in a glass card with a way forward, shared by the route
+  boundaries (`error.tsx` at `/`, `/trips` and `/trip/[id]`, `not-found.tsx`). `global-error.tsx`
+  renders outside the layout, so its alert colour is a literal `#ffb3b3` rather than the token.
+
+**Two deliberate exceptions.** The hold toast draws its rule, glyph and progress bar in **signal orange**
+(`--accent`), as on the approved canvas: a limit is a wait rather than a failure, and it is the one
+place signal marks something that cannot be pressed — an exception to The One Hand Rule. And
+`#ffb3b3` is no longer a loose hex: it is `--alert-on-night`, declared once in `globals.css`.
+`ErrorNote.tsx` is kept only for the unmounted Blue Hour landing and mounts nowhere else.
 
 ### The Wait (signature)
 Since Polar, a new plan is written on **Writing the Plan** (above); this band shows only while an
@@ -1271,9 +1307,10 @@ grammar is drawn with lines and circles, not silhouette.
 - **Do** move `ACCENT_HUE_BAND` in `src/lib/mapRoute.ts` by hand whenever `--accent` moves. A CSS sweep
   misses it and the failure is silent.
 - **Do** add `pointer-events-auto` to every interactive box you place inside the shell's overlay.
-- **Do** put every failed request in an `ErrorNote` — one component, one treatment, `role="alert"`, on
-  every route — and check `res.ok` before reading the body. A 500 whose payload has no data key
-  silently rendered `/trips`' empty state, telling the visitor their saved trips were gone.
+- **Do** put every failed request in one of the three error patterns (inline, toast, dialog), chosen
+  in that order and read through `failureFromResponse`, and check `res.ok` before reading the body. A
+  500 whose payload has no data key silently rendered `/trips`' empty state, telling the visitor their
+  saved trips were gone.
 - **Do** hide a surface with `hidden` rather than unmounting it when its state is worth keeping.
   `{!selectedStop && <ItineraryCard/>}` threw away the active day index, the panel's scroll position
   and any running tour every time someone opened a place detail. When you do this, stop side effects

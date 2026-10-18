@@ -1702,10 +1702,9 @@ export function appendLlmSessionTurns(id: string, newTurns: unknown[]): void {
   );
 }
 
-/** Sum of `cost_usd` for traces created at or after `isoCutoff`. Built from a caller-supplied ISO
+/** Each costed trace at or after `isoCutoff`, oldest first. The cutoff is a caller-supplied ISO
  *  string, never SQLite's `datetime('now', ...)` — see the CLAUDE.md gotcha on comparing ISO
  *  ("...T...Z") timestamps against SQLite's space-separated `datetime()` output. */
-/** Each costed trace at or after the cutoff, oldest first. ISO-to-ISO compare (see CLAUDE.md). */
 export function getSpendRowsSince(isoCutoff: string): { created_at: string; cost_usd: number }[] {
   return db
     .prepare(
