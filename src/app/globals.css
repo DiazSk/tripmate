@@ -116,6 +116,17 @@ html {
   /* ALERT: over budget, failed requests, destructive confirmation. 6.91:1 on the card. */
   --alert: #ff6b6b;
   --alert-soft: rgba(255, 107, 107, 0.16);
+  /* Alert as *text* on dark glass: the error toast, the error dialog, an inline note on night.
+     --alert drops to ~4.3:1 over a scrimmed photograph; this holds 11.1:1 on deep. Not re-pointed
+     by the light scope: a light surface uses --wd-alert-text (see .inline-note). */
+  --alert-on-night: #ffb3b3;
+  /* The inline note's alert, per appearance: re-pointed by the light scope, and back by a dark
+     island (`data-appearance="dark"`, in the error-messages section) inside a light page. */
+  --note-alert: var(--alert-on-night);
+  /* Night's values, captured for chrome that stays dark inside a light scope (the error dialog). A
+     var() resolves where it is declared, so these keep night's values below [data-appearance="light"]. */
+  --night-muted: var(--muted);
+  --night-deep-rgb: var(--surface-deep-rgb);
 
   /* Text over any dark surface: header band, photo overlays, scrims, the map. Never moves with
      appearance — a photograph is dark in both. */
@@ -457,6 +468,8 @@ html {
   --money-soft: rgba(31, 42, 68, 0.1);
   --alert: #d10f0f;
   --alert-soft: rgba(209, 15, 15, 0.1);
+  /* --wd-alert-text when this scope is also .tm, its own value (#d10f0f) otherwise. */
+  --note-alert: var(--wd-alert-text, #d10f0f);
   --card-border: rgba(31, 42, 68, 0.12);
   --tag-neutral-bg: rgba(31, 42, 68, 0.06);
   --tag-neutral-fg: #2c374b;
@@ -3925,20 +3938,397 @@ html[data-story-mode="true"] .marker-day-label {
   }
 }
 
-/* The toast's entrance. Kept here rather than as a Tailwind arbitrary keyframe because the
-   `motion-safe:` variant on the element is what gates it — a reduced-motion profile gets the
-   toast with no travel at all, which is the correct degradation for a thing that appears at the
-   bottom of the screen unbidden. Short and small: a confirmation that slides a long way reads as
-   more important than it is. */
+/* The toast's entrance. Kept here rather than as a Tailwind arbitrary keyframe because a
+   reduced-motion profile has to get the toast with no travel at all (the success toast gates it
+   with `motion-safe:`, the error toast with the media query below). The stack sits under the
+   navbar, so a toast drops in from above. Short and small: a message that slides a long way reads
+   as more important than it is. */
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(-8px) scale(0.98);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* --- Error messages: toast, dialog, inline note (canvas "Errors · 1-3") ----------------------
+   Shared buttons first. Three weights from the canvas: signal (the safe choice in a dialog),
+   quiet (the other choice; a section's retry) and text (a toast's or an item's one action). */
+.err-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1.125rem;
+  border: 0;
+  border-radius: 2px;
+  font: 600 0.9rem/1 var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.err-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.err-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.err-btn svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+.err-btn-signal {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.err-btn-signal:hover {
+  background: var(--accent-hover);
+}
+.err-btn-quiet {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+.err-btn-quiet:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+.err-btn-text {
+  height: 1.75rem;
+  padding: 0 0.375rem;
+  background: none;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+.err-eyebrow {
+  margin: 0;
+  font-family: var(--font-condensed-stack), "Arial Narrow", Arial, sans-serif;
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The stack: top centre under the navbar, for both kinds. The stack is a strip of free map, and
+   each toast centres in it at the canvas's 520px or the strip's width, whichever is less. The strip
+   ignores the pointer so the map stays draggable between toasts; each toast opts back in. */
+.toast-stack {
+  position: fixed;
+  top: calc(var(--nav-h) + 1.25rem);
+  left: 1rem;
+  right: 1rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  pointer-events: none;
+}
+.toast-stack > * {
+  /* 20rem is the floor: a strip squeezed narrower lets the toast overhang it (centred) rather than
+     wrap its text a few words a line. The viewport still bounds it. */
+  width: min(32.5rem, 100vw - 2rem, max(100%, 20rem));
+  pointer-events: auto;
+}
+/* The trip page keeps its own chrome in the top row (the map search left, Map/Satellite right), so
+   the strip starts below it (1rem inset + the 2.9rem search + a gap). The open search sheet holds the
+   left edge (TripSpotlight.css's width, 1.25rem in, plus a 1rem gap); from 961px the plan column or
+   a drawer holds the right, at the width TripView writes to --trip-drawer-w. When a drawer holds the
+   right, the sheet's edge is not honoured: both together leave almost no map at 961px, and the toast
+   sits above the sheet (z 50 against 25), so overlapping it beats a column of one-word lines. */
+@media (width >= 40rem) {
+  :root:has(.trip-page) .toast-stack {
+    top: calc(var(--nav-h) + 4.65rem);
+  }
+  :root:has(.trip-spotlight):not(:has(.trip-page.has-drawer)) .toast-stack {
+    left: calc(2.25rem + clamp(17.5rem, 36vw, 27rem));
+  }
+}
+@media (width > 960px) {
+  :root:has(.trip-board.docked-panel) .toast-stack,
+  :root:has(.trip-page.has-drawer) .toast-stack {
+    right: calc(var(--trip-drawer-w, 0px) + 2.25rem);
+  }
+}
+/* Always dark glass, on any screen: the stack is mounted by AppShell, outside every light scope. */
+.toast-error {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.875rem 0.75rem 0.875rem 1rem;
+  background: rgb(var(--surface-deep-rgb) / 0.9);
+  backdrop-filter: blur(18px) saturate(1.1);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-left: 2px solid var(--alert-on-night);
+  border-radius: 0.25rem;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.45);
+  color: var(--on-deep);
+}
+/* A hold is a wait, not a failure: the canvas marks it in signal (rule, glyph, bar). */
+.toast-error.is-hold {
+  border-left-color: var(--accent);
+}
+.toast-error-glyph {
+  padding-top: 1px;
+  color: var(--alert-on-night);
+}
+.toast-error.is-hold .toast-error-glyph {
+  color: var(--accent);
+}
+.toast-error-glyph svg {
+  display: block;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.toast-error-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.90625rem;
+  line-height: 1.35;
+}
+.toast-error-detail {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.toast-error-detail strong {
+  font-weight: 600;
+  color: var(--on-deep);
+  font-variant-numeric: tabular-nums;
+}
+.toast-error-bar {
+  margin-top: 0.625rem;
+  height: 2px;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+.toast-error-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 1s linear;
+}
+.toast-error-action {
+  align-self: center;
+  color: var(--on-deep);
+}
+.toast-error-x {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 2px;
+  color: var(--muted);
+}
+.toast-error-x:hover {
+  color: var(--on-deep);
+  background: rgb(255 255 255 / 0.08);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .toast-error {
+    animation: toast-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+/* The canvas draws Dismiss and the text actions at 24-28px. On a coarse pointer the press reaches
+   44px through a transparent ::after centred on each, so the drawn size stays the canvas's (the
+   pattern at the foot of TripBoard.css and TripSpotlight.css). */
+@media (pointer: coarse) {
+  .toast-x,
+  .toast-error-x,
+  .toast-error-action,
+  .inline-note .err-btn-text {
+    position: relative;
+  }
+  .toast-x::after,
+  .toast-error-x::after,
+  .toast-error-action::after,
+  .inline-note .err-btn-text::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    translate: -50% -50%;
+  }
+}
+
+/* The error dialog. Centring, the backdrop, the entrance and the pointer-events opt-in come from
+   .confirm-dialog; this is the canvas's panel. The night roles are re-declared because the dialog
+   can be mounted inside a light drawer, and the cascade follows the DOM, not the top layer. The
+   padding is on the inner body, so a click whose target is the <dialog> itself is the backdrop. */
+.error-dialog {
+  color-scheme: dark;
+  --foreground: var(--on-deep);
+  --muted: var(--night-muted);
+  --accent-text: var(--accent);
+  width: min(32.5rem, calc(100vw - 2rem));
+  max-width: none;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.375rem;
+  background: rgb(var(--night-deep-rgb) / 0.94);
+  backdrop-filter: blur(18px) saturate(1.1);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
+  color: var(--foreground);
+}
+.error-dialog-body {
+  padding: 1.75rem 1.875rem 1.5rem;
+}
+.error-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--alert-on-night);
+}
+.error-dialog-head svg {
+  width: 1.375rem;
+  height: 1.375rem;
+  flex: none;
+}
+.error-dialog-title {
+  margin: 0.875rem 0 1.125rem;
+  font-weight: 600;
+  font-size: 1.625rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.error-dialog-reason {
+  margin: 0 0 1.5rem;
+  display: grid;
+  grid-template-columns: 3.25rem 1fr;
+  gap: 0.625rem 0.875rem;
+}
+.error-dialog-reason dt {
+  padding-top: 3px;
+}
+.error-dialog-reason dd {
+  margin: 0;
+  font-size: 0.90625rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--on-deep) 88%, transparent);
+}
+.error-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.625rem;
+}
+.error-dialog-actions .err-btn {
+  height: 2.75rem;
+}
+.error-dialog-detail {
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  font-size: 0.71875rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+/* The inline note, at three sizes. --note-fg is the tone; the alert is --note-alert, declared per
+   appearance: the dark-glass text on night and in a dark island, --wd-alert-text in a light scope.
+   Positive and muted re-point with the scope on their own. Glyph plus words
+   on every tone but muted, never colour alone. */
+.inline-note {
+  --note-fg: var(--alert-on-night);
+  color: var(--note-fg);
+  /* It can land inside AppShell's pointer-events-none overlay; its action must stay pressable. */
+  pointer-events: auto;
+}
+.inline-note.is-ok {
+  --note-fg: var(--tag-positive-fg);
+}
+.inline-note.is-muted {
+  --note-fg: var(--muted);
+}
+.inline-note.is-error {
+  --note-fg: var(--note-alert);
+}
+[data-appearance="dark"] {
+  --note-alert: var(--alert-on-night);
+}
+.inline-note svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex: none;
+}
+.inline-note.is-field {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.84375rem;
+  line-height: 1.45;
+}
+.inline-note.is-field svg {
+  margin-top: 2px;
+}
+.inline-note.is-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+}
+.inline-note-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 600;
+}
+.inline-note.is-muted .inline-note-status {
+  font-weight: 500;
+}
+.inline-note.is-item .err-btn-text {
+  height: 1.5rem;
+}
+.inline-note.is-section {
+  display: grid;
+  justify-items: start;
+  gap: 0.625rem;
+  padding: 1rem 1.125rem;
+  border: 1px dashed var(--card-border);
+  border-radius: 0.25rem;
+}
+.inline-note-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.inline-note-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--foreground);
+}
+.inline-note-tag {
+  font-family: var(--font-condensed-stack), "Arial Narrow", Arial, sans-serif;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--note-fg) 45%, transparent);
+  border-radius: 2px;
+  padding: 3px 7px;
+}
+.inline-note-why {
+  margin: 0;
+  max-width: 44em;
+  font-size: 0.84375rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--foreground) 86%, transparent);
 }
 
 /* --- The footer's arrival ---------------------------------------------------------------------

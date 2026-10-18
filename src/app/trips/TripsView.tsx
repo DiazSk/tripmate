@@ -303,6 +303,7 @@ export default function TripsView({
         }
         confirmLabel={pendingDelete?.status === "draft" ? "Discard draft" : "Delete trip"}
         pending={deleting}
+        pendingLabel={pendingDelete?.status === "draft" ? "Discarding…" : "Deleting…"}
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

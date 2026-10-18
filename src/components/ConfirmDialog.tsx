@@ -24,6 +24,7 @@ export default function ConfirmDialog({
   body,
   confirmLabel,
   pending = false,
+  pendingLabel = "Working…",
   onConfirm,
   onCancel,
 }: {
@@ -33,6 +34,8 @@ export default function ConfirmDialog({
   confirmLabel: string;
   /** Disables both buttons and relabels confirm while the action is in flight. */
   pending?: boolean;
+  /** Confirm's label while pending, named for the action ("Deleting…", "Discarding…"). */
+  pendingLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -94,7 +97,7 @@ export default function ConfirmDialog({
           disabled={pending}
           className="inline-flex min-h-11 items-center rounded-full bg-alert px-4 text-sm font-medium text-white transition-colors hover:bg-alert disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-alert focus-visible:outline-none"
         >
-          {pending ? "Deleting…" : confirmLabel}
+          {pending ? pendingLabel : confirmLabel}
         </button>
       </div>
     </dialog>

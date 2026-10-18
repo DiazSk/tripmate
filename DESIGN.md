@@ -320,7 +320,6 @@ components:
 > | 1, 2, 3px radii | `polar/planner/PlanningFlow.css` | the planner's chips, rhythm-bar blocks and time-panel cells, from the canvas design "TripMate Planning flow (web)" |
 > | 20px | `polar/planner/PlanningFlow.css` | the time panel's typed readout, matching the range calendar's 20px edge values |
 > | `#d64545`, `#8a8780`, `#535353` | `polar/planner/PlanningFlow.css` | the time panel's invalid-entry ring, placeholder and labels, on its white panel like the calendar's |
-> | `#ffb3b3` | `polar/planner/PlanningFlow.css` | the text of the planner's failure alert above Back and Next, on dark glass |
 >
 > The design check's matching ignores live in `.impeccable/config.json`, scoped to those files. That
 > folder is gitignored here, so this table is the shared record.
@@ -633,7 +632,7 @@ inset clips are scroll effects on photographs, not shapes.
   With all three places taken the slot of an unstarred chip is dashed and see-through, set a gap off the chip.
 - **Saved-place chips** (`.pp-anchor`): star, name, status, remove. The status is always words: found is
   "✓" plus where, in `{colors.tag-positive-fg}` with its edge tinted to match; not found is "Not found —
-  try a nearby landmark" in the failure-alert text on dark glass (`#ffb3b3`, as `.pp-alert`; `--alert`
+  try a nearby landmark" in the failure-alert text on dark glass (`--alert-on-night`, `#ffb3b3`, as `.pp-alert`; `--alert`
   drops to ~4.3:1 over the scrimmed photo) with an underlined **Edit** that turns the name into an input;
   never looked up (a library place or restored draft without coordinates) is "Not looked up yet" in
   muted night text with **Look up**.

@@ -660,7 +660,7 @@
 /* The failure-alert text on dark glass (as .pp-alert): --alert itself drops to ~4.3:1 over the
    scrimmed photograph this list can sit on. */
 .pp-anchor.is-missing .pp-anchor-status {
-  color: #ffb3b3;
+  color: var(--alert-on-night);
 }
 .pp-anchor.is-unlooked .pp-anchor-status {
   color: var(--wd-night-text-2);
@@ -873,7 +873,7 @@
   border: 1px solid rgba(255, 107, 107, 0.45);
   border-radius: var(--wd-radius-card);
   background: rgba(9, 11, 16, 0.7);
-  color: #ffb3b3;
+  color: var(--alert-on-night);
   font-size: 0.9em;
 }
 @media (max-width: 760px) {

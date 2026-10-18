@@ -10,45 +10,53 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, X } from "lucide-react";
+import { Check, CircleAlert, Clock, X } from "lucide-react";
+import { formatWait, heldUntil, secondsLeft as secondsLeftNow, useHold } from "./actionHolds";
+import type { Bucket } from "./ipThrottle";
+import {
+  autoDismissMs,
+  currentCopy,
+  formatClockTime,
+  holdSentence,
+  pushToast,
+  WAIT,
+  type Toast,
+  type ToastCopy,
+} from "./toastQueue";
 
 /**
- * Transient confirmations — "Bar Luce added to Day 3".
+ * The toast stack: confirmations, and errors that don't block.
  *
- * **Only for things the traveler just did, and only where the result is off screen.** A toast is a
- * message that interrupts and then disappears, which makes it the wrong shape for almost
- * everything: an error the traveler has to act on must not evaporate (that is `ErrorNote`), a
- * state a row can show must be shown on the row (the search list's own "Added" badge), and a
- * process still running is a spinner. What is left, and what this exists for, is the acknowledgement
- * that an action landed somewhere the traveler cannot currently see — adding a place to a day while
- * the itinerary panel is scrolled elsewhere, or covered by the map.
+ * **Success** — "Bar Luce added to Day 3" — is for an action that landed somewhere the traveller
+ * cannot currently see, and fades after 3.2s. A state a row can show belongs on the row, and a
+ * process still running is a spinner.
  *
- * Deliberately not a general notification centre: no queue history, no severity levels beyond the
- * one, no actions inside the toast. Something that needs a button needs a dialog.
+ * **Error** is news that doesn't block: the traveller can carry on and the thing that failed is not
+ * on screen (or is everywhere, like being offline). It stays until dismissed or resolved, carries at
+ * most one action as text, and for a limit it counts down the hold and swaps to its `resolved` copy
+ * when the wait ends. A failure that belongs to something on screen is `InlineNote`; one that blocks
+ * is `ErrorDialog`.
  */
 
-export interface Toast {
-  id: number;
-  message: string;
-  /** Optional second line — the detail that makes the first line checkable ("Day 3 · 4 stops"). */
-  detail?: string;
+export type { Toast } from "./toastQueue";
+
+export interface ErrorToast extends ToastCopy {
+  action?: { label: string; onClick: () => void };
+  /** Count down this bucket's hold. Call `holdFromFailure` first, or the toast resolves at once. A
+   *  second hold toast for the same bucket replaces the first. */
+  hold?: Bucket;
+  resolved?: ToastCopy;
 }
 
 interface ToastContextValue {
-  /** Show a toast. Returns its id, so a caller that wants to replace its own can dismiss it. */
+  /** Show a success toast. Returns its id, so a caller that wants to replace its own can dismiss it. */
   show: (message: string, detail?: string) => number;
+  /** Show an error toast. It stays until dismissed, or until its hold ends. */
+  showError: (toast: ErrorToast) => number;
   dismiss: (id: number) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
-
-/** How long a toast stays up. Long enough to read two short lines without hurrying, short enough
- *  that adding three places in a row does not stack a wall of them. */
-const TOAST_MS = 3200;
-
-/** Above this many at once the oldest is dropped rather than growing the stack down the screen.
- *  Three is what fits comfortably above the fold on a laptop. */
-const MAX_VISIBLE = 3;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -69,21 +77,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((current) => current.filter((t) => t.id !== id));
   }, []);
 
-  const show = useCallback(
-    (message: string, detail?: string) => {
+  const add = useCallback(
+    (toast: Omit<Toast, "id">) => {
       const id = nextId.current++;
-      setToasts((current) => [...current, { id, message, detail }].slice(-MAX_VISIBLE));
-      timers.current.set(
-        id,
-        setTimeout(() => {
-          timers.current.delete(id);
-          setToasts((current) => current.filter((t) => t.id !== id));
-        }, TOAST_MS)
-      );
+      const full = { ...toast, id };
+      setToasts((current) => pushToast(current, full));
+      const ms = autoDismissMs(full);
+      if (ms !== null) timers.current.set(id, setTimeout(() => dismiss(id), ms));
       return id;
     },
-    []
+    [dismiss]
   );
+
+  const show = useCallback(
+    (message: string, detail?: string) => add({ kind: "success", title: message, detail }),
+    [add]
+  );
+  const showError = useCallback((toast: ErrorToast) => add({ kind: "error", ...toast }), [add]);
 
   // Every pending timer cleared on unmount. Without this a navigation away mid-toast leaves a
   // setState scheduled against a provider that no longer exists.
@@ -95,61 +105,142 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo(() => ({ show, dismiss }), [show, dismiss]);
+  const value = useMemo(() => ({ show, showError, dismiss }), [show, showError, dismiss]);
 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {/* `aria-live="polite"` rather than `assertive`: this is a confirmation of something the
-          traveler just did on purpose, so it should be read at the next natural pause rather than
-          interrupt whatever the screen reader is in the middle of. The region is always in the
-          DOM — an element that appears at the same moment its text does is frequently missed by
-          the live-region implementations, which watch for *changes* inside a region they already
-          know about. */}
-      <div
-        aria-live="polite"
-        aria-atomic="false"
-        className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex w-[min(24rem,calc(100vw-3rem))] -translate-x-1/2 flex-col gap-2 print:hidden"
-      >
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className="glass-control pointer-events-auto flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 shadow-lg motion-safe:animate-[toast-in_180ms_ease-out]"
-          >
-            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
-              <Check className="h-3 w-3" strokeWidth={3} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm leading-snug text-foreground">{toast.message}</p>
-              {toast.detail && <p className="mt-0.5 text-xs text-muted">{toast.detail}</p>}
-            </div>
-            <button
-              type="button"
-              onClick={() => dismiss(toast.id)}
-              aria-label="Dismiss"
-              className="-mr-1 shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
+      {/* Polite, never assertive, and never focus-stealing: an error toast is news the traveller
+          can read at the next pause, not an interruption. The region is always in the DOM — an
+          element that appears at the same moment its text does is frequently missed by the
+          live-region implementations, which watch for *changes* inside a region they already know
+          about. Top centre under the navbar, clear of the trip page's search sheet and board. */}
+      <div role="status" aria-live="polite" aria-atomic="false" className="toast-stack print:hidden">
+        {toasts.map((toast) =>
+          toast.kind === "success" ? (
+            <div
+              key={toast.id}
+              className="glass-control pointer-events-auto flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 shadow-lg motion-safe:animate-[toast-in_180ms_ease-out]"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ))}
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
+                <Check className="h-3 w-3" strokeWidth={3} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm leading-snug text-foreground">{toast.title}</p>
+                {toast.detail && <p className="mt-0.5 text-xs text-muted">{toast.detail}</p>}
+              </div>
+              <DismissButton onClick={() => dismiss(toast.id)} className="toast-x -mr-1 rounded-md p-1 text-muted hover:bg-white/10 hover:text-foreground" />
+            </div>
+          ) : toast.hold ? (
+            <HoldToast key={toast.id} toast={toast} hold={toast.hold} dismiss={dismiss} />
+          ) : (
+            <ErrorToastView key={toast.id} toast={toast} copy={toast} dismiss={dismiss} />
+          )
+        )}
       </div>
     </ToastContext.Provider>
   );
 }
 
+function DismissButton({ onClick, className }: { onClick: () => void; className: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-label="Dismiss" className={`shrink-0 transition-colors ${className}`}>
+      <X className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function ErrorToastView({
+  toast,
+  copy,
+  dismiss,
+  wait,
+}: {
+  toast: Toast;
+  copy: ToastCopy;
+  dismiss: (id: number) => void;
+  /** A hold toast still counting: the live wait, the end as a clock time, and how much is left. */
+  wait?: { now: number; clockTime: string; progress: number };
+}) {
+  const { action } = toast;
+  return (
+    <div className={`toast-error${toast.hold ? " is-hold" : ""}`}>
+      <span className="toast-error-glyph">
+        {toast.hold ? <Clock aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
+      </span>
+      <div className="min-w-0">
+        <p className="toast-error-title">{copy.title}</p>
+        {copy.detail &&
+          (wait ? (
+            <p className="toast-error-detail">
+              {/* The ticking countdown is for eyes only. A screen reader hears the sentence once,
+                  with the end as a clock time (copy row P-37a), and again when it resolves. */}
+              <span aria-hidden="true">
+                {copy.detail.split(WAIT).map((part, i) => (
+                  <span key={i}>
+                    {i > 0 && <strong>{formatWait(wait.now)}</strong>}
+                    {part}
+                  </span>
+                ))}
+              </span>
+              <span className="sr-only">{holdSentence(copy.detail, wait.clockTime)}</span>
+            </p>
+          ) : (
+            <p className="toast-error-detail">{copy.detail}</p>
+          ))}
+        {toast.hold && (
+          <div className="toast-error-bar" aria-hidden="true">
+            <span style={{ transform: `scaleX(${wait?.progress ?? 0})` }} />
+          </div>
+        )}
+      </div>
+      {action && (
+        <button
+          type="button"
+          className="err-btn err-btn-text toast-error-action"
+          onClick={() => {
+            dismiss(toast.id);
+            action.onClick();
+          }}
+        >
+          {action.label}
+        </button>
+      )}
+      <DismissButton onClick={() => dismiss(toast.id)} className="toast-error-x" />
+    </div>
+  );
+}
+
+function HoldToast({ toast, hold, dismiss }: { toast: Toast; hold: Bucket; dismiss: (id: number) => void }) {
+  const { secondsLeft } = useHold(hold);
+  // Frozen at first render: the bar's full length, and the end time the screen reader is told.
+  const [atShow] = useState(() => secondsLeftNow(hold) ?? 0);
+  const [clockTime] = useState(() => formatClockTime(heldUntil(hold) ?? Date.now()));
+  const copy = currentCopy(toast, secondsLeft);
+  const done = copy === null;
+
+  useEffect(() => {
+    if (done) dismiss(toast.id);
+  }, [done, dismiss, toast.id]);
+
+  if (copy === null) return null;
+  const wait =
+    secondsLeft === null ? undefined : { now: secondsLeft, clockTime, progress: atShow > 0 ? secondsLeft / atShow : 0 };
+  return <ErrorToastView toast={toast} copy={copy} dismiss={dismiss} wait={wait} />;
+}
+
 /**
  * Raise a toast.
  *
- * Returns a no-op outside the provider rather than throwing. A toast is an embellishment on an
- * action that has already succeeded, and a component rendered in a test, a story or a print route
- * should not fail to mount because the confirmation it would have shown has nowhere to go.
+ * Returns a no-op outside the provider rather than throwing. A component rendered in a test, a
+ * story or a print route should not fail to mount because its message has nowhere to go.
  */
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   return (
     ctx ?? {
       show: () => 0,
+      showError: () => 0,
       dismiss: () => {},
     }
   );
