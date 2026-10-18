@@ -241,8 +241,12 @@ export default function PlanningFlow({ model: m }: { model: PlannerModel }) {
     });
   const title = useRef<HTMLHeadingElement>(null);
 
-  // Each step opens at its title, for a screen reader as much as the eye.
+  // Each step opens at its title, for a screen reader as much as the eye, and at the top of the form:
+  // Next, Back and the stepper all land here, and so does opening the planner from partway down the
+  // landing. The scroller is `.content-overlay`, not `.pp-page` (the document never scrolls); a plain
+  // jump, never smooth, so reduced-motion needs no branch.
   useEffect(() => {
+    title.current?.closest(".content-overlay")?.scrollTo({ top: 0, behavior: "instant" });
     title.current?.focus({ preventScroll: true });
   }, [m.step]);
 
