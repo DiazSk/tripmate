@@ -5,12 +5,10 @@ import {
   searchPlaces,
   type PlaceCategory,
 } from "@/lib/placeSearch";
-import { cached } from "@/lib/fetchCache";
+import { googlePlacesMemo } from "@/lib/fetchCache";
 import { decodePolygon } from "@/lib/searchArea";
 import { throttle } from "@/lib/ipThrottle";
 import { limitResponse } from "@/lib/limitResponse";
-
-const GOOGLE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * `GET ?lat=&lng=&q=&category=&radius=&area=` → named places in an area, for the map's search
@@ -77,13 +75,14 @@ export async function GET(req: NextRequest) {
     {
     lat,
     lng,
-    query: params.get("q") ?? undefined,
+    // Clamped like /api/geocode: it reaches an Overpass regex, Google, and the cache key.
+    query: params.get("q")?.slice(0, 200) ?? undefined,
     categories: categories.length ? categories : undefined,
     radiusM,
     area: boundedArea,
     },
     // A day of Google answers per spot: a map nudge or a re-typed query is not a new paid call.
-    (key, fetcher) => cached(key, GOOGLE_TTL_MS, fetcher)
+    googlePlacesMemo
   );
   return NextResponse.json(result);
 }

@@ -34,8 +34,10 @@ export const LIMITS: Record<Bucket, { max: number; windowMinutes: number }> = {
   // destination-context: two model calls and a paid Brave search per request, and the wizard fires it
   // on leaving the basics step, so a person plans a handful an hour, not a handful a minute.
   context: { max: 10, windowMinutes: 10 },
-  // The free lookups (Overpass, Wikimedia, Open-Meteo, ...): cheap each, but a loop is a loop.
-  lookup: { max: 120, windowMinutes: 10 },
+  // The free lookups (Overpass, Wikimedia, ...). 600, not 120: the trip page fires one /api/place-photo per
+  // stop per page load (deduped in memory only), so a 40-stop trip opened three times is already 120, and a
+  // 429'd photo is not cached, so it keeps retrying. This stops a loop, not a traveller.
+  lookup: { max: 600, windowMinutes: 10 },
   // Internal: counts refusals by the AI scope guard. Never answered as a 429.
   refusal: { max: 30, windowMinutes: 10 },
 };

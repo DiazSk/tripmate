@@ -126,6 +126,6 @@ test("an IPv4-mapped IPv6 address is the IPv4 address; IPv4 is unchanged", () =>
 
 test("the context, lookup and refusal buckets", () => {
   assert.deepEqual(LIMITS.context, { max: 10, windowMinutes: 10 });
-  assert.deepEqual(LIMITS.lookup, { max: 120, windowMinutes: 10 });
+  assert.deepEqual(LIMITS.lookup, { max: 600, windowMinutes: 10 });
   assert.deepEqual(LIMITS.refusal, { max: 30, windowMinutes: 10 });
 });

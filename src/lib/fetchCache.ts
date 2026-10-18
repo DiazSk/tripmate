@@ -1,4 +1,5 @@
 import { getFetchCache, saveFetchCache } from "./db";
+import type { GoogleMemo } from "./placeSearch";
 
 /**
  * Read-through cache for third-party API answers.
@@ -115,3 +116,6 @@ export const TTL = {
   CHURNING: 14 * 24 * 60 * 60 * 1000,
   VOLATILE: 60 * 60 * 1000,
 } as const;
+
+/** The `searchPlaces` memo for Google answers: a day, shared by the place-search route and the anchor geocoder. */
+export const googlePlacesMemo: GoogleMemo = (key, fetcher) => cached(key, 24 * 60 * 60 * 1000, fetcher);

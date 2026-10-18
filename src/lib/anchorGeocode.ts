@@ -38,11 +38,12 @@ async function getDefaultDeps(): Promise<GeocodeDeps> {
     const { resolveNamedPlaceCoords } = await import("./poiDetails");
     const { searchPlaces } = await import("./placeSearch");
     const { photonLookup } = await import("./photon");
+    const { googlePlacesMemo } = await import("./fetchCache");
     _defaultDeps = {
       resolve: (names, near) => resolveNamedPlaceCoords(names, near),
       photon: photonLookup,
       search: async (name, near) => {
-        const res = await searchPlaces({ lat: near.lat, lng: near.lon, query: name, radiusM: 30000 });
+        const res = await searchPlaces({ lat: near.lat, lng: near.lon, query: name, radiusM: 30000 }, googlePlacesMemo);
         const hit = res.places[0];
         return hit ? { lat: hit.lat, lng: hit.lng } : null;
       },
