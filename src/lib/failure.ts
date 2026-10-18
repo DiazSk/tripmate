@@ -11,6 +11,8 @@ export type Failure =
   | { kind: "not_found" }
   | { kind: "signed_out" }
   | { kind: "invalid"; message: string }
+  /** The server refused on purpose and wrote the sentence (the scope guard, the length caps): show `message` as is. */
+  | { kind: "refused"; message: string }
   | { kind: "server" };
 
 type Body = Record<string, unknown>;
@@ -21,7 +23,7 @@ function fromCode(body: Body, retryHeader: number | null, now: number, hint: Buc
   if (body.code === "timeout") return { kind: "timeout" };
   // The server wrote the sentence (SV-14..16 for the scope guard, SV-17/20 for the length caps).
   if ((body.code === "off_topic" || body.code === "too_long") && typeof body.error === "string" && body.error) {
-    return { kind: "invalid", message: body.error };
+    return { kind: "refused", message: body.error };
   }
   if (body.code === "daily_cap") {
     return { kind: "daily_cap", resumesAt: new Date(now + (num(body.retryAfterSeconds) ?? retryHeader ?? 60) * 1000) };

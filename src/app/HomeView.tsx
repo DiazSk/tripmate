@@ -140,6 +140,9 @@ function planFailureText(f: RunFailure, destination: string): string {
       return `Writing your ${d} plan took longer than TripMate allows, so it stopped. Your answers are kept. Press Plan my trip to try again.`;
     case "daily_cap":
       return `Planning is paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. Your answers are kept, and your saved trips and the map still work.`;
+    // The server wrote this sentence (copy rows SV-14..SV-17, SV-20); shown as it is, with nothing to retry.
+    case "refused":
+      return f.message;
     case "invalid":
       return "TripMate couldn’t read your trip details. Go back to Basics, check the destination, dates and budget, then press Plan my trip.";
     default:
@@ -183,6 +186,9 @@ function refineFailureNote(f: RunFailure): Note {
       return {
         text: `Changes by TripMate are paused for everyone until ${formatResumeTime(f.resumesAt)}. It has reached its limit for the day; it isn’t anything you did. Your plan is unchanged, and you can still keep it and edit it by hand on its trip page.`,
       };
+    // The server wrote this sentence (copy rows SV-14..SV-17, SV-20); shown as it is, with nothing to retry.
+    case "refused":
+      return { text: f.message };
     default:
       return { text: "TripMate hit a problem reworking the plan. Your current plan is unchanged. Press Rework the plan to try again." };
   }

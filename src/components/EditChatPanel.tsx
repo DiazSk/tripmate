@@ -46,6 +46,9 @@ function chatFailure(f: Failure): ChatFailure {
       return {
         text: `Changes by TripMate are paused for everyone until ${formatResumeTime(f.resumesAt)}. It has reached its limit for the day; it isn’t anything you did. You can still drag stops, edit times and log costs by hand.`,
       };
+    // The server wrote this sentence (copy rows SV-14..SV-17, SV-20); shown as it is, with nothing to retry.
+    case "refused":
+      return { text: f.message };
     case "invalid":
       return { text: "TripMate couldn’t read that request. Reload the trip and try again." };
     default:

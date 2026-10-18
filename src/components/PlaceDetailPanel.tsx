@@ -404,6 +404,9 @@ function detailFailureText(f: Failure, name: string): string {
       return `You’ve opened the details of 10 places in the last 10 minutes, which is the limit. You can open ${name}’s in ${WAIT}. The plan and the map work as normal.`;
     case "daily_cap":
       return `Place details are paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. The plan, photos and map still work.`;
+    // The server wrote this sentence (copy rows SV-14..SV-17, SV-20); shown as it is, with nothing to retry.
+    case "refused":
+      return f.message;
     case "invalid":
       return "TripMate couldn’t tell which place this is. Close it and open the stop again.";
     default:
@@ -429,7 +432,7 @@ function DetailFailure({ failure, name, onRetry }: { failure: Failure; name: str
 
   const text = detailFailureText(failure, name);
   const action =
-    failure.kind === "daily_cap" || failure.kind === "invalid" || !onRetry
+    failure.kind === "daily_cap" || failure.kind === "invalid" || failure.kind === "refused" || !onRetry
       ? undefined
       : limited
         ? { label: secondsLeft === null ? "Try again" : `Try again in ${formatWait(secondsLeft)}`, onClick: onRetry, busy: secondsLeft !== null }

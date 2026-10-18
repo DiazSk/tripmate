@@ -74,6 +74,9 @@ function rebalanceNote(f: Failure, span: string): Note {
       return {
         text: `Rebalancing is paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. You can still move stops and change costs by hand.`,
       };
+    // The server wrote this sentence (copy rows SV-14..SV-17, SV-20); shown as it is, with nothing to retry.
+    case "refused":
+      return { text: f.message };
     case "invalid":
       return { text: "TripMate couldn’t read the days left to rebalance. Reload the trip and press Rebalance again." };
     default:
