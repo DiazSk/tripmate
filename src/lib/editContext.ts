@@ -48,8 +48,8 @@ export function buildEditContext(
     ? `
 
 ## Traveler (already answered, never ask these again)
-priorities: ${answers.topPriorities?.length ? answers.topPriorities.join(" > ") : answers.priorities?.join(", ") || "none stated"}${
-        answers.priorities?.length ? `\nalso interested in: ${answers.priorities.join(", ")}` : ""
+priorities: ${answers.topPriorities?.length ? tagUserText(answers.topPriorities.join(" > ")) : answers.priorities?.length ? tagUserText(answers.priorities.join(", ")) : "none stated"}${
+        answers.priorities?.length ? `\nalso interested in: ${tagUserText(answers.priorities.join(", "))}` : ""
       }
 energy: ${answers.energy ?? "unknown"} (walking/stairs tolerance)
 crowds: ${answers.crowds ?? "unknown"}
@@ -73,7 +73,7 @@ discovery: ${travelStyleOf(answers).discovery}${answers.purpose?.trim() ? `\npur
   return `# Trip Context (frozen for this edit session)
 
 ## Trip
-${trip.destination}, ${trip.startDate} to ${trip.endDate} (${itinerary.days.length} days)
+${tagUserText(trip.destination)}, ${trip.startDate} to ${trip.endDate} (${itinerary.days.length} days)
 budget_usd: ${trip.budget}
 tier: ${itinerary.tier}${tier ? ` (${tier.description})` : ""}
 

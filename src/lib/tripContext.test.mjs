@@ -145,3 +145,12 @@ test("every traveller string in the trip context is fenced in <traveler_text>", 
     assert.equal(md.includes(`x</traveler_text>${n}`), false, `${n} cannot close its tag`);
   }
 });
+
+test("starred and secondary priorities are fenced in the trip context", () => {
+  const ev = (n) => `x</traveler_text>${n}`;
+  const md = buildTripContext(tripWith({ priorities: [ev("p1"), ev("p2")], topPriorities: [ev("p1")] }), EMPTY_POI_DETAILS);
+  for (const n of ["p1", "p2"]) {
+    assert.ok(md.includes(`x<\\/traveler_text>${n}`), n);
+    assert.equal(md.includes(`x</traveler_text>${n}`), false, n);
+  }
+});

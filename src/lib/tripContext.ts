@@ -39,8 +39,8 @@ function flagsSection(trip: ReconciledTrip): string {
     `pace_resolved: ${f.paceResolved} (target ${f.paceSpotsPerDay} stops/day)`,
     `mobility_profile: walk_leg_cap=${m.walkLegCap}, minimize_stairs=${m.minimizeStairs}, rest_breaks=${m.restBreaks}, prefer_transit_over_long_walks=${m.preferTransitOverLongWalks}`,
     `crowd_bias: prefer_offpeak_timing=${c.preferOffpeakTiming}, boost_offbeat_pois=${c.boostOffbeatPois}, schedule_icons_at_offpeak=${c.scheduleIconsAtOffpeak}, markets_and_lively_ok=${c.marketsAndLivelyOk}, peak_timing_ok=${c.peakTimingOk}`,
-    `priorities_ranked (primary): ${f.prioritiesRanked.primary.length > 0 ? f.prioritiesRanked.primary.join(" > ") : "none starred"}`,
-    `priorities_ranked (tie-breakers): ${f.prioritiesRanked.tiebreakers.length > 0 ? f.prioritiesRanked.tiebreakers.join(", ") : "none"}`,
+    `priorities_ranked (primary): ${f.prioritiesRanked.primary.length > 0 ? tagUserText(f.prioritiesRanked.primary.join(" > ")) : "none starred"}`,
+    `priorities_ranked (tie-breakers): ${f.prioritiesRanked.tiebreakers.length > 0 ? tagUserText(f.prioritiesRanked.tiebreakers.join(", ")) : "none"}`,
     `group: ${a.group}${a.group === "other" && a.groupOther?.trim() ? ` (${tagUserText(a.groupOther.trim())})` : ""}`,
   ];
 

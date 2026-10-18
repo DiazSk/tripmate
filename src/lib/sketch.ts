@@ -1,6 +1,7 @@
 import { parseJsonResponse } from "./claude";
 import { NO_EM_DASH_RULE } from "./writingStyle";
 import { formatAnchors, formatWeather } from "./itineraryPrompt";
+import { SCOPE_BLOCK, tagUserText } from "./promptScope";
 import type { Anchor } from "./types";
 import type { DayWeather } from "./weather";
 
@@ -26,10 +27,13 @@ export function buildSketchPrompt(p: {
   priorities: string[];
   weather: DayWeather[];
 }): string {
-  return `Sketch a ${p.dates.length}-day trip to ${p.destination}: only the shape, not the stops.
+  const dest = tagUserText(p.destination);
+  return `${SCOPE_BLOCK}
+
+Sketch a ${p.dates.length}-day trip to ${dest}: only the shape, not the stops.
 Days: ${p.dates.join(", ")}
-${p.priorities.length ? `What matters to them: ${p.priorities.join(", ")}\n` : ""}${p.weather.length ? `Weather:\n${formatWeather(p.weather)}\n` : ""}${formatAnchors(p.anchors)}
-For each day give: a "theme" of 2-5 evocative words about that day in ${p.destination} (a place or neighbourhood of ${p.destination} and how the day feels, never a place from anywhere else), the one "area" the day centres on, and the traveler's places ("anchors", exact names from the list) that belong on that day. Group places that are near each other; put outdoor places on the better-weather days. ${NO_EM_DASH_RULE}
+${p.priorities.length ? `What matters to them: ${tagUserText(p.priorities.join(", "))}\n` : ""}${p.weather.length ? `Weather:\n${formatWeather(p.weather)}\n` : ""}${formatAnchors(p.anchors)}
+For each day give: a "theme" of 2-5 evocative words about that day in ${dest} (a place or neighbourhood of ${dest} and how the day feels, never a place from anywhere else), the one "area" the day centres on, and the traveler's places ("anchors", exact names from the list) that belong on that day. Group places that are near each other; put outdoor places on the better-weather days. ${NO_EM_DASH_RULE}
 
 Respond with ONLY valid JSON, no code fences:
 {"days":[{"date":"YYYY-MM-DD","theme":"2-5 words","area":"neighbourhood or town","anchors":["exact name"]}]}`;

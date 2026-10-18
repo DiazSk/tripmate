@@ -80,9 +80,9 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
 
   const { primary, tiebreakers } = flags.prioritiesRanked;
   if (primary.length > 0) {
-    let line = `Top priorities (these drive which stops are chosen, not just the notes): ${primary.join(", ")}.`;
+    let line = `Top priorities (these drive which stops are chosen, not just the notes): ${tagUserText(primary.join(", "))}.`;
     if (tiebreakers.length > 0) {
-      line += ` Secondary interests, for tie-breaks only: ${tiebreakers.join(", ")}.`;
+      line += ` Secondary interests, for tie-breaks only: ${tagUserText(tiebreakers.join(", "))}.`;
     }
     lines.push(line);
   }
