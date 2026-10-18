@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isThrottled } from "./ipThrottle.ts";
+import { clientIp, isThrottled, throttleKeyCount } from "./ipThrottle.ts";
 
 function fakeRequest(ip) {
   return { headers: { get: (name) => (name === "x-forwarded-for" ? ip : null) } };
@@ -53,4 +53,23 @@ test("buckets are independent and max is per call", () => {
   assert.equal(isThrottled(req, { bucket: "import", max: 30 }), false); // import bucket untouched
   for (let i = 0; i < 29; i += 1) isThrottled(req, { bucket: "import", max: 30 });
   assert.equal(isThrottled(req, { bucket: "import", max: 30 }), true);
+});
+
+test("x-real-ip is the client address, so rotating x-forwarded-for buys no fresh bucket", () => {
+  // The proxy sets x-real-ip; the leftmost x-forwarded-for entry is whatever the client sent.
+  const req = (forged) => ({
+    headers: { get: (name) => (name === "x-real-ip" ? "20.20.20.20" : name === "x-forwarded-for" ? `${forged}, 20.20.20.20` : null) },
+  });
+  for (let i = 0; i < 3; i += 1) assert.equal(isThrottled(req(`66.0.0.${i}`)), false);
+  assert.equal(isThrottled(req("66.0.0.99")), true);
+});
+
+test("clientIp falls back to x-forwarded-for when no x-real-ip is set", () => {
+  assert.equal(clientIp(fakeRequest("30.30.30.30, 10.0.0.1")), "30.30.30.30");
+  assert.equal(clientIp({ headers: { get: () => null } }), null);
+});
+
+test("the key map stays bounded under a flood of distinct addresses", () => {
+  for (let i = 0; i < 10_050; i += 1) isThrottled(fakeRequest(`77.${i >> 16 & 255}.${i >> 8 & 255}.${i & 255}`), { bucket: "flood" });
+  assert.ok(throttleKeyCount() <= 10_000, `map grew to ${throttleKeyCount()}`);
 });

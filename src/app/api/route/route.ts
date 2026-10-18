@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { type Pt, type RoutableMode, routableMode, routeLegs } from "@/lib/osrmRoute";
 import type { TransportMode } from "@/lib/types";
+import { clientIp } from "@/lib/ipThrottle";
 
 /**
  * `GET ?profile=walk|bike|drive&stops=lat,lng|lat,lng[|…]` → the real road-network route between
@@ -33,10 +34,10 @@ const MAX_STOPS = 12;
  * and not a place to be lazy. 60/min is far above any legitimate client — the map asks for one day
  * at a time — and far below anything that would get this app's IP dropped by FOSSGIS.
  *
- * Deliberately **not** `ipThrottle.ts`: that one is priced for LLM spend (3 per 10 minutes) and
- * returns `false` unconditionally unless `LLM_TRANSPORT === "api"`, which would leave this endpoint
- * completely open in exactly the environment where a development loop hammers it hardest.
- * Deliberately not extracted into a shared helper either — there is one caller.
+ * Deliberately **not** `ipThrottle.ts`'s limiter: that one is priced for LLM spend (3 per 10
+ * minutes) and sits out entirely when a request carries no forwarded IP, which would leave this
+ * endpoint completely open in exactly the environment where a development loop hammers it hardest.
+ * It does share `clientIp`, so both read the client's address the same, unforgeable way.
  *
  * It counts **requests, not outbound fetches**, because a cache hit still costs this process work.
  * In-memory and per-process, the same posture as `ipThrottle.ts`: it resets on redeploy, and that
@@ -49,7 +50,7 @@ const WINDOW_MS = 60_000;
 const hits = new Map<string, { count: number; windowStart: number }>();
 
 function throttled(req: NextRequest): boolean {
-  const key = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const key = clientIp(req) ?? "unknown";
   const now = Date.now();
   const seen = hits.get(key);
   if (!seen || now - seen.windowStart >= WINDOW_MS) {
