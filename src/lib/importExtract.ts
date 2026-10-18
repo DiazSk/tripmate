@@ -1,6 +1,7 @@
 import { parseJsonResponse } from "./claude";
 import { anchorKey } from "./anchors";
 import type { SourceKind } from "./importSources";
+import { SCOPE_BLOCK, fenceUserText } from "./promptScope";
 
 export interface ExtractSource {
   index: number;
@@ -21,9 +22,13 @@ export function buildExtractPrompt(sources: ExtractSource[], imageIndices: numbe
   const images = imageIndices.length
     ? `The attached images are, in order, items ${imageIndices.join(", ")}. They are usually screenshots of social posts, maps or messages.\n`
     : "";
-  return `A traveler saved these while dreaming about a trip${destination ? ` to ${destination}` : ""}. List every specific, real place they could visit: venues, sights, neighbourhoods, markets, restaurants.
+  return `${SCOPE_BLOCK}
 
-${images}${listed}
+A traveler saved these while dreaming about a trip${destination ? ` to ${destination}` : ""}. List every specific, real place they could visit: venues, sights, neighbourhoods, markets, restaurants.
+
+${images}<traveler_text>
+${fenceUserText(listed)}
+</traveler_text>
 
 Rules:
 - Only places actually named in the text, or clearly readable or unmistakably pictured in an image. Never guess a venue from mood, food or scenery alone.

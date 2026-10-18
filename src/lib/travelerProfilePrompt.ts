@@ -1,4 +1,5 @@
 import type { ResolvedFlags, TripLogistics, UserAnswers } from "./types";
+import { fenceUserText } from "./promptScope";
 
 /**
  * The traveler's answers, rendered as prompt lines. Kept in its own module rather
@@ -48,7 +49,7 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
     );
   }
 
-  lines.push(`Travelling as: ${flags.groupLabel}.`);
+  lines.push(`Travelling as: <traveler_text>${fenceUserText(flags.groupLabel)}</traveler_text>.`);
 
   if (flags.partySize !== null) {
     lines.push(

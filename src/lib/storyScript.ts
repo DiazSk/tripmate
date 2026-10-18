@@ -1,4 +1,5 @@
 import type { DayPlan, Stop } from "./types";
+import { SCOPE_BLOCK, fenceUserText } from "./promptScope";
 
 /**
  * The narration script behind Story mode — the itinerary a day already contains, re-voiced as
@@ -77,7 +78,7 @@ export const NARRATION_WPM = 160;
  * beats — a one-sentence line between two stops, played while the camera walks the real street
  * route between them.
  */
-export const STORY_PROMPT_VERSION = 4;
+export const STORY_PROMPT_VERSION = 5;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Facts
@@ -243,11 +244,15 @@ export function buildStoryPrompt(params: {
   const stopCount = day.stops.length;
   const routedLegs = countRoutedLegs(day, legs);
   const beatCount = stopCount + routedLegs + 2;
-  return `You are narrating one day of a trip to ${destination} as a short piece of spoken storytelling, played over a map that flies to each place as you describe it.
+  return `${SCOPE_BLOCK}
+
+You are narrating one day of a trip to <traveler_text>${fenceUserText(destination)}</traveler_text> as a short piece of spoken storytelling, played over a map that flies to each place as you describe it.
 
 THE DAY (day ${dayIndex + 1} of ${dayCount}). These are the only facts you have:
 
-${compactDay(day, dayIndex, legs)}
+<traveler_text>
+${fenceUserText(compactDay(day, dayIndex, legs))}
+</traveler_text>
 
 WRITE THE NARRATION.
 

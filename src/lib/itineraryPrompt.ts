@@ -25,6 +25,7 @@ import { formatPlaceConflicts } from "./placeConflicts";
 import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
 import { NO_EM_DASH_RULE } from "./writingStyle";
+import { SCOPE_BLOCK, SCOPE_BLOCK_WITH_REFUSAL, fenceUserText } from "./promptScope";
 
 /**
  * One stop's shape.
@@ -317,7 +318,9 @@ export function buildGeneratePrompt(params: {
   anchors?: Anchor[];
   sketch?: string;
 }): string {
-  return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
+  return `${SCOPE_BLOCK}
+
+Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
 ${PRECEDENCE_INSTRUCTION}
 
@@ -353,15 +356,22 @@ export function buildRefinePrompt(params: {
   answers?: UserAnswers | null;
   anchors?: Anchor[];
 }): string {
-  return `Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
+  return `${SCOPE_BLOCK_WITH_REFUSAL}
 
-${JSON.stringify(params.previousItinerary)}
+Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
+
+<traveler_text>
+${fenceUserText(JSON.stringify(params.previousItinerary))}
+</traveler_text>
 
 ${PRECEDENCE_INSTRUCTION}
 
 Style: ${tierStyle(params.previousItinerary.tier)}
 
-The user's feedback on this itinerary: "${params.feedback}"
+The user's feedback on this itinerary:
+<traveler_feedback>
+${fenceUserText(params.feedback)}
+</traveler_feedback>
 ${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}
 Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, keep the lodging entries, and keep per-stop costs realistic.
 ${STOP_FIELD_INSTRUCTION}
@@ -396,10 +406,12 @@ export function buildPlaceDetailPrompt(params: {
   itineraryContext?: string;
 }): string {
   const context = params.itineraryContext
-    ? `\n\n<their_itinerary>\n${params.itineraryContext}\n</their_itinerary>\n\nThis stop is part of the trip above. Judge "bestTime" and "duration" against the slot it actually occupies and the stops around it, and make at least one tip specific to this trip rather than generic: the weather that day, the stop before or after it, or the time they arrive. If the plan already puts them there at a poor time, say so plainly in a tip.`
+    ? `\n\n<their_itinerary>\n<traveler_text>\n${fenceUserText(params.itineraryContext)}\n</traveler_text>\n</their_itinerary>\n\nThis stop is part of the trip above. Judge "bestTime" and "duration" against the slot it actually occupies and the stops around it, and make at least one tip specific to this trip rather than generic: the weather that day, the stop before or after it, or the time they arrive. If the plan already puts them there at a poor time, say so plainly in a tip.`
     : "";
 
-  return `Give a compact travel-guide entry for "${params.name}" in ${params.destination} (approx. coordinates ${params.lat}, ${params.lng}).${context}
+  return `${SCOPE_BLOCK}
+
+Give a compact travel-guide entry for <traveler_text>${fenceUserText(params.name)}</traveler_text> in <traveler_text>${fenceUserText(params.destination)}</traveler_text> (approx. coordinates ${params.lat}, ${params.lng}).${context}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 {"history":"1-2 sentence history or significance","bestTime":"short best time of day or season to visit","tips":["practical tip 1","practical tip 2"],"duration":"suggested visit duration, e.g. '1-2 hours'","pros":["Short label: one sentence on what is genuinely good here","..."],"cons":["Short label: one sentence on what is genuinely worse here","..."]}

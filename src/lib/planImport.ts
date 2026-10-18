@@ -8,6 +8,7 @@ import {
   type ImportedStop,
 } from "./importedPlan";
 import { formatClock, parseClock } from "./itinerary";
+import { SCOPE_BLOCK, fenceUserText } from "./promptScope";
 
 /**
  * The read: a traveller's own plan, as days of stops, in their order. The model copies; it
@@ -23,9 +24,13 @@ export function buildPlanReadPrompt(
   const images = imageIndices.length
     ? `The attached images are, in order, items ${imageIndices.join(", ")}. They are usually screenshots of a plan in notes, a message or a social post.\n`
     : "";
-  return `A traveller already has a plan for a trip${destination ? ` to ${destination}` : ""} and wants to bring it in exactly as it is. Read it into days and stops.
+  return `${SCOPE_BLOCK}
 
-${images}${listed}
+A traveller already has a plan for a trip${destination ? ` to ${destination}` : ""} and wants to bring it in exactly as it is. Read it into days and stops.
+
+${images}<traveler_text>
+${fenceUserText(listed)}
+</traveler_text>
 
 Rules:
 - Copy only what is there. Never add a stop, a time, a date or a hotel the material doesn't state, and never reorder anything.

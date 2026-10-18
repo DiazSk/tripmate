@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { dayActiveSpan } from "./itinerary";
 import type { DayPlan, Itinerary, Stop } from "./types";
 import { NO_EM_DASH_RULE } from "./writingStyle";
+import { SCOPE_BLOCK_WITH_REFUSAL, fenceUserText } from "./promptScope";
 
 /** The stop payload every op that writes a stop carries. */
 const STOP_SHAPE = `{"name":"...","lat":0.0,"lng":0.0,"cost":0,"why":"one line","note":"one line","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
@@ -180,10 +181,12 @@ export function buildChatEditPrompt(params: {
       : `day ${params.dayIndex + 1} of the trip (dayIndex=${params.dayIndex}${target ? `, ${target.date}` : ""}) only. Do not change any other day`;
 
   const transcript = params.messages
-    .map((m) => `${m.role === "user" ? "Traveler" : "You"}: ${m.content}`)
+    .map((m) => `${m.role === "user" ? "Traveler" : "You"}: ${fenceUserText(m.content)}`)
     .join("\n");
 
-  return `<planning_rules>
+  return `${SCOPE_BLOCK_WITH_REFUSAL}
+
+<planning_rules>
 ${params.skill}
 </planning_rules>
 
@@ -192,7 +195,9 @@ ${params.editContext}
 </trip_context>
 
 <current_itinerary>
-${compactItinerary(params.itinerary, params.dayIndex)}
+<traveler_text>
+${fenceUserText(compactItinerary(params.itinerary, params.dayIndex))}
+</traveler_text>
 
 The trip already includes every stop listed above. Never add a place that already appears on any day, editable or read-only. Pick a different one instead.
 </current_itinerary>
@@ -285,14 +290,18 @@ The itinerary has been edited outside this conversation since your last message,
 remember is out of date. This is the current plan. Treat it as the only truth and ignore your
 earlier recollection of the indices:
 
-${compactItinerary(params.itinerary, params.dayIndex)}
+<traveler_text>
+${fenceUserText(compactItinerary(params.itinerary, params.dayIndex))}
+</traveler_text>
 </plan_changed>
 
 `
     : "";
 
-  return `${resyncBlock}<traveler_message>
-${params.message}
+  return `${SCOPE_BLOCK_WITH_REFUSAL}
+
+${resyncBlock}<traveler_message>
+${fenceUserText(params.message)}
 </traveler_message>
 
 Continue helping the traveler with the itinerary you planned for them: answering what they ask
@@ -349,7 +358,14 @@ export function buildElementEditPrompt(params: {
       ? `${label}: ${s.name}, ${s.time || "no time"}, ${s.lat.toFixed(3)}/${s.lng.toFixed(3)}`
       : `${label}: none`;
 
-  return `<planning_rules>
+  const slot = `Day ${params.dayIndex + 1} of the trip, dayIndex=${params.dayIndex} (${day.date}), stopIndex=${stopIndex} of ${day.stops.length}
+Current: ${params.target.name}, ${params.target.time || "no time"}, ${params.target.durationLabel || "no duration"}, $${params.target.cost}, ${params.target.lat.toFixed(3)}/${params.target.lng.toFixed(3)}
+${neighbour(before, "Previous stop")}
+${neighbour(after, "Next stop")}`;
+
+  return `${SCOPE_BLOCK_WITH_REFUSAL}
+
+<planning_rules>
 ${params.skill}
 </planning_rules>
 
@@ -358,13 +374,15 @@ ${params.editContext}
 </trip_context>
 
 <slot>
-Day ${params.dayIndex + 1} of the trip, dayIndex=${params.dayIndex} (${day.date}), stopIndex=${stopIndex} of ${day.stops.length}
-Current: ${params.target.name}, ${params.target.time || "no time"}, ${params.target.durationLabel || "no duration"}, $${params.target.cost}, ${params.target.lat.toFixed(3)}/${params.target.lng.toFixed(3)}
-${neighbour(before, "Previous stop")}
-${neighbour(after, "Next stop")}
+<traveler_text>
+${fenceUserText(slot)}
+</traveler_text>
 </slot>
 
-The traveler wants this ONE stop changed: "${params.instruction}"
+The traveler wants this ONE stop changed:
+<traveler_instruction>
+${fenceUserText(params.instruction)}
+</traveler_instruction>
 
 Replace only this stop, keeping its time window workable between the neighbours shown. The replacement must fit the day's geography (it sits between those two stops), the slot's timing, and the trip context's conditions for that day. Do not move, add or remove any other stop; the surrounding plan is fixed.
 
