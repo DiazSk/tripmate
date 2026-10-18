@@ -26,7 +26,15 @@ import {
   itineraryFingerprint,
 } from "@/lib/editPrompt";
 import { applyPatch, PatchOp } from "@/lib/itineraryPatch";
-import { CAPS, capFailureResponse, chatHistory, checkItinerary, checkText, readJsonCapped } from "@/lib/inputLimits";
+import {
+  CAPS,
+  capFailureResponse,
+  chatHistory,
+  checkItinerary,
+  checkText,
+  readJsonCapped,
+  UNREADABLE_REQUEST,
+} from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
 import {
   capResponse,
@@ -106,7 +114,16 @@ export async function POST(req: NextRequest) {
   const clientMessages = (body as { messages?: { role?: unknown; content?: unknown }[] }).messages;
   const latest = Array.isArray(clientMessages) ? clientMessages[clientMessages.length - 1]?.content : undefined;
   const instruction = (body as { instruction?: unknown }).instruction;
-  for (const c of [checkText(latest, CAPS.message), checkText(instruction, CAPS.instruction), checkItinerary(itinerary)]) {
+  // A message that isn't text would reach the prompt builders as an object; the screen skips it.
+  if (mode === "chat" && Array.isArray(clientMessages) && clientMessages.length > 0 && typeof latest !== "string") {
+    return capFailureResponse(UNREADABLE_REQUEST);
+  }
+  for (const c of [
+    checkText(latest, CAPS.message),
+    checkText(instruction, CAPS.instruction),
+    checkText(trip.destination, CAPS.destination),
+    checkItinerary(itinerary),
+  ]) {
     if (!c.ok) return capFailureResponse(c);
   }
   const refused =
@@ -260,7 +277,16 @@ export async function POST(req: NextRequest) {
       servedBy = r.sessionId;
       traceId = r.traceId;
     }
-    const parsed = parseJsonResponse<EditResponse & { refused?: unknown }>(raw);
+    // A reply that breaks the JSON contract (prose, as a jailbreak's often is) never reaches the
+    // reply check, so it is cut out of the resumed session here before the generic failure. The
+    // trace keeps its `ok` status: `refused` means the traveller was told off_topic, and they aren't.
+    let parsed: EditResponse & { refused?: unknown };
+    try {
+      parsed = parseJsonResponse<EditResponse & { refused?: unknown }>(raw);
+    } catch (err) {
+      if (rollback) truncateLlmSession(rollback.id, rollback.keep);
+      throw err;
+    }
 
     // The reply check. A refused turn changes nothing: no ops applied, no transcript written, no
     // new session stored (a rebuild's fresh session holds only this turn, so the client keeps the
@@ -268,6 +294,8 @@ export async function POST(req: NextRequest) {
     const check = checkEditReply(parsed, MAX_REPLY_CHARS);
     if (check.refused) {
       markTraceRefused(traceId, check.reason);
+      // ponytail: a sibling turn on the same session that lands while this one runs is cut away
+      // with it; a single traveller's chat sends one turn at a time, so that is accepted.
       if (rollback) truncateLlmSession(rollback.id, rollback.keep);
       return offTopicResponse(mode === "chat" ? "chat" : "element");
     }

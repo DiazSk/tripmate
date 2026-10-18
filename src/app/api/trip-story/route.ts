@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   }
   // Before the cache too, so one check covers both. No free check: the story prompt carries the
   // traveller's plan, not a request.
-  for (const c of [checkItinerary({ days: [day] }), checkText(destination, CAPS.destination)]) {
+  for (const c of [checkItinerary({ days: [day], legs: body.legs }), checkText(destination, CAPS.destination)]) {
     if (!c.ok) return capFailureResponse(c);
   }
 

@@ -69,7 +69,10 @@ function FallbackNote({ failure }: { failure: Failure | null }) {
       </p>
     );
   }
-  if (failure?.kind === "refused") return <p className="sp-note">Read from your plan. {failure.message}</p>;
+  // SV-24. The server's own sentence (SV-17) asks for something shorter, which Play can't send.
+  if (failure?.kind === "refused") {
+    return <p className="sp-note">Read from your plan: this day has more than TripMate can narrate at once.</p>;
+  }
   return <p className="sp-note">Read from your plan. The storyteller wasn&rsquo;t reachable this time.</p>;
 }
 

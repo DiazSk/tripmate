@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { screenRequest } from "./promptScope";
 import { MAX_TRIP_DAYS } from "./tiers";
 
 /**
@@ -33,6 +34,9 @@ const TOO_MANY_STOPS = `A day in that plan has more than ${CAPS.stopsPerDay} sto
 const UNREADABLE = "TripMate couldn’t read that request. Try again, and if it keeps happening, reload the page.";
 
 const badRequest = (error: string): CapFailure => ({ ok: false, status: 400, code: "bad_request", error });
+
+/** SV-23, for a route whose request parsed but holds something it cannot read (a non-text message). */
+export const UNREADABLE_REQUEST: CapFailure = badRequest(UNREADABLE);
 
 /**
  * A non-string is ok: the route's own validation handles it. `.length` counts UTF-16 code units,
@@ -119,17 +123,21 @@ type Turn = { role: "user" | "assistant"; content: string };
 
 /**
  * The conversation a rebuilt chat prompt replays. A saved trip replays its own stored transcript
- * plus the client's latest message, so a client cannot hand the model a history it never had; an
- * unsaved trip has no transcript and keeps the client's array. Either way: the last
- * `historyTurns`, each cut to the message cap.
+ * plus the client's latest message (always as the traveller's), so a client cannot hand the model
+ * a history it never had. An unsaved trip has no transcript and keeps the client's array, minus any
+ * traveller turn the free check refuses, so a refused message is never replayed on a rebuild.
+ * Either way: the last `historyTurns`, each cut to the message cap.
  */
 export function chatHistory(
   stored: { role: string; content: string }[] | null,
   client: { role?: unknown; content?: unknown }[]
 ): Turn[] {
-  const turns = stored ? [...stored, client[client.length - 1]] : client;
-  return turns.slice(-CAPS.historyTurns).map((t) => ({
+  const turns: Turn[] = (
+    stored ? [...stored, { ...client[client.length - 1], role: "user" }] : client
+  ).map((t) => ({
     role: t?.role === "assistant" ? "assistant" : "user",
     content: String(t?.content ?? "").slice(0, CAPS.message),
   }));
+  const kept = stored ? turns : turns.filter((t) => t.role === "assistant" || !screenRequest(t.content).refused);
+  return kept.slice(-CAPS.historyTurns);
 }

@@ -165,8 +165,9 @@ export async function POST(req: NextRequest) {
       // `runGeneration` throws CLI timeouts and JSON parse failures. Those messages are
       // written for a developer reading a trace, not for someone waiting on a plan, so the
       // real one goes to the server log and the client gets a recovery step.
-      console.error("[itinerary]", err);
+      // A refusal is the guard working, not a server error, so it is not logged as one.
       if (err instanceof OffTopicError) return offTopicResponse("refine");
+      console.error("[itinerary]", err);
       return modelFailureResponse(err, GENERATION_ERROR, bucket);
     }
   }
@@ -232,7 +233,7 @@ export async function POST(req: NextRequest) {
         const result = await runGeneration(params, onStage, live);
         safeEnqueue("done", result);
       } catch (err) {
-        console.error("[itinerary]", err);
+        if (!(err instanceof OffTopicError)) console.error("[itinerary]", err);
         // The stream's status is already 200, so the timeout code rides in the event instead.
         safeEnqueue(
           "error",
