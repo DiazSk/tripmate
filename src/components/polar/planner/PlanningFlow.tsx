@@ -14,6 +14,7 @@ import { MAX_TRIP_DAYS, TIERS, tripDays, type TierId } from "@/lib/tiers";
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from "@/lib/weather";
 import type { DietaryNeeds } from "@/lib/travelerProfile";
 import type { CandidatePoi } from "@/lib/pois";
+import { cityOf, specificsPlaceholders } from "@/lib/specificsPlaceholders";
 import type {
   AccessibilityNeeds,
   Anchor,
@@ -185,7 +186,6 @@ function dms(v: number, pos: string, neg: string) {
   const s = Math.round(((a - d) * 60 - m) * 60);
   return `${d}º ${String(m).padStart(2, "0")}’ ${String(s).padStart(2, "0")}” ${v >= 0 ? pos : neg}`;
 }
-const cityOf = (destination: string) => destination.split(",")[0]?.trim() ?? "";
 
 /** The trip as it is answered, shared by the card and the strip. */
 export type TripFacts = {
@@ -1069,6 +1069,7 @@ function Preferences({ m }: { m: PlannerModel }) {
   const left = MAX_STARRED_PRIORITIES - m.starredInterests.length;
   const access = m.accessibility;
   const anySpecifics = !!(m.purpose || m.mustInclude || m.avoid || m.constraintsNote);
+  const ph = specificsPlaceholders(m.destination, m.pois, m.poisAvailable);
   return (
     <>
       <Section title="What matters most" hint="Pick any, then star the ones that matter most.">
@@ -1137,11 +1138,11 @@ function Preferences({ m }: { m: PlannerModel }) {
       </More>
       <More title="The specifics" hint="An occasion, places you must see, things to leave out." open={anySpecifics}>
         <Field label="What’s the occasion?">
-          <input value={m.purpose} onChange={(e) => m.setPurpose(e.target.value)} placeholder="An anniversary, a first time in Japan, work and play" className="tm-fb-input" />
+          <input value={m.purpose} onChange={(e) => m.setPurpose(e.target.value)} placeholder={ph.purpose} className="tm-fb-input" />
         </Field>
         <div className="pp-grid-2">
           <Field label="Anything you must see">
-            <input value={m.mustInclude} onChange={(e) => m.setMustInclude(e.target.value)} placeholder="The Louvre, Versailles" className="tm-fb-input" />
+            <input value={m.mustInclude} onChange={(e) => m.setMustInclude(e.target.value)} placeholder={ph.mustInclude} className="tm-fb-input" />
           </Field>
           <Field label="Anything to leave out">
             <input value={m.avoid} onChange={(e) => m.setAvoid(e.target.value)} placeholder="Nightclubs, seafood" className="tm-fb-input" />
