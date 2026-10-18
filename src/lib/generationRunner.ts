@@ -286,7 +286,8 @@ export async function runGeneration(
 
     // Import already geocoded what it could; this only fills typed and legacy entries. Skipped
     // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
-    if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
+    // `area` is the chip's display label; dropped so a refine's stringified plan never carries it.
+    if (geoPoint && anchors.length > 0) anchors = (await geocodeAnchors(anchors, geoPoint)).map((a) => ({ ...a, area: undefined }));
 
     // The planner is told to schedule each place "at a time it is open" and, until now, never
     // told when that was. Started here — it needs the coordinates just resolved — and awaited

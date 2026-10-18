@@ -127,6 +127,9 @@ export interface Anchor {
   /** Derived from `openingHours` by `closedDaysFromOpeningHours`; null when that syntax is too
    *  rich to read confidently. */
   closedDays?: string[] | null;
+  /** Where the geocoder found it ("Apollo Bandar"), for the planner's chip only. Display, not a
+   *  fact for the model: `normalizeAnchors` drops it and generation strips it before storing. */
+  area?: string;
 }
 
 /** A `must` anchor the planner could not schedule, with the model's one-line reason. */

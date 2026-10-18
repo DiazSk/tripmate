@@ -4,7 +4,7 @@
  * one function every path now goes through, including the iOS wizard's legacy fields. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { anchorKey, normalizeAnchors, readUnplaced } from "./anchors.ts";
+import { anchorKey, foundSummary, normalizeAnchors, readUnplaced } from "./anchors.ts";
 
 test("anchorKey folds case, accents and punctuation", () => {
   assert.equal(anchorKey("  Café  de Flore! "), "cafe de flore");
@@ -65,4 +65,18 @@ test("readUnplaced keeps only well-formed entries", () => {
     readUnplaced([{ name: "Kawagoe", reason: "70 min each way" }, { name: "No reason" }, 4]),
     [{ name: "Kawagoe", reason: "70 min each way" }]
   );
+});
+
+test("normalizeAnchors drops the display-only area, so the model never sees it", () => {
+  const [a] = normalizeAnchors({ anchors: [{ name: "Cafe Leopold", lat: 18.92, lng: 72.83, area: "Apollo Bandar" }] });
+  assert.equal("area" in a, false);
+});
+
+test("foundSummary: all found names the city; a partial batch says what the rest need", () => {
+  assert.equal(foundSummary(3, 3, "Mumbai"), "Found 3 of 3 places in Mumbai.");
+  assert.equal(foundSummary(1, 1, " Mumbai "), "Found 1 of 1 place in Mumbai.");
+  assert.equal(foundSummary(2, 2, ""), "Found 2 of 2 places.");
+  assert.equal(foundSummary(2, 3, "Mumbai"), "Found 2 of 3 — 1 needs a nearby landmark.");
+  assert.equal(foundSummary(0, 3, "Mumbai"), "Found 0 of 3 — 3 need a nearby landmark.");
+  assert.equal(foundSummary(0, 0, "Mumbai"), "");
 });

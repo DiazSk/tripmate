@@ -629,6 +629,12 @@ inset clips are scroll effects on photographs, not shapes.
   frost edge brightening on hover. The checked chip turns ice with ink text, and a 2px signal bar along
   its foot fills over the rotation interval (`--rotate-ms`), pausing on hover or focus.
 - **Planner chips** (`.pp-chip`): hairline corners, multi-select, filled when chosen.
+- **Saved-place chips** (`.pp-anchor`): star, name, status, remove. The status is always words: found is
+  "✓" plus where, in `{colors.tag-positive-fg}` with its edge tinted to match; not found is "Not found —
+  try a nearby landmark" in the failure-alert text on dark glass (`#ffb3b3`, as `.pp-alert`; `--alert`
+  drops to ~4.3:1 over the scrimmed photo) with an underlined **Edit** that turns the name into an input;
+  never looked up (a library place or restored draft without coordinates) is "Not looked up yet" in
+  muted night text with **Look up**.
 - **Spotlight tokens and categories:** pills, each category with its dot in the map's colour for it.
 - **Tags** (`chip-neutral`, `chip-positive`, `chip-highlight`): small pills on the older surfaces.
 

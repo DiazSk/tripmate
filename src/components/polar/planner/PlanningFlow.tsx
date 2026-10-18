@@ -8,7 +8,7 @@ import { TimeField, time12 } from "./TimeField";
 import { INTEREST_TAGS } from "@/components/InterestPicker";
 import { DIETARY_TAGS } from "@/components/DietaryPicker";
 import type { SuggestOption } from "@/components/SuggestInput";
-import { anchorKey } from "@/lib/anchors";
+import { anchorKey, foundSummary } from "@/lib/anchors";
 import { MAX_STARRED_PRIORITIES, PARTY_MAX_PER_BAND } from "@/lib/userAnswers";
 import { MAX_TRIP_DAYS, TIERS, tripDays, type TierId } from "@/lib/tiers";
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from "@/lib/weather";
@@ -681,6 +681,11 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
   const [notes, setNotes] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [saved, setSaved] = useState<SavedPlace[]>([]);
+  // Keys this destination's lookup has answered for (found or not). A chip with no coordinates that
+  // is not in here was never looked up — a library place, a restored draft — and must not say
+  // "Not found". Nothing is looked up on mount; the traveller asks.
+  const [looked, setLooked] = useState<Set<string>>(() => new Set());
+  const markLooked = (names: string[]) => setLooked((prev) => new Set([...prev, ...names.map(anchorKey)]));
   const file = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -717,18 +722,21 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
         return;
       }
       const incoming = json.places ?? [];
+      // Only a geocoded batch was looked up: with no city to search near, nothing was.
+      if (m.destination.trim() || json.destinationGuess) markLooked(incoming.map((p) => p.name));
       m.setAnchors((prev) => {
         const byKey = new Map(prev.map((a) => [anchorKey(a.name), a] as const));
         for (const place of incoming) {
           const key = anchorKey(place.name);
           const existing = byKey.get(key);
           if (!existing) byKey.set(key, place);
-          else if (existing.lat === null && place.lat !== null) byKey.set(key, { ...existing, lat: place.lat, lng: place.lng });
+          else if (existing.lat === null && place.lat !== null) byKey.set(key, { ...existing, lat: place.lat, lng: place.lng, area: place.area });
         }
         return Array.from(byKey.values());
       });
       if (json.destinationGuess && !m.destination.trim()) m.setDestination(json.destinationGuess);
-      setNotes((json.unread ?? []).map((u) => u.reason));
+      const summary = foundSummary(incoming.filter((p) => p.lat !== null).length, incoming.length, city || cityOf(json.destinationGuess ?? ""));
+      setNotes([...(summary ? [summary] : []), ...(json.unread ?? []).map((u) => u.reason)]);
       setImages([]);
       setText("");
     } catch {
@@ -738,6 +746,7 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
     }
   }
   const chosen = new Set(m.anchors.map((a) => anchorKey(a.name)));
+  const city = cityOf(m.destination);
 
   return (
     <More title="Places you’ve saved" hint="Screenshots, links or a list. We find the places in them and plan around them." open={m.anchors.length > 0}>
@@ -754,7 +763,10 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
                   aria-pressed={on}
                   onClick={() =>
                     m.setAnchors((prev) =>
-                      on ? prev.filter((a) => anchorKey(a.name) !== anchorKey(p.name)) : [...prev, { name: p.name, lat: p.lat, lng: p.lng, priority: "want", source: "import" }]
+                      on
+                        ? prev.filter((a) => anchorKey(a.name) !== anchorKey(p.name))
+                        : // Its own city as the area: the library's place is not claimed for this destination.
+                          [...prev, { name: p.name, lat: p.lat, lng: p.lng, priority: "want", source: "import", ...(p.city ? { area: cityOf(p.city) } : {}) }]
                     )
                   }
                   className="pp-chip"
@@ -811,41 +823,179 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
           </button>
         </div>
       </div>
-      {notes.length > 0 && (
-        <ul className="pp-hint grid gap-1" aria-live="polite">
-          {notes.map((n, i) => (
-            <li key={i}>{n}</li>
-          ))}
-        </ul>
-      )}
+      {/* Always mounted, so a line added to it is announced; sr-only while empty, which also takes it
+          out of the grid so it leaves no gap. */}
+      <ul className={notes.length > 0 ? "pp-hint grid gap-1" : "sr-only"} aria-live="polite">
+        {/* Keyed by distance from the end, which stays put when a note is prepended, so an old line
+            is not re-mounted and announced again. */}
+        {notes.map((n, i) => (
+          <li key={notes.length - i}>{n}</li>
+        ))}
+      </ul>
       {m.anchors.length > 0 && (
         <>
           <ul className="pp-chips" aria-label="Places to plan around">
             {m.anchors.map((a) => (
-              <li key={a.name} className="pp-anchor">
-                <button
-                  type="button"
-                  aria-pressed={a.priority === "must"}
-                  aria-label={a.priority === "must" ? `${a.name}: must see` : `${a.name}: nice to have`}
-                  onClick={() => m.setAnchors((prev) => prev.map((x) => (x.name === a.name ? { ...x, priority: x.priority === "must" ? "want" : "must" } : x)))}
-                  className={a.priority === "must" ? "is-star" : ""}
-                >
-                  {a.priority === "must" ? "★" : "☆"}
-                </button>
-                <span>
-                  {a.name}
-                  {a.lat === null && <span className="tm-on-dark-2"> · couldn’t place it, type it or skip</span>}
-                </span>
-                <button type="button" aria-label={`Remove ${a.name}`} onClick={() => m.setAnchors((prev) => prev.filter((x) => x.name !== a.name))}>
-                  ×
-                </button>
-              </li>
+              <AnchorChip
+                key={a.name}
+                a={a}
+                m={m}
+                city={city}
+                looked={looked.has(anchorKey(a.name))}
+                onLooked={(name) => markLooked([name])}
+                onNote={(n) => setNotes((prev) => [n, ...prev])}
+              />
             ))}
           </ul>
           <p className="pp-hint">★ means must see. The rest we fit in where they suit the day.</p>
         </>
       )}
     </More>
+  );
+}
+
+/* One place to plan around, saying plainly where it stands. Found: a check and where ("✓ Apollo
+   Bandar, Mumbai"). Not found: the alert role in words, and Edit, which renames it and looks again
+   through GET /api/geocode?place= — one name, no model call. Never looked up (a library place or a
+   restored draft without coordinates): neutral, with Look up. A lookup that failed (busy, offline)
+   says so and changes nothing, rather than calling the place missing. The star and × are unchanged. */
+function AnchorChip({
+  a,
+  m,
+  city,
+  looked,
+  onLooked,
+  onNote,
+}: {
+  a: Anchor;
+  m: PlannerModel;
+  city: string;
+  looked: boolean;
+  onLooked: (name: string) => void;
+  onNote: (note: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [looking, setLooking] = useState(false);
+  const found = a.lat !== null && a.lng !== null;
+  const state = found ? "is-found" : looked ? "is-missing" : "is-unlooked";
+  // The destination's city only for what this destination's lookup found; a library place keeps its own.
+  const where = [a.area, looked ? city : ""].filter(Boolean).join(", ");
+  // The input unmounts on Escape or a lookup, and a rename remounts the chip under its new key, so
+  // focus is put back by name after the commit: on Edit if still not found, else the star.
+  const refocus = (name: string) =>
+    requestAnimationFrame(() => {
+      const li = document.querySelector(`.pp-anchor[data-name="${CSS.escape(name)}"]`);
+      (li?.querySelector<HTMLElement>(".pp-anchor-text") ?? li?.querySelector<HTMLElement>("button"))?.focus();
+    });
+
+  async function lookAgain(raw: string) {
+    const name = raw.trim();
+    if (!name || looking) return;
+    if (!m.destination.trim()) {
+      onNote("Pick a destination first, then look it up.");
+      return;
+    }
+    setLooking(true);
+    let hit: { lat: number; lng: number; area: string | null } | null = null;
+    let answered = false;
+    try {
+      const res = await fetch(`/api/geocode?${new URLSearchParams({ destination: m.destination, place: name })}`);
+      // Only 200 and 404 are answers. 429, 5xx, a 400 (no destination yet) or a 422 (the destination
+      // itself could not be placed) are a failure to look, and the place is not called missing for them.
+      if (res.ok) hit = await res.json();
+      answered = res.ok || res.status === 404;
+    } catch {
+      // Offline or aborted: the same failure to look.
+    }
+    setLooking(false);
+    if (!answered) {
+      onNote("Couldn’t look just now — try again.");
+      return; // Nothing renamed; an open editor keeps its text and its focus.
+    }
+    const key = anchorKey(name);
+    // Renamed onto a place already in the list: that one survives, under its own spelling.
+    const survivor = m.anchors.find((x) => x.name !== a.name && anchorKey(x.name) === key);
+    m.setAnchors((prev) =>
+      survivor
+        ? prev
+            .filter((x) => x.name !== a.name)
+            .map((x) => (x.name === survivor.name && hit && x.lat === null ? { ...x, lat: hit.lat, lng: hit.lng, area: hit.area ?? undefined } : x))
+        : prev.map((x) => (x.name === a.name ? { ...x, name, lat: hit?.lat ?? null, lng: hit?.lng ?? null, area: hit?.area ?? undefined } : x))
+    );
+    onLooked(name);
+    onNote(hit ? `Found ${name}${hit.area ? ` — ${hit.area}` : ""}.` : `Still couldn’t find ${name}. Try a nearby landmark or street.`);
+    setDraft(null);
+    refocus(survivor?.name ?? name);
+  }
+
+  return (
+    <li className={`pp-anchor ${state}`} data-name={a.name}>
+      <button
+        type="button"
+        aria-pressed={a.priority === "must"}
+        aria-label={a.priority === "must" ? `${a.name}: must see` : `${a.name}: nice to have`}
+        onClick={() => m.setAnchors((prev) => prev.map((x) => (x.name === a.name ? { ...x, priority: x.priority === "must" ? "want" : "must" } : x)))}
+        className={a.priority === "must" ? "is-star" : ""}
+      >
+        {a.priority === "must" ? "★" : "☆"}
+      </button>
+      {draft === null ? (
+        <span>
+          {a.name}
+          {found ? (
+            <span className="pp-anchor-status">
+              <span aria-hidden="true"> ✓ </span>
+              {where ? <span className="sr-only"> found in </span> : null}
+              {where || "Found"}
+            </span>
+          ) : looked ? (
+            <span className="pp-anchor-status"> · Not found — try a nearby landmark</span>
+          ) : (
+            <span className="pp-anchor-status"> · Not looked up yet</span>
+          )}
+        </span>
+      ) : (
+        // Not a <form>: this sits inside the step's form, and a nested submit bubbles to it (Next).
+        <span className="pp-anchor-edit-form">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setDraft(null);
+                refocus(a.name);
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void lookAgain(draft);
+              }
+            }}
+            aria-label={`New name for ${a.name}`}
+            placeholder="A nearby landmark or street"
+            autoFocus
+            // Not `disabled`: that would drop the focus the traveller is typing in.
+            readOnly={looking}
+            aria-busy={looking}
+          />
+          <button type="button" className="pp-anchor-text" onClick={() => void lookAgain(draft)} disabled={looking || !draft.trim()}>
+            {looking ? <span className="pp-pulse">Looking…</span> : "Look again"}
+          </button>
+        </span>
+      )}
+      {!found && looked && draft === null && (
+        <button type="button" className="pp-anchor-text" aria-label={`Edit ${a.name} and look again`} onClick={() => setDraft(a.name)}>
+          Edit
+        </button>
+      )}
+      {!found && !looked && draft === null && (
+        <button type="button" className="pp-anchor-text" aria-label={`Look up ${a.name}`} aria-busy={looking} onClick={() => void lookAgain(a.name)}>
+          {looking ? <span className="pp-pulse">Looking…</span> : "Look up"}
+        </button>
+      )}
+      <button type="button" aria-label={`Remove ${a.name}`} onClick={() => m.setAnchors((prev) => prev.filter((x) => x.name !== a.name))}>
+        ×
+      </button>
+    </li>
   );
 }
 

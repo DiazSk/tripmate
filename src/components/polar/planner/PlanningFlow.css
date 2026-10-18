@@ -627,6 +627,54 @@
 .pp-anchor .is-star {
   color: var(--wd-signal);
 }
+/* Found or not, said in words and carried by colour: the positive role (cyan on night) for a place
+   the geocoder placed, the alert role for one it did not — which also gets Edit, its way forward —
+   and plain muted text for one nobody has looked up yet. */
+.pp-anchor-status {
+  font-weight: 600;
+}
+.pp-anchor.is-found {
+  border-color: color-mix(in oklab, var(--tag-positive-fg) 45%, transparent);
+}
+.pp-anchor.is-found .pp-anchor-status {
+  color: var(--tag-positive-fg);
+}
+.pp-anchor.is-missing {
+  border-color: rgba(255, 107, 107, 0.45);
+}
+/* The failure-alert text on dark glass (as .pp-alert): --alert itself drops to ~4.3:1 over the
+   scrimmed photograph this list can sit on. */
+.pp-anchor.is-missing .pp-anchor-status {
+  color: #ffb3b3;
+}
+.pp-anchor.is-unlooked .pp-anchor-status {
+  color: var(--wd-night-text-2);
+}
+.pp-anchor .pp-anchor-text {
+  width: auto;
+  padding: 0 0.6em;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.pp-anchor-edit-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+}
+.pp-anchor-edit-form input {
+  min-width: 0;
+  width: 14em;
+  max-width: 100%;
+  padding: 0.25em 0.4em;
+  font: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--wd-frost-20);
+}
+.pp-anchor-edit-form input::placeholder {
+  color: var(--wd-night-text-2);
+}
 
 /* The action bar: Back as glass, the one action in signal. It floats as the form's own footer,
    the width of the working column, rather than a full-bleed band that cut the photograph in two

@@ -85,3 +85,13 @@ export function readUnplaced(value: unknown): UnplacedAnchor[] {
     return name && reason ? [{ name, reason }] : [];
   });
 }
+
+/** The planner's one line after "Find the places": how many of a batch were placed, and what to do
+ *  about the rest. Empty when nothing came back — the unread notes already say why. */
+export function foundSummary(found: number, total: number, city: string): string {
+  if (total === 0) return "";
+  const where = city.trim() ? ` in ${city.trim()}` : "";
+  if (found === total) return `Found ${found} of ${total} ${total === 1 ? "place" : "places"}${where}.`;
+  const left = total - found;
+  return `Found ${found} of ${total} — ${left} ${left === 1 ? "needs" : "need"} a nearby landmark.`;
+}
