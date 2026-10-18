@@ -7,6 +7,10 @@ import type { PlaceGallery } from "@/app/api/place-gallery/route";
 import BackButton from "@/components/BackButton";
 import { devLabel } from "@/lib/devInspector";
 import { formatMoney } from "@/lib/format";
+import InlineNote from "@/components/InlineNote";
+import { formatWait, heldUntil, useHold } from "@/lib/actionHolds";
+import { formatResumeTime, type Failure } from "@/lib/failure";
+import { formatClockTime, holdSentence, WAIT } from "@/lib/toastQueue";
 
 /** The field labels inside this panel. Uppercase is a field-label device in this
  *  system, but a styled div is not a heading — these were unreachable by heading
@@ -70,9 +74,12 @@ export default function PlaceDetailPanel({
   detail,
   loading,
   error,
+  onRetry,
   onBack,
   actualCost,
   onActualCostChange,
+  actualCostNote = "",
+  onRetryActualCost,
   upcomingStops,
   onSelectUpcoming,
   polar = false,
@@ -82,10 +89,15 @@ export default function PlaceDetailPanel({
   stop: Stop;
   detail: PlaceDetail | null;
   loading: boolean;
-  error: string | null;
+  error: Failure | null;
+  /** Asks for this stop's details again: the failure's Try again, and the end of a limit's wait. */
+  onRetry?: () => void;
   onBack: () => void;
   actualCost?: number;
   onActualCostChange?: (value: number | undefined) => void;
+  /** Copy row T-05: why the actual amount didn't save. Empty while there is nothing to say. */
+  actualCostNote?: string;
+  onRetryActualCost?: () => void;
   /** Remaining stops for the same day, in order — powers the "Next up" quick-nav list. */
   upcomingStops?: Stop[];
   onSelectUpcoming?: (stop: Stop) => void;
@@ -198,7 +210,7 @@ export default function PlaceDetailPanel({
   );
   const tabPanel = (className: string) => (
     <div id="place-tabpanel" role="tabpanel" aria-labelledby={`place-tab-${active}`} tabIndex={-1} className={className}>
-      {active === "overview" && <Overview stop={stop} detail={detail} loading={loading} error={error} gallery={gallery} />}
+      {active === "overview" && <Overview stop={stop} detail={detail} loading={loading} error={error} onRetry={onRetry} gallery={gallery} />}
       {active === "verdict" && detail && <Verdict detail={detail} />}
       {active === "practical" && <Practical gallery={gallery} stop={stop} />}
       {active === "plan" && (
@@ -206,6 +218,8 @@ export default function PlaceDetailPanel({
           stop={stop}
           actualCost={actualCost}
           onActualCostChange={onActualCostChange}
+          actualCostNote={actualCostNote}
+          onRetryActualCost={onRetryActualCost}
           numberFieldClass={numberFieldClass}
           upcomingStops={upcomingStops}
           onSelectUpcoming={onSelectUpcoming}
@@ -379,17 +393,75 @@ function Photo({ src, name }: { src: string; name: string }) {
   );
 }
 
+/** Copy rows T-75..T-80. `{mm:ss}` (T-78) is filled by `DetailFailure`. */
+function detailFailureText(f: Failure, name: string): string {
+  switch (f.kind) {
+    case "offline":
+      return `You’re offline, so the details for ${name} didn’t load. Try again once you’re back online.`;
+    case "timeout":
+      return `Writing the details for ${name} took too long, so it stopped. Try again.`;
+    case "rate_limited":
+      return `You’ve opened the details of 10 places in the last 10 minutes, which is the limit. You can open ${name}’s in ${WAIT}. The plan and the map work as normal.`;
+    case "daily_cap":
+      return `Place details are paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. The plan, photos and map still work.`;
+    case "invalid":
+      return "TripMate couldn’t tell which place this is. Close it and open the stop again.";
+    default:
+      return `TripMate couldn’t write the details for ${name} just now. Try again.`;
+  }
+}
+
+/** The details' failure, in the Overview's place. A limit holds Try again as "Try again in {mm:ss}"
+ *  and asks again by itself when the wait ends (T-78). */
+function DetailFailure({ failure, name, onRetry }: { failure: Failure; name: string; onRetry?: () => void }) {
+  const limited = failure.kind === "rate_limited";
+  // The bucket the server named, not an assumed one: the wait shown is the wait that was set.
+  const { secondsLeft } = useHold(limited ? failure.bucket : "place-detail");
+  const over = limited && secondsLeft === null;
+  // A ref, so the host's per-render callback does not re-fire the effect while the wait is over.
+  const retry = useRef(onRetry);
+  useEffect(() => {
+    retry.current = onRetry;
+  });
+  useEffect(() => {
+    if (over) retry.current?.();
+  }, [over]);
+
+  const text = detailFailureText(failure, name);
+  const action =
+    failure.kind === "daily_cap" || failure.kind === "invalid" || !onRetry
+      ? undefined
+      : limited
+        ? { label: secondsLeft === null ? "Try again" : `Try again in ${formatWait(secondsLeft)}`, onClick: onRetry, busy: secondsLeft !== null }
+        : { label: "Try again", onClick: onRetry };
+  return (
+    <InlineNote size="section" tone="error" action={action}>
+      {limited && secondsLeft !== null ? (
+        <>
+          {/* Ticking for the eye; read once, with the end as a clock time (P-37a). */}
+          <span aria-hidden="true">{text.replace(WAIT, formatWait(secondsLeft))}</span>
+          <span className="sr-only">{holdSentence(text, formatClockTime(heldUntil(failure.bucket) ?? 0))}</span>
+        </>
+      ) : (
+        text.replace(WAIT, "0:00")
+      )}
+    </InlineNote>
+  );
+}
+
 function Overview({
   stop,
   detail,
   loading,
   error,
+  onRetry,
   gallery,
 }: {
   stop: Stop;
   detail: PlaceDetail | null;
   loading: boolean;
-  error: string | null;
+  error: Failure | null;
+  onRetry?: () => void;
   gallery: PlaceGallery;
 }) {
   return (
@@ -407,7 +479,7 @@ function Overview({
         </>
       )}
 
-      {error && !loading && <p className="text-sm text-alert">{error}</p>}
+      {error && !loading && <DetailFailure failure={error} name={stop.name} onRetry={onRetry} />}
 
       {detail && !loading && (
         <>
@@ -581,6 +653,8 @@ function InYourPlan({
   stop,
   actualCost,
   onActualCostChange,
+  actualCostNote,
+  onRetryActualCost,
   numberFieldClass,
   upcomingStops,
   onSelectUpcoming,
@@ -588,6 +662,8 @@ function InYourPlan({
   stop: Stop;
   actualCost?: number;
   onActualCostChange?: (value: number | undefined) => void;
+  actualCostNote: string;
+  onRetryActualCost?: () => void;
   numberFieldClass: string;
   upcomingStops?: Stop[];
   onSelectUpcoming?: (stop: Stop) => void;
@@ -601,6 +677,8 @@ function InYourPlan({
         </div>
       )}
 
+      {/* One child of the stack with its note, so the empty note adds no gap. */}
+      <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-medium tabular-nums text-foreground">
           Estimated {formatMoney(stop.cost)}
@@ -623,6 +701,7 @@ function InYourPlan({
                 // Same reasoning as the lodging field in `ItineraryCard`: the wrapping label's
                 // "Actual" is a name, not a useful one, and the `$` beside it is aria-hidden.
                 aria-label={`Actual cost in dollars for ${stop.name}`}
+                aria-describedby="place-cost-note"
                 title="What you actually paid. Replaces the estimate in this trip's budget total."
                 defaultValue={actualCost}
                 onBlur={(e) =>
@@ -634,6 +713,13 @@ function InYourPlan({
             </span>
           </label>
         )}
+      </div>
+      {/* Copy row T-05, under the amount. Mounted empty so it is announced. */}
+      {onActualCostChange && (
+        <InlineNote size="field" tone="error" id="place-cost-note" action={onRetryActualCost && { label: "Try again", onClick: onRetryActualCost }}>
+          {actualCostNote}
+        </InlineNote>
+      )}
       </div>
 
       {onSelectUpcoming && upcomingStops && upcomingStops.length > 0 && (

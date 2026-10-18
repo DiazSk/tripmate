@@ -27,7 +27,7 @@ export default function AnchorReceipt({
   if (!cov) return null;
   const notIn = [
     ...cov.unplaced,
-    ...cov.missing.map((name) => ({ name, reason: "Left out without a reason." })),
+    ...cov.missing.map((name) => ({ name, reason: "TripMate didn’t say why it left this out." })),
   ];
   if (kept && notIn.length === 0) return null;
   return (

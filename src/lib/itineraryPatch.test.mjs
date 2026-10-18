@@ -123,7 +123,7 @@ test("a stop removed twice is rejected by name rather than taking its neighbour"
   ]);
   assert.deepEqual(names(itinerary, 0), ["A", "C", "D"]);
   assert.equal(rejected.length, 1);
-  assert.match(rejected[0].reason, /already removed/);
+  assert.match(rejected[0].reason, /had already been removed/);
 });
 
 test("an index past the end of the day is still out of range", () => {
@@ -131,7 +131,24 @@ test("an index past the end of the day is still out of range", () => {
     { op: "remove_stop", dayIndex: 0, stopIndex: 9 },
   ]);
   assert.deepEqual(names(itinerary, 0), ["A", "B", "C", "D"]);
-  assert.match(rejected[0].reason, /out of range/);
+  assert.match(rejected[0].reason, /day 1 has no stop 10/);
+});
+
+// A model can send an op with no usable index. The reason reaches the traveller, so it must not read
+// "day NaN" (copy rows T-54a, T-56a, T-57a).
+test("a missing or non-integer index is worded without a number", () => {
+  const ops = [
+    { op: "remove_day" },
+    { op: "add_day", dayIndex: 1.5 },
+    { op: "remove_stop", stopIndex: 0 },
+    { op: "replace_stop", dayIndex: 0, stop: stop("X") },
+    { op: "remove_stop", dayIndex: 0, stopIndex: "1" },
+  ];
+  const { rejected } = applyPatch(trip(), ops);
+  assert.equal(rejected.length, ops.length);
+  for (const r of rejected) assert.doesNotMatch(r.reason, /NaN|undefined|null/, r.reason);
+  assert.match(rejected[0].reason, /didn’t name a day/);
+  assert.match(rejected[4].reason, /didn’t name a stop on day 1/);
 });
 
 // An add is the one op with no stop to name, so a too-large index appends rather than rejecting —
@@ -169,7 +186,7 @@ test("a scope-locked element edit still refuses everything but its own slot", ()
   );
   assert.deepEqual(names(itinerary, 0), ["A2", "B", "C", "D"]);
   assert.equal(rejected.length, 1);
-  assert.match(rejected[0].reason, /scope/);
+  assert.match(rejected[0].reason, /beyond the stop you’re editing/);
 });
 
 test("the itinerary handed in is never mutated", () => {
@@ -199,7 +216,7 @@ test("a booked stop cannot be dropped, and says why", () => {
     { op: "remove_stop", dayIndex: 0, stopIndex: 1 },
   ]);
   assert.equal(rejected.length, 1);
-  assert.match(rejected[0].reason, /booked .* cannot be dropped/);
+  assert.match(rejected[0].reason, /booked, so it stays/);
   assert.deepEqual(names(itinerary, 0), ["A", "Dinner at Den"], "the stop survives the refusal");
 });
 
@@ -227,7 +244,7 @@ test("a patch cannot unlock a booked stop", () => {
     { op: "replace_stop", dayIndex: 0, stopIndex: 1, stop: { timeFlexibility: "PREFERRED" } },
   ]);
   assert.equal(rejected.length, 1);
-  assert.match(rejected[0].reason, /only the traveler can unlock it/);
+  assert.match(rejected[0].reason, /unlock it on the stop/);
   assert.equal(itinerary.days[0].stops[1].timeFlexibility, "FIXED");
 });
 
@@ -272,7 +289,7 @@ test("a day-scoped edit refuses ops that land on another day", () => {
   );
   assert.equal(rejected.length, 1);
   assert.equal(rejected[0].op.dayIndex, 1);
-  assert.match(rejected[0].reason, /only day 1 is in scope/);
+  assert.match(rejected[0].reason, /only for day 1/);
 });
 
 test("a day-scoped edit allows every op shape within its own day", () => {
@@ -300,7 +317,7 @@ test("a day-scoped edit refuses whole-day ops even on its own day", () => {
     const { itinerary, rejected } = applyPatch(trip(), [{ op, dayIndex: 0 }], { dayIndex: 0 });
     assert.equal(itinerary.days.length, 2, `${op} changed the trip's length`);
     assert.equal(rejected.length, 1);
-    assert.match(rejected[0].reason, /trip's length/);
+    assert.match(rejected[0].reason, /changed another day/);
   }
 });
 

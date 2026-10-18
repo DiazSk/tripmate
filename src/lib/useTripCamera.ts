@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMapCamera } from "./mapCamera";
+import { heldUntil } from "./actionHolds";
+import { failureFromResponse, failureFromThrown, holdFromFailure, isAbort, type Failure } from "./failure";
 import { prefersReducedMotion } from "./reducedMotion";
 import { geocodeDestination } from "./weather";
 import { Itinerary, PlaceDetail, Stop } from "./types";
@@ -119,7 +121,8 @@ export function useTripCamera(destination: string, tripId?: string) {
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
   const [detail, setDetail] = useState<PlaceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  /** Why the open stop's details didn't load: the panel words it (copy rows T-75..T-80). */
+  const [detailError, setDetailError] = useState<Failure | null>(null);
 
   /**
    * Geocodes `name` and records the coordinates (closeDetail flies back to them). `fly`
@@ -205,6 +208,21 @@ export function useTripCamera(destination: string, tripId?: string) {
       if (!stayPut) flyToPlace(stop.lat, stop.lng);
       setDetail(null);
       setDetailError(null);
+      const request = ++detailRequestRef.current;
+      // A limit still running answers without asking (copy row T-78): the panel shows the wait and
+      // loads by itself when it ends, so the stop rows stay pressable rather than dead.
+      const held = heldUntil("place-detail");
+      if (held !== null) {
+        setDetailLoading(false);
+        setDetailError({
+          kind: "rate_limited",
+          bucket: "place-detail",
+          retryAfterSeconds: Math.ceil((held - Date.now()) / 1000),
+          limit: 0,
+          windowMinutes: 0,
+        });
+        return;
+      }
       setDetailLoading(true);
       /**
        * Which lookup this is, so a slower earlier one cannot answer for a later place.
@@ -221,7 +239,6 @@ export function useTripCamera(destination: string, tripId?: string) {
        * server has already started, and it throws into the `catch` below, so the guard would be
        * needed anyway to keep that from surfacing as an error. One ref does the whole job.
        */
-      const request = ++detailRequestRef.current;
       const current = () => detailRequestRef.current === request;
       try {
         const res = await fetch("/api/place-detail", {
@@ -235,16 +252,17 @@ export function useTripCamera(destination: string, tripId?: string) {
             tripId,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        if (current()) setDetail(data.detail);
+        if (!res.ok) {
+          const failure = await failureFromResponse(res, "place-detail");
+          // Held whichever stop asked: the limit is the traveller's, not this place's.
+          holdFromFailure(failure);
+          if (current()) setDetailError(failure);
+        } else {
+          const data = await res.json();
+          if (current()) setDetail(data.detail);
+        }
       } catch (e) {
-        if (current())
-          setDetailError(
-            e instanceof Error && e.message
-              ? e.message
-              : `We couldn't look up ${stop.name}. Reopening it will try again.`
-          );
+        if (current() && !isAbort(e)) setDetailError(failureFromThrown(e));
       } finally {
         if (current()) setDetailLoading(false);
       }

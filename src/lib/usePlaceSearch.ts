@@ -7,6 +7,7 @@ import type { CameraState } from "@/lib/mapRenderer";
 import { useActiveItinerary } from "@/lib/activeItinerary";
 import type { FoundPlace, PlaceCategory } from "@/lib/placeSearch";
 import { rememberSearch } from "@/lib/searchHistory";
+import { failureFromThrown } from "@/lib/failure";
 import { encodePolygon, searchAreaFor, type LatLng } from "@/lib/searchArea";
 import { isTilePlace, placeFromTilePoi, placesFromTiles } from "@/lib/tilePlaces";
 
@@ -71,6 +72,9 @@ export function usePlaceSearch({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [state, setState] = useState<PlaceSearchState>("idle");
+  /** Why `state` is "throttled": the index turned the search away, the traveller is offline, or the
+   *  route didn't answer (copy rows T-38..T-40). */
+  const [throttledBy, setThrottledBy] = useState<"busy" | "offline" | "server">("busy");
   const [provider, setProvider] = useState<"google" | "osm">("osm");
   const [history, setHistory] = useState<string[]>([]);
 
@@ -338,6 +342,8 @@ export function usePlaceSearch({
       if (trimmed) params.set("q", trimmed);
       if (askedCategories.length) params.set("category", askedCategories.join(","));
       const res = await fetch(`/api/place-search?${params}`);
+      // An error body has no places in it, and would otherwise read as an honest "nothing here".
+      if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as {
         places?: FoundPlace[];
         provider?: "google" | "osm";
@@ -349,16 +355,18 @@ export function usePlaceSearch({
       setClickedId(null);
       setProvider(data.provider ?? "osm");
       setSelectedId(null);
+      setThrottledBy("busy");
       setState(data.available === false ? "throttled" : found.length ? "idle" : "empty");
       // Recorded on the answer rather than the keystroke, so the history is searches that actually
       // ran — not every prefix the debounce happened to catch on the way to one.
       if (trimmed && data.available !== false) setHistory(rememberSearch(query));
-    } catch {
+    } catch (e) {
       // Same fail-soft contract the route has: the traveler gets a state they can act on
       // (try again) rather than an error dialog — but only if this is still the search anybody is
       // waiting on. A failure belonging to a view that has been panned away from is not news.
       if (generation !== searchGenerationRef.current) return;
       setPlaces([]);
+      setThrottledBy(failureFromThrown(e).kind === "offline" ? "offline" : "server");
       setState("throttled");
     }
     // `active` whole, not `active?.itinerary`. The React Compiler infers the dependency at the
@@ -439,6 +447,7 @@ export function usePlaceSearch({
     selectedPlace,
     withFacts,
     state,
+    throttledBy,
     provider,
     history,
     setHistory,

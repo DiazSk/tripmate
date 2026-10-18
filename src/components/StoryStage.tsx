@@ -14,6 +14,9 @@ import { useRouteProfile } from "@/lib/dayRoutes";
 import type { StoryBeat } from "@/lib/storyScript";
 import type { DayPlan, Stop } from "@/lib/types";
 import { meriForStory } from "@/lib/meri";
+import { formatWait, heldUntil, useHold } from "@/lib/actionHolds";
+import { formatResumeTime, type Failure } from "@/lib/failure";
+import { formatClockTime, holdSentence, WAIT } from "@/lib/toastQueue";
 import Meridian from "./Meridian";
 
 import "@/components/polar/PolarLanding.css";
@@ -40,6 +43,34 @@ import "@/components/polar/StoryPlayer.css";
  */
 const ENTER = { duration: 0.32, ease: [0.16, 1, 0.3, 1] as const };
 const EXIT = { duration: 0.18, ease: [0.4, 0, 1, 1] as const };
+
+/** Copy rows T-93..T-96: why this day is read from the plan. It never blocks: Play still plays. */
+function FallbackNote({ failure }: { failure: Failure | null }) {
+  const { secondsLeft } = useHold("story");
+  if (failure?.kind === "offline") {
+    return <p className="sp-note">Read from your plan. You&rsquo;re offline, so the storyteller couldn&rsquo;t write this day.</p>;
+  }
+  if (failure?.kind === "daily_cap") {
+    return (
+      <p className="sp-note">
+        Read from your plan. New stories are paused for everyone until {formatResumeTime(failure.resumesAt)}; it isn&rsquo;t anything you
+        did. Days you&rsquo;ve already played keep theirs.
+      </p>
+    );
+  }
+  if (failure?.kind === "rate_limited") {
+    // Once the wait is over the countdown has nothing left to say; the day is still read from the plan.
+    if (secondsLeft === null) return <p className="sp-note">Read from your plan.</p>;
+    const text = `Read from your plan. You’ve started 6 new stories in the last 10 minutes, which is the limit; written stories are back in ${WAIT}. Days you’ve already played keep theirs.`;
+    return (
+      <p className="sp-note">
+        <span aria-hidden="true">{text.replace(WAIT, formatWait(secondsLeft))}</span>
+        <span className="sr-only">{holdSentence(text, formatClockTime(heldUntil("story") ?? 0))}</span>
+      </p>
+    );
+  }
+  return <p className="sp-note">Read from your plan. The storyteller wasn&rsquo;t reachable this time.</p>;
+}
 
 export default function StoryStage() {
   const playback = useStoryPlayback();
@@ -254,7 +285,11 @@ function StoryPlayerBody({
               )}
             </>
           )}
-          {script?.source === "fallback" && <p className="sp-note">Read from your plan. The storyteller wasn&rsquo;t reachable this time.</p>}
+          {script?.source === "fallback" && <FallbackNote failure={playback.scriptFailure} />}
+          {/* T-90: said on the stage, not only in the voice chip's tooltip (which phones don't show). */}
+          {naturalStatus === "unavailable" && !silentPlatform && (
+            <p className="sp-note">The natural voice couldn&rsquo;t load, so it&rsquo;s staying with this device&rsquo;s own voice.</p>
+          )}
         </section>
       )}
 

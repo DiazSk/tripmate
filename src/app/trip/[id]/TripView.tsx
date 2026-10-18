@@ -2,6 +2,10 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { preload } from "react-dom";
+import { useRouter } from "next/navigation";
+import ErrorDialog from "@/components/ErrorDialog";
+import { useToast } from "@/lib/toast";
+import { failureFromResponse, failureFromThrown, formatResumeTime, holdFromFailure, isAbort, type Failure } from "@/lib/failure";
 import { fitMessage } from "@/components/AnchorReceipt";
 import { useStoryControls } from "@/lib/storyMode";
 import FocusEditMode from "@/components/FocusEditMode";
@@ -9,9 +13,9 @@ import SplitEditor from "@/components/SplitEditor";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import TripBoard, { COLUMN_QUERY, type BoardShape } from "@/components/polar/trip/TripBoard";
+import TripBoard, { COLUMN_QUERY, type BoardShape, type Note } from "@/components/polar/trip/TripBoard";
 import TripSpotlight from "@/components/polar/trip/TripSpotlight";
-import { Itinerary, Trip } from "@/lib/types";
+import { Itinerary, Stop, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import { DEFAULT_MAP_ENGINE, MAPLIBRE_STYLE_URL } from "@/lib/mapEngine";
@@ -25,9 +29,56 @@ import "@/components/polar/trip/TripBoard.css";
 import "@/components/polar/trip/TripDrawer.css";
 import "@/components/polar/trip/TripSpotlight.css";
 
-/** Fallback shown only when the thrown error carries no message of its own. */
-function errorMessage(e: unknown, fallback: string): string {
-  return e instanceof Error && e.message ? e.message : fallback;
+/** Thrown by this page's requests so the catch knows what failed, never a sentence to print. */
+class RequestError extends Error {
+  constructor(readonly failure: Failure) {
+    super(failure.kind);
+  }
+}
+const failureOf = (e: unknown): Failure => (e instanceof RequestError ? e.failure : failureFromThrown(e));
+
+/** Fetch that throws a `RequestError` for a refused request or a failed connection. */
+async function request(url: string, init: RequestInit): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    throw isAbort(e) ? e : new RequestError(failureFromThrown(e));
+  }
+  if (!res.ok) throw new RequestError(await failureFromResponse(res, "edit"));
+  return res;
+}
+
+/** The first stop the server's itinerary check refuses: one with no place on the map. */
+function stopWithoutPlace(plan: Itinerary): { stop: Stop; day: number } | null {
+  for (const [d, day] of plan.days.entries()) {
+    const stop = day.stops.find((x) => !Number.isFinite(x.lat) || !Number.isFinite(x.lng));
+    if (stop) return { stop, day: d + 1 };
+  }
+  return null;
+}
+
+/** Copy rows T-09..T-14: a rebalance that didn't land. The plan on screen is the one from before. */
+function rebalanceNote(f: Failure, span: string): Note {
+  switch (f.kind) {
+    case "offline":
+      return { text: "You’re offline, so the rest of the trip wasn’t rebalanced. Your plan is unchanged. Press Rebalance when you’re back online." };
+    case "timeout":
+      return { text: `Rebalancing ${span} took longer than TripMate allows, so it stopped. Your plan is unchanged. Press Rebalance to try again.` };
+    case "rate_limited":
+      return {
+        text: "You’ve asked TripMate for 6 changes in the last 10 minutes, which is the limit. Your plan is unchanged. You can rebalance in {mm:ss}.",
+        hold: { bucket: f.bucket, resolved: "You can ask for changes again." },
+      };
+    case "daily_cap":
+      return {
+        text: `Rebalancing is paused for everyone until ${formatResumeTime(f.resumesAt)}. TripMate has reached its limit for the day; it isn’t anything you did. You can still move stops and change costs by hand.`,
+      };
+    case "invalid":
+      return { text: "TripMate couldn’t read the days left to rebalance. Reload the trip and press Rebalance again." };
+    default:
+      return { text: `TripMate hit a problem rebalancing ${span}. Your plan is unchanged. Press Rebalance to try again.` };
+  }
 }
 
 type ActualCostTarget = "lodging" | number;
@@ -36,6 +87,12 @@ type ActualCostTarget = "lodging" | number;
  *  destination flight must be suppressed or it lands second and clobbers that framing. */
 const hasStops = (itinerary?: Itinerary | null) =>
   !!itinerary?.days.some((d) => d.stops.length > 0);
+
+/** The `costNote` key of a stop's actual amount. */
+function stopCostKey(itinerary: Itinerary, stop: Stop): string | null {
+  const loc = findStopLocation(itinerary, stop);
+  return loc ? `${loc.dayIndex}:${loc.stopIndex}` : null;
+}
 
 
 export default function TripView({
@@ -57,7 +114,16 @@ export default function TripView({
   }
   const [trip, setTrip] = useState<Trip | null>(initialTrip);
   const [itinerary, setItinerary] = useState<Itinerary | null>(initialTrip?.itinerary ?? null);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const { showError } = useToast();
+  /** Copy rows T-06/T-07, beside Keep this trip. */
+  const [keepNote, setKeepNote] = useState("");
+  /** Copy rows T-09..T-14, in the overspend strip. */
+  const [rebalanceFailure, setRebalanceFailure] = useState<Note | null>(null);
+  /** Copy row T-05, under the amount that didn't save. `key` is `${dayIndex}:${stopIndex | "lodging"}`. */
+  const [costNote, setCostNote] = useState<{ key: string; text: string } | null>(null);
+  /** Copy row T-04: a save found the row gone, so the plan on screen is the only copy. */
+  const [tripGone, setTripGone] = useState(false);
   const [dismissedDays, setDismissedDays] = useState<Set<number>>(new Set());
   const [rebalancingDay, setRebalancingDay] = useState<number | null>(null);
   // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
@@ -120,7 +186,6 @@ export default function TripView({
       // loaded with a dynamic import so real trips don't pay for it. It is also the one
       // trip with no database row, which is why it cannot arrive as a prop.
       import("@/lib/previewTrip").then(({ PREVIEW_TRIP }) => {
-        setError(null);
         setTrip(PREVIEW_TRIP);
         setItinerary(PREVIEW_TRIP.itinerary);
         flyToDestinationByName(PREVIEW_TRIP.destination, !hasStops(PREVIEW_TRIP.itinerary));
@@ -152,16 +217,20 @@ export default function TripView({
   /** Set by the first write from this page: from then on a late critique revision is older than
    *  what the traveller has, and is dropped (see the effect below). */
   const editedRef = useRef(false);
+  /** The last plan sent, so Try again saves what is on screen now: each save sends the whole plan. */
+  const latestPlanRef = useRef<Itinerary | null>(null);
 
   async function persist(updated: Itinerary) {
     if (id === "preview") return;
     editedRef.current = true;
-    const res = await fetch(`/api/trips/${id}`, {
+    latestPlanRef.current = updated;
+    const res = await request(`/api/trips/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itinerary: updated }),
     });
-    if (!res.ok) throw new Error("That amount didn't save. Check your connection and re-enter it.");
+    // The whole plan just saved, so an amount that hadn't now has.
+    setCostNote(null);
 
     // An edit can now change the trip's LENGTH (the chat can add or remove days), which moves the
     // end date. The route recomputes it from the saved itinerary, so take its answer rather than
@@ -213,12 +282,102 @@ export default function TripView({
    * holds the plan; sending this page's copy as well could write the old plan over a critique
    * revision that landed on the row a moment before this page heard about it.
    */
+  /**
+   * Saves the plan and says what didn't save if it fails (copy rows T-01..T-04, T-15). `what` is the
+   * copy table's `{whatDidntSave}`. Nothing is reverted: the plan stays on screen, and Try again sends
+   * whatever is on screen by then.
+   */
+  function save(plan: Itinerary, what: string): Promise<void> {
+    return persist(plan).catch((e) => {
+      if (isAbort(e)) return;
+      const f = failureOf(e);
+      if (f.kind === "not_found") return setTripGone(true);
+      const bad = f.kind === "invalid" ? stopWithoutPlace(plan) : null;
+      if (bad) {
+        showError({
+          title: `${what} didn’t save: ${bad.stop.name} on day ${bad.day} has no place on the map.`,
+          detail: "Remove or replace that stop and it will save.",
+        });
+        return;
+      }
+      const again = { label: "Try again", onClick: () => save(latestPlanRef.current ?? plan, what) };
+      if (f.kind === "offline") {
+        // Mid-sentence, so "Your new stop order" reads "your new stop order"; a place name keeps its capital.
+        const inline = what.replace(/^(Your|The) /, (m) => m.toLowerCase());
+        // "Your edits" and "The rebalanced days" are plural.
+        const isnt = /^(Your edits|The rebalanced days)/.test(what) ? "aren’t" : "isn’t";
+        showError({ title: `You’re offline, so ${inline} ${isnt} saved.`, detail: "It’s still on screen; press Try again once you’re back online.", action: again });
+      } else {
+        showError({ title: `${what} didn’t save: TripMate’s server had a problem.`, detail: "It’s still on screen.", action: again });
+      }
+    });
+  }
+
+  /** An actual amount: its failure is written under that field (T-05), not raised as a toast. */
+  function saveCost(plan: Itinerary, key: string) {
+    persist(plan).catch((e) => {
+      if (isAbort(e)) return;
+      const f = failureOf(e);
+      if (f.kind === "not_found") return setTripGone(true);
+      setCostNote({ key, text: `Not saved. ${f.kind === "offline" ? "You’re offline." : "The server had a problem."}` });
+    });
+  }
+  const retryCost = () => {
+    if (costNote && latestPlanRef.current) saveCost(latestPlanRef.current, costNote.key);
+  };
+
+  /**
+   * T-04's safe choice: the on-screen plan as a new draft, then this page continues on it. Guarded,
+   * because Esc, a backdrop click and the button all choose it and only one trip should come of it.
+   */
+  const savingNewRef = useRef(false);
+  // Its failure is shown inside the dialog (T-04a): a toast would sit under the modal, which is inert.
+  const [savingNew, setSavingNew] = useState(false);
+  const [newTripNote, setNewTripNote] = useState("");
+  async function saveAsNewTrip() {
+    const plan = latestPlanRef.current ?? itinerary;
+    if (savingNewRef.current || !trip || !plan) return;
+    savingNewRef.current = true;
+    setSavingNew(true);
+    setNewTripNote("");
+    try {
+      const res = await request("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination: trip.destination,
+          // From the plan, which a chat edit can lengthen, rather than from the row that is gone.
+          startDate: plan.days[0]?.date ?? trip.startDate,
+          endDate: plan.days.at(-1)?.date ?? trip.endDate,
+          budget: trip.budget,
+          itinerary: plan,
+          userAnswers: trip.userAnswers ?? undefined,
+          // As it was: a kept trip stays kept, and the chat resumes where it left off.
+          chatSessionId: trip.chatSessionId ?? undefined,
+          status: trip.status ?? "saved",
+        }),
+      });
+      const { id: next } = (await res.json()) as { id: string };
+      // `TripPage` keys this view by id, so the new trip mounts fresh from its own row.
+      router.replace(`/trip/${next}`);
+    } catch (e) {
+      savingNewRef.current = false;
+      setSavingNew(false);
+      if (isAbort(e)) return;
+      setNewTripNote(
+        failureOf(e).kind === "offline"
+          ? "You’re offline, so this trip isn’t saved. Press Save as a new trip once you’re back online."
+          : "This trip didn’t save: TripMate’s server had a problem. Press Save as a new trip to try again."
+      );
+    }
+  }
+
   async function keepTrip() {
     if (!trip || !itinerary) return;
     setKeeping(true);
-    setError(null);
+    setKeepNote("");
     try {
-      const res = await fetch(`/api/trips/${id}`, {
+      await request(`/api/trips/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         // Status only, so Keep never writes this page's copy over a revision that landed after it
@@ -226,12 +385,19 @@ export default function TripView({
         // no revision can land on it, and re-sending recovers an edit whose own save had failed.
         body: JSON.stringify(editedRef.current ? { itinerary, status: "saved" } : { status: "saved" }),
       });
-      if (!res.ok) throw new Error("We couldn't keep this trip. Try again.");
       // Local, not a reload: the row is unchanged apart from the one field, and re-fetching the
       // whole trip would reset the panel, the active day and the camera the traveler set.
       setTrip((prev) => (prev ? { ...prev, status: "saved" } : prev));
     } catch (e) {
-      setError(errorMessage(e, "We couldn't keep this trip. Try again."));
+      if (isAbort(e)) return;
+      const f = failureOf(e);
+      if (f.kind === "not_found") setTripGone(true);
+      else
+        setKeepNote(
+          f.kind === "offline"
+            ? "You’re offline, so this trip wasn’t kept. It’s still a draft. Press Keep this trip once you’re back online."
+            : "TripMate couldn’t keep this trip: its server had a problem. It’s still a draft. Press Keep this trip to try again."
+        );
     } finally {
       setKeeping(false);
     }
@@ -251,8 +417,7 @@ export default function TripView({
       day.stops[target].actualCost = value;
     }
     setItinerary(updated);
-    setError(null);
-    persist(updated).catch((e) => setError(errorMessage(e, "That amount didn't save.")));
+    saveCost(updated, `${dayIndex}:${target}`);
     setDismissedDays((prev) => {
       const next = new Set(prev);
       next.delete(dayIndex);
@@ -263,10 +428,9 @@ export default function TripView({
   /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed
    *  every day it touched, so this only has to commit it — and it saves immediately rather than
    *  waiting for a Save button, matching how the actual-cost inputs on this page already behave. */
-  function handleRearrange(next: Itinerary) {
+  function handleRearrange(next: Itinerary, what = "Your new stop order") {
     setItinerary(next);
-    setError(null);
-    persist(next).catch((e) => setError(errorMessage(e, "That change didn't save.")));
+    save(next, what);
   }
 
   function handleStopActualCostChange(value: number | undefined) {
@@ -279,7 +443,11 @@ export default function TripView({
   async function handleRebalance(dayIndex: number) {
     if (!itinerary || !trip) return;
     setRebalancingDay(dayIndex);
-    setError(null);
+    setRebalanceFailure(null);
+    const fromDay = dayIndex + 2;
+    const lastDay = itinerary.days.length;
+    // One day left reads "day 9", not "days 9 to 9".
+    const span = fromDay === lastDay ? `day ${fromDay}` : `days ${fromDay} to ${lastDay}`;
     try {
       const spentThroughDay = itinerary.days
         .slice(0, dayIndex + 1)
@@ -292,7 +460,7 @@ export default function TripView({
         return;
       }
 
-      const res = await fetch("/api/itinerary", {
+      const res = await request("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -305,17 +473,20 @@ export default function TripView({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to rebalance");
 
       const updated: Itinerary = {
         ...itinerary,
         days: [...itinerary.days.slice(0, dayIndex + 1), ...data.days],
       };
       setItinerary(updated);
-      await persist(updated);
       setDismissedDays((prev) => new Set(prev).add(dayIndex));
+      // T-15: the new days are on screen either way, so a failed save says so rather than "unchanged".
+      save(updated, `The rebalanced ${span}`);
     } catch (e) {
-      setError(errorMessage(e, "We couldn't rebalance the rest of the trip. Your plan is unchanged."));
+      if (isAbort(e)) return;
+      const f = failureOf(e);
+      holdFromFailure(f);
+      setRebalanceFailure(rebalanceNote(f, span));
     } finally {
       setRebalancingDay(null);
     }
@@ -422,28 +593,31 @@ export default function TripView({
   );
 
   async function saveRefine() {
+    const target = focus.target;
     const committed = focus.save();
     if (!committed) return;
     setSavingFocus(true);
     setItinerary(committed);
-    setError(null);
-    try {
-      await persist(committed);
-    } catch (e) {
-      setError(errorMessage(e, "That change didn't save."));
-    } finally {
-      setSavingFocus(false);
-    }
+    await save(committed, target?.scope === "day" ? `Your edits to day ${target.dayIndex + 1}` : "Your edits to the trip");
+    setSavingFocus(false);
   }
 
   return (
     <main className={`trip-page${drawer ? " has-drawer" : ""}`} {...devLabel("TripPage")}>
-      {error && (
-        <p className="tm trip-error" role="alert">
-          {error}
-        </p>
-      )}
-      {!trip && !error && <p className="tm trip-loading">Loading…</p>}
+      {!trip && <p className="tm trip-loading">Loading…</p>}
+
+      {/* T-04 / T-08. Inert while closed: `open` drives showModal(). */}
+      <ErrorDialog
+        open={tripGone}
+        title="This trip can’t be saved any more."
+        why="It’s no longer in your memories; it may have been deleted in another tab or on another device. The plan on screen is the only copy."
+        now="Save it as a new trip to keep it."
+        primary={{ label: "Save as a new trip", onClick: saveAsNewTrip }}
+        secondary={{ label: "Leave it", onClick: () => { setNewTripNote(""); setTripGone(false); } }}
+        pending={savingNew}
+        pendingLabel="Saving…"
+        detail={newTripNote || undefined}
+      />
 
       {trip && itinerary && (
         <TripBoard
@@ -474,6 +648,9 @@ export default function TripView({
           onOpen={() => setPlanShut(false)}
           onKeep={keepTrip}
           keeping={keeping}
+          keepNote={keepNote}
+          costNote={costNote}
+          onRetryCost={retryCost}
           // Re-read the row rather than toggling a local copy of `shared`, so the control cannot
           // end up disagreeing with the database after a failed request.
           onShareChange={() => {
@@ -490,7 +667,11 @@ export default function TripView({
                   amount: daySpend(itinerary.days[overspendDayIndex]) - dayPlanned(itinerary.days[overspendDayIndex]),
                   rebalancing: rebalancingDay === overspendDayIndex,
                   onRebalance: () => handleRebalance(overspendDayIndex),
-                  onDismiss: () => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex)),
+                  onDismiss: () => {
+                    setRebalanceFailure(null);
+                    setDismissedDays((prev) => new Set(prev).add(overspendDayIndex));
+                  },
+                  note: rebalanceFailure,
                 }
               : null
           }
@@ -550,9 +731,12 @@ export default function TripView({
                 detail={detail}
                 loading={detailLoading}
                 error={detailError}
+                onRetry={() => selectStop(selectedStop, { stayPut: true })}
                 onBack={() => closeDetail({ stayPut: story.active })}
                 actualCost={selectedStop.actualCost}
                 onActualCostChange={handleStopActualCostChange}
+                actualCostNote={costNote?.key === stopCostKey(itinerary, selectedStop) ? costNote.text : ""}
+                onRetryActualCost={retryCost}
                 upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
                 onSelectUpcoming={(stop) => selectStop(stop, { stayPut: story.active })}
               />

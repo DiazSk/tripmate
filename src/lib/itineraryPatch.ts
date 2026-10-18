@@ -29,6 +29,12 @@ function inRange(i: number, len: number): boolean {
   return Number.isInteger(i) && i >= 0 && i < len;
 }
 
+/** 1-based number for a reason, or null when the model sent something that isn't an index (a
+ *  missing or fractional `dayIndex` would otherwise print as "day NaN"). */
+const nth = (i: unknown): number | null => (Number.isInteger(i) && (i as number) >= 0 ? (i as number) + 1 : null);
+// T-56, or T-56a when the model sent no usable day number.
+const noDay = (i: unknown) => (nth(i) === null ? "it didn’t name a day in this trip" : `there’s no day ${nth(i)} in this trip`);
+
 /**
  * Where a stop the model wanted at `stopIndex` goes, given the day may have moved underneath.
  *
@@ -61,19 +67,19 @@ function insertionIndex(day: DayPlan, before: Stop[], stopIndex: number): number
  */
 function refusesLock(op: PatchOp, target: Stop): string | null {
   if (target.timeFlexibility !== "FIXED") return null;
-  if (op.op === "remove_stop") return `${target.name} is booked and cannot be dropped.`;
+  if (op.op === "remove_stop") return `${target.name} is booked, so it stays`;
   if (op.op !== "replace_stop") return null;
   // Declared `Stop`, but the merge below exists precisely because the model sends only the fields
   // it changed, so every one of these is absent more often than not.
   const patch = op.stop as Partial<Stop>;
   if (patch.time !== undefined && patch.time !== target.time) {
-    return `${target.name} is booked for ${target.time}, so that time cannot be moved.`;
+    return `${target.name} is booked for ${target.time}, so its time stays`;
   }
   if (patch.name !== undefined && patch.name !== target.name) {
-    return `${target.name} is booked and cannot be swapped for ${patch.name}.`;
+    return `${target.name} is booked, so it can’t be swapped for ${patch.name}`;
   }
   if (patch.timeFlexibility !== undefined && patch.timeFlexibility !== "FIXED") {
-    return `${target.name} is booked, and only the traveler can unlock it.`;
+    return `${target.name} is booked; unlock it on the stop if you want it changed`;
   }
   return null;
 }
@@ -149,9 +155,8 @@ export function applyPatch(
         if (wholeDay || op.dayIndex !== scope.dayIndex) {
           rejected.push({
             op,
-            reason: wholeDay
-              ? `only day ${scope.dayIndex + 1} is in scope, and this would change the trip's length`
-              : `only day ${scope.dayIndex + 1} is in scope for this change`,
+            // Copy row T-52, for both: either way it reached past the one day being edited.
+            reason: `it would have changed another day, and this edit is only for day ${scope.dayIndex + 1}`,
           });
           continue;
         }
@@ -161,7 +166,7 @@ export function applyPatch(
           op.dayIndex === scope.dayIndex &&
           op.stopIndex === scope.stopIndex;
         if (!sameSlot) {
-          rejected.push({ op, reason: "outside the edited element's scope" });
+          rejected.push({ op, reason: "it reached beyond the stop you’re editing" });
           continue;
         }
       }
@@ -171,7 +176,8 @@ export function applyPatch(
     // and where the day being named is about to stop existing.
     if (op.op === "add_day" || op.op === "remove_day") {
       if (!Number.isInteger(op.dayIndex) || op.dayIndex < 0) {
-        rejected.push({ op, reason: `day ${op.dayIndex} is not a valid position` });
+        // T-54, or T-54a when the model sent no usable day number.
+        rejected.push({ op, reason: nth(op.dayIndex) === null ? "it didn’t name a day in this trip" : `there’s no day ${nth(op.dayIndex)} to put it on` });
         continue;
       }
       if (op.op === "add_day") {
@@ -180,11 +186,11 @@ export function applyPatch(
         continue;
       }
       if (next.days.length <= 1) {
-        rejected.push({ op, reason: "a trip needs at least one day" });
+        rejected.push({ op, reason: "it would have removed the trip’s last day" });
         continue;
       }
       if (!inRange(op.dayIndex, next.days.length)) {
-        rejected.push({ op, reason: `day ${op.dayIndex} out of range` });
+        rejected.push({ op, reason: noDay(op.dayIndex) });
         continue;
       }
       next.days = removeDay(next, op.dayIndex).days;
@@ -192,7 +198,7 @@ export function applyPatch(
     }
 
     if (!inRange(op.dayIndex, next.days.length)) {
-      rejected.push({ op, reason: `day ${op.dayIndex} out of range` });
+      rejected.push({ op, reason: noDay(op.dayIndex) });
       continue;
     }
 
@@ -203,14 +209,15 @@ export function applyPatch(
       case "remove_stop": {
         const target = inRange(op.stopIndex, before.length) ? before[op.stopIndex] : undefined;
         if (!target) {
-          rejected.push({ op, reason: `stop ${op.stopIndex} out of range` });
+          // T-57, or T-57a when the stop number isn't one.
+          rejected.push({ op, reason: nth(op.stopIndex) === null ? `it didn’t name a stop on day ${nth(op.dayIndex)}` : `day ${nth(op.dayIndex)} has no stop ${nth(op.stopIndex)}` });
           break;
         }
         const at = day.stops.indexOf(target);
         if (at < 0) {
           // Only reachable when an earlier op in this same patch removed it. Saying so is the
           // whole point: the alternative is applying the op to whichever stop took its place.
-          rejected.push({ op, reason: `stop ${op.stopIndex} was already removed by an earlier op` });
+          rejected.push({ op, reason: `${target.name} had already been removed by an earlier change` });
           break;
         }
         const locked = refusesLock(op, target);

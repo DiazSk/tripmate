@@ -517,12 +517,6 @@
 }
 .tsl-alert {
   margin: 0.8rem 1rem;
-  padding: 0.7rem 0.85rem;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--wd-alert-text);
-  background: rgba(209, 15, 15, 0.08);
-  border-left: 2px solid currentColor;
 }
 .tsl-skel {
   list-style: none;

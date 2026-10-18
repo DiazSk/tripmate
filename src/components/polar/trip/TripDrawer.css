@@ -155,6 +155,12 @@ html[data-story-mode="true"] .tm.trip-drawer {
   font-size: 0.78em;
   color: var(--wd-alert-text);
 }
+/* The chat's failure slots stay mounted so their words are announced; empty, they leave the grid so
+   its gap doesn't open twice above the first turn. */
+.td-note-slot:empty,
+.td-note-slot:has(> .inline-note:empty) {
+  position: absolute;
+}
 
 /* ── Detail ── */
 .td-detail {

@@ -40,7 +40,7 @@ test("a hallucinated day index is rejected and scored down", () => {
   const s = scorePatch({ base, ops, task: { expect: { opsExpected: true } }, budget: 2000 });
   assert.equal(s.opsRejected, 1);
   assert.equal(s.applied, 0);
-  assert.match(s.rejectedReasons[0], /out of range/);
+  assert.match(s.rejectedReasons[0], /no day 10 in this trip/);
 });
 
 test("editing a day the task ruled out costs scope, even though applyPatch allows it", () => {

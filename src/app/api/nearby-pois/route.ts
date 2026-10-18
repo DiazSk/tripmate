@@ -13,12 +13,11 @@ import { getCandidatePoisCached } from "@/lib/serverFetchCached";
  * own name. Picking from real POIs also means every added stop already has coordinates that
  * belong to a real thing, rather than wherever the pointer happened to land on a rooftop.
  *
- * Always 200 with a list, possibly empty. A click on open water or moorland legitimately has
- * nothing near it, and this surface deliberately says the same thing when the lookup could not
- * run: the traveller clicked a point on a map and the only useful answer is a list or no list,
- * with nothing to act on in between. `getCandidatePois` *does* now tell the two apart — see the
- * trip wizard's POI picker, which has room for the distinction and needs it — so flattening it
- * here is this route's choice rather than the underlying ambiguity it used to be.
+ * Always 200 with `{pois, available}`. `pois` is a list, empty when nothing is near: a click on open
+ * water or moorland legitimately has nothing. `available: false` means a configured lookup failed
+ * (copy row T-72), so the picker says the places service didn't answer rather than "nothing
+ * listed". With no `OPENTRIPMAP_API_KEY` there is no lookup to fail: that deployment answers
+ * `available: true` with an empty list, and the picker says nothing about a service.
  */
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
@@ -33,5 +32,8 @@ export async function GET(req: NextRequest) {
   // `minRate: 0` because a rating floor answers "what is this city known for", and this is
   // asking "what is here" — the cafe being pointed at is unrated.
   const pois = await getCandidatePoisCached(lat, lng, 8, { radiusM: 250, minRate: 0 });
-  return NextResponse.json({ pois: pois ?? [] });
+  // `getCandidatePois` returns null both for "no key" and for a failed fetch. Only the second is
+  // T-72; a deployment that never configured the key isn't failing, it just has no lookup.
+  const configured = !!process.env.OPENTRIPMAP_API_KEY;
+  return NextResponse.json({ pois: pois ?? [], available: pois !== null || !configured });
 }

@@ -79,8 +79,14 @@ export default function InlineNote({
   if (size === "field") {
     return (
       <p id={id} className={cls} aria-live={live ? "polite" : undefined}>
-        {glyph}
+        {/* Kept mounted empty to be announced, so the glyph and action wait for words too. */}
+        {children ? glyph : null}
         <span>{children}</span>
+        {action && children ? (
+          <button type="button" className="err-btn err-btn-text" onClick={action.onClick} disabled={action.busy} aria-busy={action.busy || undefined}>
+            {action.label}
+          </button>
+        ) : null}
       </p>
     );
   }
@@ -119,24 +125,26 @@ export function HeldNote({
   bucket,
   resolved,
   id,
+  live,
   children,
 }: {
   size: "field" | "item" | "section";
   bucket: Bucket;
   resolved: string;
   id?: string;
+  live?: boolean;
   children: string;
 }) {
   const { secondsLeft } = useHold(bucket);
   if (secondsLeft === null) {
     return (
-      <InlineNote size={size} tone="ok" id={id}>
+      <InlineNote size={size} tone="ok" id={id} live={live}>
         {resolved}
       </InlineNote>
     );
   }
   return (
-    <InlineNote size={size} tone="error" id={id}>
+    <InlineNote size={size} tone="error" id={id} live={live}>
       <span aria-hidden="true">{children.replace(WAIT, formatWait(secondsLeft))}</span>
       <span className="sr-only">{holdSentence(children, formatClockTime(heldUntil(bucket) ?? 0))}</span>
     </InlineNote>

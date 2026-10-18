@@ -557,7 +557,7 @@ function checkCommitments(
         found.push({
           rule: "commitment",
           dayIndex: 0,
-          message: `${stop.name} starts at ${stop.time}, but the traveler only arrives at ${logistics.arrivalTime} and needs about ${ARRIVAL_BUFFER_MIN} min for bags and the transfer in.`,
+          message: `${stop.name} starts at ${stop.time}, but you only arrive at ${logistics.arrivalTime} and need about ${ARRIVAL_BUFFER_MIN} min for bags and the transfer in.`,
         });
       }
     }
@@ -577,7 +577,7 @@ function checkCommitments(
         found.push({
           rule: "commitment",
           dayIndex: lastIndex,
-          message: `${stop.name} runs past ${formatClock(mustEndBy)}, which is when the traveler needs to be heading for a ${logistics.departureTime} departure.`,
+          message: `${stop.name} runs past ${formatClock(mustEndBy)}, which is when you need to be heading for a ${logistics.departureTime} departure.`,
         });
       }
     }

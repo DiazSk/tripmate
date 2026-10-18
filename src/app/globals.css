@@ -3974,7 +3974,8 @@ html[data-story-mode="true"] .marker-day-label {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-.err-btn:disabled {
+.err-btn:disabled,
+.err-btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.6;
 }

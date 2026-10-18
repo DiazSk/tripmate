@@ -66,7 +66,7 @@ export async function generateMetadata({
 export default async function TripPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  if (id === PREVIEW_ID) return <TripView id={id} initialTrip={null} />;
+  if (id === PREVIEW_ID) return <TripView key={id} id={id} initialTrip={null} />;
 
   const row = await readOwnTrip(id);
   // `notFound()` rather than a rendered message: an unknown id is a genuinely missing resource,
@@ -75,5 +75,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   // never confirms that an id is real to somebody who may not read it.
   if (!row) notFound();
 
-  return <TripView id={id} initialTrip={toTripDetail(row)} />;
+  // Keyed: "Save as a new trip" (copy row T-04) replaces the URL with a new id, and the view must
+  // start again from that row rather than keep the old trip in its state.
+  return <TripView key={id} id={id} initialTrip={toTripDetail(row)} />;
 }

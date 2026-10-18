@@ -5,7 +5,10 @@ import { Send } from "lucide-react";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
 import { devLabel } from "@/lib/devInspector";
 import { meriForChat } from "@/lib/meri";
+import { formatWait, useHold } from "@/lib/actionHolds";
+import { failureFromResponse, failureFromThrown, formatResumeTime, holdFromFailure, isAbort, type Failure } from "@/lib/failure";
 import Meridian from "./Meridian";
+import InlineNote, { HeldNote } from "./InlineNote";
 
 const SUGGESTIONS = [
   "Is this day too packed?",
@@ -23,6 +26,31 @@ function formatDays(days: number[]): string {
       ? days.join("")
       : `${days.slice(0, -1).join(", ")} and ${days[days.length - 1]}`;
   return `${label} ${list}`;
+}
+
+/** A turn that didn't land (copy rows T-45..T-50). `retry` offers Try again; `held` counts `{mm:ss}` down. */
+type ChatFailure = { text: string; retry?: boolean; held?: boolean };
+
+function chatFailure(f: Failure): ChatFailure {
+  switch (f.kind) {
+    case "offline":
+      return { text: "You’re offline, so your message wasn’t sent. Send it again when you’re back online.", retry: true };
+    case "timeout":
+      return { text: "TripMate took too long to answer, so it stopped. Your plan is unchanged. Try again, or ask for one change at a time.", retry: true };
+    case "rate_limited":
+      return {
+        text: "You’ve asked TripMate for 6 changes in the last 10 minutes, which is the limit. You can send another in {mm:ss}. Editing stops by hand still works.",
+        held: true,
+      };
+    case "daily_cap":
+      return {
+        text: `Changes by TripMate are paused for everyone until ${formatResumeTime(f.resumesAt)}. It has reached its limit for the day; it isn’t anything you did. You can still drag stops, edit times and log costs by hand.`,
+      };
+    case "invalid":
+      return { text: "TripMate couldn’t read that request. Reload the trip and try again." };
+    default:
+      return { text: "TripMate hit a problem answering that. Your plan is unchanged.", retry: true };
+  }
 }
 
 interface ChatMessage {
@@ -95,7 +123,12 @@ export default function EditChatPanel({
   const [loadingHistory, setLoadingHistory] = useState(!!tripId);
   const [input, setInput] = useState(initialMessage ?? "");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ChatFailure | null>(null);
+  /** Copy rows T-65/T-66: the saved transcript didn't load. The chat itself still works. */
+  const [historyFailure, setHistoryFailure] = useState<"offline" | "server" | null>(null);
+  /** Bumped by the history note's Try again, to re-run the load. */
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  const { secondsLeft: held } = useHold("edit");
   /** True for one lift (420ms) after a reply lands, so Meri marks the arrival once. */
   const [justReplied, setJustReplied] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -141,29 +174,36 @@ export default function EditChatPanel({
    * box with no record of what had been asked or what changed.
    *
    * Skipped without a `tripId` — the pre-save result view has no row to have saved anything to.
-   * Fail-soft: a transcript that will not load leaves an empty panel, which is exactly where
-   * this feature started, rather than blocking the chat that still works.
+   * Fail-soft: a transcript that will not load says so at the top (T-65/T-66) and the chat that
+   * still works carries on below it.
    */
   useEffect(() => {
     if (!tripId) return;
     let cancelled = false;
     fetch(`/api/trip-chat?tripId=${encodeURIComponent(tripId)}`)
-      .then((r) => (r.ok ? r.json() : { turns: [] }))
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((data: { turns?: ChatMessage[] }) => {
         if (cancelled) return;
+        setHistoryFailure(null);
         // Options are deliberately dropped on restore: they are tappable answers to a question
         // the model asked in a session that has since moved on, and answering one now would
-        // reply to a turn nobody is waiting on.
+        // reply to a turn nobody is waiting on. A retry's answer already holds any turn sent since.
         setMessages((data.turns ?? []).map((t) => ({ ...t, options: undefined })));
       })
-      .catch(() => {})
+      .catch((e) => {
+        if (!cancelled && !isAbort(e)) setHistoryFailure(failureFromThrown(e).kind === "offline" ? "offline" : "server");
+      })
       .finally(() => {
         if (!cancelled) setLoadingHistory(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [tripId]);
+    // `historyAttempt` is bumped by the note's Try again, to run this again.
+  }, [tripId, historyAttempt]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -177,7 +217,7 @@ export default function EditChatPanel({
 
   async function send(preset?: string) {
     const text = (preset ?? input).trim();
-    if (!text || busy) return;
+    if (!text || busy || held !== null) return;
 
     const nextMessages: ChatMessage[] = [
       ...messages.map((m) => ({ ...m, options: undefined })),
@@ -185,6 +225,11 @@ export default function EditChatPanel({
     ];
     setMessages(nextMessages);
     setInput("");
+    await ask(nextMessages);
+  }
+
+  /** One turn: the transcript ending in the traveler's message. Try again re-asks the same one. */
+  async function ask(nextMessages: ChatMessage[]) {
     setBusy(true);
     onBusyChange?.(true);
     setError(null);
@@ -207,8 +252,8 @@ export default function EditChatPanel({
           messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
+      if (!res.ok) throw await failureFromResponse(res, "edit");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Edit failed");
 
       if (data.itinerary) onItineraryChange(data.itinerary);
       // Reported even when the list is empty — a turn that only answered a question changed no
@@ -232,7 +277,11 @@ export default function EditChatPanel({
       ]);
       setJustReplied(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      if (isAbort(e)) return;
+      // A `Failure` thrown above, or whatever the fetch or the JSON threw.
+      const f: Failure = e && typeof e === "object" && "kind" in e ? (e as Failure) : failureFromThrown(e);
+      holdFromFailure(f);
+      setError(chatFailure(f));
     } finally {
       setBusy(false);
       onBusyChange?.(false);
@@ -249,7 +298,7 @@ export default function EditChatPanel({
       {/* Who is replying, and whether they are. This replaces the "Thinking…" line that used to sit
           at the foot of the transcript. */}
       <div className={k("flex shrink-0 items-center gap-3 border-b border-card-border px-4 py-3", "td-chat-who")}>
-        <Meridian size={polar ? 22 : 28} state={meriForChat({ replying: busy, failure: error, justReplied })} />
+        <Meridian size={polar ? 22 : 28} state={meriForChat({ replying: busy, failure: error?.text ?? null, justReplied })} />
         <div className={k("min-w-0", "td-chat-who-text")}>
           <p className={k("text-sm font-medium text-foreground", "")}>TripMate</p>
           {busy ? (
@@ -270,6 +319,21 @@ export default function EditChatPanel({
         </p>
       </div>
       <div className={k("min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3", "td-chat-log")}>
+        {/* Copy rows T-65/T-66, at the top of the transcript, announced by the region around it. */}
+        <div aria-live="polite" className="td-note-slot">
+          {historyFailure && (
+            <InlineNote
+              size="section"
+              tone="error"
+              // A reload replaces the transcript, so not while a turn is in flight or an unsent one awaits its retry.
+              action={{ label: "Try again", onClick: () => setHistoryAttempt((n) => n + 1), busy: busy || !!error?.retry }}
+            >
+              {historyFailure === "offline"
+                ? "You’re offline, so your earlier messages didn’t load. They’ll show when you’re back online."
+                : "Your earlier messages didn’t load, so they aren’t shown here. Your plan is unaffected, and you can keep chatting."}
+            </InlineNote>
+          )}
+        </div>
         {loadingHistory && messages.length === 0 && (
           <p className={k("text-sm text-muted", "td-muted")}>Loading your conversation…</p>
         )}
@@ -288,6 +352,7 @@ export default function EditChatPanel({
                   key={sug}
                   type="button"
                   onClick={() => send(sug)}
+                  disabled={held !== null}
                   className={k("rounded-full bg-white/10 px-2.5 py-1 text-xs text-muted transition-colors hover:bg-white/20 hover:text-foreground", "")}
                 >
                   {sug}
@@ -342,10 +407,11 @@ export default function EditChatPanel({
             {m.role === "assistant" && m.knockOn && (
               <p className={k("mt-1 text-xs text-alert/75", "td-alert-line")}>Also: {m.knockOn}</p>
             )}
+            {/* Copy row T-51; the reasons are T-52..T-62, worded by the applier. */}
             {m.role === "assistant" && m.rejected && m.rejected.length > 0 && (
               <p className={k("mt-1 text-xs text-alert/80", "td-alert-line")}>
-                {m.rejected.length === 1 ? "1 change" : `${m.rejected.length} changes`} couldn&rsquo;t
-                be applied ({m.rejected.join("; ")}). Ask again to retry.
+                {m.rejected.length} of the changes TripMate suggested weren&rsquo;t made: {m.rejected.join("; ")}. The rest went
+                through. Ask again in other words to try once more.
               </p>
             )}
             {/* Tap-to-answer. The model is told to supply these whenever it asks something, so
@@ -357,7 +423,7 @@ export default function EditChatPanel({
                     key={opt}
                     type="button"
                     onClick={() => send(opt)}
-                    disabled={busy}
+                    disabled={busy || held !== null}
                     className={k("rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent/20 disabled:opacity-40", "")}
                   >
                     {opt}
@@ -368,11 +434,20 @@ export default function EditChatPanel({
           </div>
         ))}
 
-        {error && (
-          <p role="alert" className={k("text-xs text-alert", "td-alert-line")}>
-            {error}
-          </p>
-        )}
+        {/* Copy rows T-45..T-50. Kept mounted so the words are announced when they arrive; the region
+            is this wrapper, because the notes inside swap (a held one for a plain one) and a
+            node that arrives with its own live region is not reliably announced. */}
+        <div id="chat-send-note" className="td-note-slot" aria-live="polite">
+          {error?.held ? (
+            <HeldNote size="item" bucket="edit" resolved="You can ask for changes again." live={false}>
+              {error.text}
+            </HeldNote>
+          ) : (
+            <InlineNote size="item" tone="error" live={false} action={error?.retry ? { label: "Try again", onClick: () => ask(messages), busy } : undefined}>
+              {error?.text ?? ""}
+            </InlineNote>
+          )}
+        </div>
         {polar && busy && (
           <div className="td-bubble is-typing" aria-hidden="true">
             <span />
@@ -395,14 +470,16 @@ export default function EditChatPanel({
             }
           }}
           rows={2}
-          placeholder="What would you like to change?"
+          placeholder={held !== null ? `You can send in ${formatWait(held)}` : "What would you like to change?"}
+          aria-describedby="chat-send-note"
           className={k("flex-1 resize-none rounded-xl border border-card-border bg-white/10 p-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25", "")}
         />
         <button
           type="button"
           onClick={() => send()}
-          disabled={!input.trim() || busy}
+          disabled={!input.trim() || busy || held !== null}
           aria-label="Send"
+          aria-describedby="chat-send-note"
           className={k("rounded-full bg-accent p-2.5 text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40", "td-send")}
         >
           {polar ? (

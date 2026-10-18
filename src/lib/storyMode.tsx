@@ -25,6 +25,7 @@ import {
   travelFollowSeconds,
 } from "@/lib/tourPacing";
 import { metresBetween } from "@/lib/peekRange";
+import { failureFromResponse, failureFromThrown, holdFromFailure, type Failure } from "@/lib/failure";
 import {
   PROFILE_VERB,
   currentRouteProfile,
@@ -126,6 +127,9 @@ export interface StoryPlayback {
   request: StoryRequest | null;
   phase: StoryPhase;
   script: StoryScript | null;
+  /** Why a fallback script was read from the plan when the route was refused or never reached
+   *  (copy rows T-94..T-96). Null for the route's own fallback (T-93) and for a written story. */
+  scriptFailure: Failure | null;
   /** Index into `script.beats`. Meaningless while `script` is null. */
   beatIndex: number;
   muted: boolean;
@@ -232,6 +236,8 @@ function loadScript(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...params, tripId }),
     });
+    // A limit or the daily cap: rejected with what it was, so the stage can say so (T-95, T-96).
+    if (!res.ok) throw await failureFromResponse(res, "story");
     const data = (await res.json()) as { script?: StoryScript };
     if (!data.script?.beats?.length) throw new Error("no script");
     return data.script;
@@ -430,6 +436,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
 
   const [request, setRequest] = useState<StoryRequest | null>(null);
   const [script, setScript] = useState<StoryScript | null>(null);
+  const [scriptFailure, setScriptFailure] = useState<Failure | null>(null);
   const [phase, setPhase] = useState<StoryPhase>("loading");
   const [beatIndex, setBeatIndex] = useState(0);
   const [muted, setMuted] = useState(false);
@@ -643,10 +650,19 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       // never reached at all (offline, a dev server restart mid-press). Applied *outside* the
       // cached promise on purpose — inside it, one dropped connection would make the read-aloud
       // fallback this day's script for the rest of the session.
-      .catch(() => fallbackScript(params))
-      .then((resolved) => {
+      .then(
+        (resolved) => ({ resolved, failure: null }),
+        (e: unknown) => {
+          const failure: Failure = e && typeof e === "object" && "kind" in e ? (e as Failure) : failureFromThrown(e);
+          // Not to hold Play (it still plays), only so the stage can count the wait down.
+          holdFromFailure(failure);
+          return { resolved: fallbackScript(params), failure };
+        }
+      )
+      .then(({ resolved, failure }) => {
         if (!alive) return;
         setScript(resolved);
+        setScriptFailure(failure);
         setPhase("playing");
       });
     return () => {
@@ -1014,6 +1030,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       request,
       phase,
       script,
+      scriptFailure,
       beatIndex,
       muted,
       silentPlatform: !speaks,
@@ -1035,6 +1052,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       request,
       phase,
       script,
+      scriptFailure,
       beatIndex,
       muted,
       speaks,

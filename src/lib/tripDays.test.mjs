@@ -169,12 +169,12 @@ test("a scope-locked element edit cannot add or remove days", () => {
   );
   assert.equal(itinerary.days.length, 3, "the trip's length is untouched");
   assert.equal(rejected.length, 2);
-  assert.ok(rejected.every((r) => r.reason.includes("scope")));
+  assert.ok(rejected.every((r) => r.reason.includes("beyond the stop you’re editing")));
 });
 
 test("remove_day is refused rather than silently emptying a one-day trip", () => {
   const single = { tier: "midrange", days: [day("2026-09-19", "A")] };
   const { itinerary, rejected } = applyPatch(single, [{ op: "remove_day", dayIndex: 0 }]);
   assert.equal(itinerary.days.length, 1);
-  assert.match(rejected[0].reason, /at least one day/);
+  assert.match(rejected[0].reason, /the trip’s last day/);
 });

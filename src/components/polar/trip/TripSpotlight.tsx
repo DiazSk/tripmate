@@ -27,6 +27,7 @@ import { metresBetween } from "@/lib/peekRange";
 import { forgetSearch, recentSearches } from "@/lib/searchHistory";
 import { weekdayName } from "@/lib/guardrails";
 import { useToast } from "@/lib/toast";
+import InlineNote from "@/components/InlineNote";
 import type { ScreenPoint } from "@/lib/mapRenderer";
 import type { Itinerary, Stop } from "@/lib/types";
 
@@ -99,7 +100,8 @@ export default function TripSpotlight({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The trip page's commit path, so a place added here saves the way a dragged stop does. */
-  onChange: (next: Itinerary) => void;
+  /** `what` names the added place for a failed save's message (copy table §4a `{whatDidntSave}`). */
+  onChange: (next: Itinerary, what: string) => void;
 }) {
   const { engine, globeWanted, rendererRef, ready, showTripRoute } = useMapCamera();
   const toast = useToast();
@@ -123,7 +125,7 @@ export default function TripSpotlight({
     fallbackCategories: gap ? (suitsGap(gap) as PlaceCategory[]) : undefined,
     factsDwellMs: 350,
   });
-  const { query, setQuery, categories, setCategories, hasQuery, visiblePlaces, selectedId, setSelectedId, state, history, setHistory, withFacts, holdResearch } = search;
+  const { query, setQuery, categories, setCategories, hasQuery, visiblePlaces, selectedId, setSelectedId, state, throttledBy, history, setHistory, withFacts, holdResearch } = search;
 
   const rows: Row[] = useMemo(() => {
     const out = visiblePlaces.map((raw) => {
@@ -324,7 +326,7 @@ export default function TripSpotlight({
     const at = when(row);
     if (at) {
       const next = addPlaceAt(itinerary, dayIndex, place, at.start);
-      onChange(next);
+      onChange(next, `${place.name} on day ${dayIndex + 1}`);
       setAdded((a) => ({ ...a, [place.id]: { day: dayIndex, minutes: at.start, time: formatClock(at.start) } }));
       // The stop just added shortens the gap it went into; keep asking about what is left of it.
       if (gap) setGapStart(gapsOfDay(next.days[dayIndex]?.stops ?? []).find((g) => g.start >= at.start && g.start < gap.end)?.start ?? null);
@@ -333,7 +335,7 @@ export default function TripSpotlight({
     }
     const slot = suggestTimeOfDay(place);
     const plan = planSlot(stops, slot);
-    onChange(addPlaceToDay(itinerary, dayIndex, place, slot));
+    onChange(addPlaceToDay(itinerary, dayIndex, place, slot), `${place.name} on day ${dayIndex + 1}`);
     setAdded((a) => ({ ...a, [place.id]: { day: dayIndex, minutes: parseClockTime(plan.time), time: plan.time } }));
     toast.show(`${place.name} added`, `Day ${dayIndex + 1} · ${plan.time}${plan.tight ? " · tight fit" : ""}`);
   };
@@ -595,9 +597,16 @@ export default function TripSpotlight({
               )}
             </div>
           ) : state === "throttled" ? (
-            <p className="tsl-alert" role="status">
-              Search is busy right now: the free places index rate-limits. Try again in a moment.
-            </p>
+            // Copy rows T-38..T-40.
+            <div className="tsl-alert" role="status">
+              <InlineNote size="section" tone="error" action={{ label: "Try again", onClick: () => void search.runSearch() }}>
+                {throttledBy === "offline"
+                  ? "You’re offline, so the places search can’t run. Try again once you’re back online."
+                  : throttledBy === "server"
+                    ? "The places search didn’t answer. Try again in a minute."
+                    : "The places search is busy right now, so nothing came back for this view. Try again in a minute."}
+              </InlineNote>
+            </div>
           ) : state === "searching" && rows.length === 0 ? (
             <ul className="tsl-skel" aria-hidden="true">
               {[0, 1, 2].map((i) => (

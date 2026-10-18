@@ -33,6 +33,8 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { addDay, deleteStop, insertStop, updateStop } from "@/lib/itineraryEdits";
 import { devLabel } from "@/lib/devInspector";
 import BudgetBar from "./BudgetBar";
+import InlineNote from "./InlineNote";
+import { failureFromThrown } from "@/lib/failure";
 
 /**
  * The split-screen itinerary editor: the trip's own globe on the left, day-by-day editable cards
@@ -82,7 +84,8 @@ export default function SplitEditor({
 }: {
   trip: TripSummary;
   itinerary: Itinerary;
-  onItineraryChange: (next: Itinerary) => void;
+  /** `what` names the change for a failed save's message (copy table §4a `{whatDidntSave}`). */
+  onItineraryChange: (next: Itinerary, what?: string) => void;
   onClose: () => void;
   /** `"light"` on the trip page, where the plan is Polar ice and this opens as its right-hand
    *  drawer: the editor's tokens re-point through `[data-appearance="light"]`. */
@@ -100,8 +103,9 @@ export default function SplitEditor({
   } | null>(null);
   /** Armed by "Add from map": the next click on the globe becomes a stop. */
   const [pickingOnMap, setPickingOnMap] = useState(false);
+  /** `failed` when the lookup itself didn't answer (T-72), as against answering with nothing (T-73). */
   const [nearby, setNearby] = useState<
-    { loading: boolean; pois: { name: string; lat: number; lon: number }[] } | null
+    { loading: boolean; pois: { name: string; lat: number; lon: number }[]; failed?: boolean; at?: [number, number] } | null
   >(null);
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
@@ -157,16 +161,17 @@ export default function SplitEditor({
   }, [routeDays, activeDay, showTripRoute]);
 
   const loadNearby = useCallback(async (lat: number, lng: number) => {
-    setNearby({ loading: true, pois: [] });
+    const at: [number, number] = [lat, lng];
+    setNearby({ loading: true, pois: [], at });
     setAddError(null);
     try {
       const res = await fetch(`/api/nearby-pois?lat=${lat}&lng=${lng}`);
-      const data = (await res.json()) as { pois?: { name: string; lat: number; lon: number }[] };
-      setNearby({ loading: false, pois: data.pois ?? [] });
+      const data = (await res.json()) as { pois?: { name: string; lat: number; lon: number }[]; available?: boolean };
+      setNearby({ loading: false, pois: data.pois ?? [], failed: !res.ok || data.available === false, at });
     } catch {
-      // Fail-soft, per the house rule: a dropped lookup leaves the picker saying it found
-      // nothing, which is a thing the traveler can act on, rather than an error dialog.
-      setNearby({ loading: false, pois: [] });
+      // Fail-soft, per the house rule: the picker says the lookup didn't answer and offers it again,
+      // rather than an error dialog, and rather than claiming nothing is there.
+      setNearby({ loading: false, pois: [], failed: true, at });
     }
   }, []);
 
@@ -189,7 +194,7 @@ export default function SplitEditor({
   const targetDay = activeDay ?? 0;
 
   const commitNewStop = (name: string, lat: number, lng: number) => {
-    onItineraryChange(insertStop(itinerary, targetDay, { name, lat, lng }));
+    onItineraryChange(insertStop(itinerary, targetDay, { name, lat, lng }), `${name} on day ${targetDay + 1}`);
     setNearby(null);
     setPickingOnMap(false);
     setSearch("");
@@ -204,13 +209,18 @@ export default function SplitEditor({
     try {
       const res = await fetch(`/api/geocode?destination=${encodeURIComponent(q)}`);
       if (!res.ok) {
-        setAddError("Couldn't find that place. Try a fuller name.");
+        // T-69 for a real miss; T-70 when the lookup itself didn't answer, so nothing was checked.
+        setAddError(res.status === 404 ? "Couldn't find that place. Try a fuller name." : `The place lookup didn’t answer, so “${q}” wasn’t checked. Try again.`);
         return;
       }
       const geo = (await res.json()) as { lat: number; lng: number; name: string };
       commitNewStop(geo.name || q, geo.lat, geo.lng);
-    } catch {
-      setAddError("Search is unreachable right now.");
+    } catch (e) {
+      setAddError(
+        failureFromThrown(e).kind === "offline"
+          ? "You’re offline, so the place lookup can’t run. Try again once you’re back online."
+          : `The place lookup didn’t answer, so “${q}” wasn’t checked. Try again.`
+      );
     } finally {
       setSearching(false);
     }
@@ -228,13 +238,14 @@ export default function SplitEditor({
     if (target.kind === "stop") {
       if (target.dayIndex === from.dayIndex && target.stopIndex === from.stopIndex) return;
       onItineraryChange(
-        moveStop(itinerary, from, { dayIndex: target.dayIndex, stopIndex: target.stopIndex })
+        moveStop(itinerary, from, { dayIndex: target.dayIndex, stopIndex: target.stopIndex }),
+        "Your new stop order"
       );
       return;
     }
     if (target.dayIndex === from.dayIndex) return;
     const at = insertionIndexByTime(itinerary.days[target.dayIndex], source.stop);
-    onItineraryChange(moveStop(itinerary, from, { dayIndex: target.dayIndex, stopIndex: at }));
+    onItineraryChange(moveStop(itinerary, from, { dayIndex: target.dayIndex, stopIndex: at }), "Your new stop order");
   };
 
   const visibleDays = activeDay === null ? itinerary.days.map((_, i) => i) : [activeDay];
@@ -337,7 +348,7 @@ export default function SplitEditor({
           type="button"
           onClick={() => {
             const next = addDay(itinerary);
-            onItineraryChange(next);
+            onItineraryChange(next, "Your edits to the trip");
             setActiveDay(next.days.length - 1);
           }}
           aria-label="Add a day to this trip"
@@ -367,6 +378,7 @@ export default function SplitEditor({
         <NearbyPicker
           state={nearby}
           onPick={(p) => commitNewStop(p.name, p.lat, p.lon)}
+          onRetry={() => nearby.at && void loadNearby(...nearby.at)}
           onDismiss={() => setNearby(null)}
         />
       )}
@@ -397,10 +409,10 @@ export default function SplitEditor({
               onHoverStop={(flat) => setHoveredIndex(flat)}
               onFocusStop={(stop) => flyToPlace(stop.lat, stop.lng)}
               onEditStop={(stopIndex, patch) =>
-                onItineraryChange(updateStop(itinerary, dayIndex, stopIndex, patch))
+                onItineraryChange(updateStop(itinerary, dayIndex, stopIndex, patch), `Your edits to day ${dayIndex + 1}`)
               }
               onDeleteStop={(stopIndex) =>
-                onItineraryChange(deleteStop(itinerary, dayIndex, stopIndex))
+                onItineraryChange(deleteStop(itinerary, dayIndex, stopIndex), `Your edits to day ${dayIndex + 1}`)
               }
               onMoveStopToDay={(stopIndex, toDay) =>
                 onItineraryChange(
@@ -414,7 +426,8 @@ export default function SplitEditor({
                         itinerary.days[dayIndex].stops[stopIndex]
                       ),
                     }
-                  )
+                  ),
+                  "Your new stop order"
                 )
               }
             />
@@ -560,6 +573,7 @@ function AddStopBar({
               }
             }}
             placeholder={`Add a stop to ${targetDayLabel}…`}
+            aria-describedby="split-add-note"
             className="w-full rounded-full border border-card-border bg-white/5 py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
           />
         </div>
@@ -578,7 +592,12 @@ function AddStopBar({
         </button>
       </div>
       {searching && <p className="mt-1.5 text-xs text-muted">Looking that up…</p>}
-      {error && <p className="mt-1.5 text-xs text-alert/75">{error}</p>}
+      {/* Copy rows T-69..T-71, under the field. Mounted empty so it is announced. */}
+      <div className={error ? "mt-1.5" : ""}>
+        <InlineNote size="field" tone="error" id="split-add-note">
+          {error ?? ""}
+        </InlineNote>
+      </div>
     </div>
   );
 }
@@ -586,10 +605,12 @@ function AddStopBar({
 function NearbyPicker({
   state,
   onPick,
+  onRetry,
   onDismiss,
 }: {
-  state: { loading: boolean; pois: { name: string; lat: number; lon: number }[] };
+  state: { loading: boolean; pois: { name: string; lat: number; lon: number }[]; failed?: boolean };
   onPick: (p: { name: string; lat: number; lon: number }) => void;
+  onRetry: () => void;
   onDismiss: () => void;
 }) {
   return (
@@ -602,6 +623,11 @@ function NearbyPicker({
       </div>
       {state.loading ? (
         <p className="text-xs text-muted">Looking…</p>
+      ) : state.failed ? (
+        // T-72: the lookup didn't answer, which is not the same as nothing being there (T-73).
+        <InlineNote size="section" tone="error" action={{ label: "Try again", onClick: onRetry }}>
+          The places service didn&rsquo;t answer, so TripMate couldn&rsquo;t see what&rsquo;s here. Try again, or use the search box.
+        </InlineNote>
       ) : state.pois.length === 0 ? (
         // Not an error: a click on water or open ground genuinely has nothing near it, and so
         // does a missing OPENTRIPMAP_API_KEY.

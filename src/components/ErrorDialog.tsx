@@ -30,6 +30,8 @@ export default function ErrorDialog({
   primary,
   secondary,
   detail,
+  pending = false,
+  pendingLabel = "Working…",
 }: {
   open: boolean;
   eyebrow?: string;
@@ -39,6 +41,11 @@ export default function ErrorDialog({
   primary: Choice;
   secondary: Choice;
   detail?: string;
+  /** The primary's action is in flight: it is relabelled and both choices ignore presses (Esc and a
+   *  backdrop click included), so "leave it" can't race a save that will still land.
+   *  `aria-disabled` rather than `disabled`, so focus stays put. */
+  pending?: boolean;
+  pendingLabel?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -82,7 +89,7 @@ export default function ErrorDialog({
       // what Esc means here.
       onCancel={(e) => {
         e.preventDefault();
-        primary.onClick();
+        if (!pending) primary.onClick();
       }}
       // A close React didn't ask for (Chrome's close watcher closes on a second Esc without a
       // cancellable `cancel`) is the safe choice too, so the parent's state can't stay open.
@@ -92,7 +99,7 @@ export default function ErrorDialog({
         primary.onClick();
       }}
       onClick={(e) => {
-        if (e.target === ref.current) primary.onClick();
+        if (e.target === ref.current && !pending) primary.onClick();
       }}
       // A modal <dialog> lets Tab leave for the browser's own UI after the last control. Cycle
       // through everything focusable inside instead, links in `why` or `now` included.
@@ -123,14 +130,29 @@ export default function ErrorDialog({
           <dd>{now}</dd>
         </dl>
         <div className="error-dialog-actions">
-          <button type="button" className="err-btn err-btn-quiet" onClick={secondary.onClick}>
+          <button
+            type="button"
+            className="err-btn err-btn-quiet"
+            aria-disabled={pending || undefined}
+            onClick={pending ? undefined : secondary.onClick}
+          >
             {secondary.label}
           </button>
-          <button ref={primaryRef} type="button" className="err-btn err-btn-signal" onClick={primary.onClick}>
-            {primary.label}
+          <button
+            ref={primaryRef}
+            type="button"
+            className="err-btn err-btn-signal"
+            aria-disabled={pending || undefined}
+            onClick={pending ? undefined : primary.onClick}
+          >
+            {pending ? pendingLabel : primary.label}
           </button>
         </div>
-        {detail && <p className="error-dialog-detail">{detail}</p>}
+        {detail && (
+          <p className="error-dialog-detail" role="alert">
+            {detail}
+          </p>
+        )}
       </div>
     </dialog>
   );

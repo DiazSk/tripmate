@@ -422,6 +422,26 @@
   color: #fff;
   background: var(--wd-alert-text);
 }
+/* The failure notes (T-06/T-07 beside Keep, T-09..T-14 under Rebalance): kept mounted so they are
+   announced, out of the row while empty so the strip keeps its shape, a line of their own once not. */
+.tb-alert .inline-note,
+.tb-draft .inline-note {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+/* Undo `.tb-alert span`'s 14em floor inside the note, so its words wrap rather than run off. */
+.tb-alert .inline-note span {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.tb-alert .inline-note:empty,
+.tb-draft .inline-note:empty {
+  position: absolute;
+}
+.tb-alert:has(.inline-note:not(:empty)),
+.tb-draft:has(.inline-note:not(:empty)) {
+  flex-wrap: wrap;
+}
 .tb-findings {
   list-style: none;
   display: flex;
@@ -658,6 +678,9 @@
   line-height: 1.4;
   color: var(--wd-stone-text);
 }
+.tb-total .inline-note {
+  color: var(--note-fg);
+}
 
 /* Folded, beside a drawer: the trip's name and the days in a row */
 .tb-strip {
@@ -788,7 +811,6 @@
     opacity: 0;
   }
 }
-.tm.trip-error,
 .tm.trip-loading {
   position: fixed;
   width: auto;
@@ -952,6 +974,9 @@
   /* 5 · An overspend: one row in the flow, the words wrapping beside the two buttons */
   .tm.trip-board:not(.is-strip) .tb-alert {
     flex-wrap: nowrap;
+  }
+  .tm.trip-board:not(.is-strip) .tb-alert:has(.inline-note:not(:empty)) {
+    flex-wrap: wrap;
   }
   .tm.trip-board:not(.is-strip) .tb-alert span {
     min-width: 0;

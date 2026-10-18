@@ -2231,6 +2231,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   detail={detail}
                   loading={detailLoading}
                   error={detailError}
+                  onRetry={() => selectStop(selectedStop)}
                   onBack={closeDetail}
                   upcomingStops={upcomingStopsAfter(shownItinerary, selectedStop)}
                   onSelectUpcoming={selectStop}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Bike, Car, Footprints } from "lucide-react";
 
 import type { DayPlan, Itinerary, Stop, Trip } from "@/lib/types";
@@ -20,6 +21,11 @@ import { dayColorToken } from "@/lib/mapRoute";
 import { readWeather } from "@/components/DayHeader";
 import AnchorReceipt from "@/components/AnchorReceipt";
 import Meridian from "@/components/Meridian";
+import InlineNote, { HeldNote } from "@/components/InlineNote";
+import { formatWait, useHold } from "@/lib/actionHolds";
+import { failureFromResponse, failureFromThrown, isAbort } from "@/lib/failure";
+import type { Bucket } from "@/lib/ipThrottle";
+import { useToast } from "@/lib/toast";
 
 /**
  * The trip page's plan. At 961px and wider it is the right-hand column of the canvas design "Trip
@@ -39,6 +45,9 @@ import Meridian from "@/components/Meridian";
  * the overview; and hover and selection are one index shared with the markers.
  */
 export type BoardShape = "board" | "strip" | "ticket" | "hidden";
+
+/** A failure written where it happened. `hold` counts the `{mm:ss}` in `text` down, then says `resolved`. */
+export type Note = { text: string; hold?: { bucket: Bucket; resolved: string } };
 
 const ICON = { walk: Footprints, bike: Bike, drive: Car } as const;
 /** "7 min walk", as the canvas's legs read. */
@@ -80,6 +89,9 @@ export default function TripBoard({
   onOpen,
   onKeep,
   keeping,
+  keepNote,
+  costNote,
+  onRetryCost,
   onShareChange,
   onLodgingActualCost,
   overspend,
@@ -100,9 +112,14 @@ export default function TripBoard({
   onOpen: () => void;
   onKeep: () => void;
   keeping: boolean;
+  /** Copy rows T-06/T-07: why Keep didn't keep it. Empty while there is nothing to say. */
+  keepNote: string;
+  /** Copy row T-05, for the lodging amount whose key matches (`${dayIndex}:lodging`). */
+  costNote: { key: string; text: string } | null;
+  onRetryCost: () => void;
   onShareChange: () => void;
   onLodgingActualCost: (dayIndex: number, value: number | undefined) => void;
-  overspend: { dayIndex: number; amount: number; rebalancing: boolean; onRebalance: () => void; onDismiss: () => void } | null;
+  overspend: { dayIndex: number; amount: number; rebalancing: boolean; onRebalance: () => void; onDismiss: () => void; note: Note | null } | null;
 }) {
   const days = itinerary.days;
   const di = Math.min(dayIndex, Math.max(0, days.length - 1));
@@ -190,12 +207,21 @@ export default function TripBoard({
   // ── Share: one control, two sides, and a reply that belongs to the button pressed ────────────
   const [shareSaid, setShareSaid] = useState<string | null>(null);
   const canShare = trip.id !== "preview";
+  const router = useRouter();
+  const { showError } = useToast();
   async function share() {
     const stop = trip.shared;
     setShareSaid(stop ? "Stopping…" : "Making a link…");
     try {
       const res = await fetch(`/api/trips/${trip.id}/share`, { method: stop ? "DELETE" : "POST" });
-      if (!res.ok) throw new Error(String(res.status));
+      if (!res.ok) {
+        // Copy rows T-84..T-88: a failure is news that outlives the button's 2.6s label, so it is a
+        // toast that stays, and the button goes back to what it was.
+        const f = await failureFromResponse(res, "edit");
+        setShareSaid(null);
+        shareFailed(stop, f.kind === "not_found" ? "gone" : "server");
+        return;
+      }
       if (stop) setShareSaid("Link turned off");
       else {
         const { url } = (await res.json()) as { url: string };
@@ -210,10 +236,30 @@ export default function TripBoard({
         }
       }
       onShareChange();
-    } catch {
-      setShareSaid(stop ? "Couldn't stop sharing" : "Couldn't make a link");
+    } catch (e) {
+      setShareSaid(null);
+      if (!isAbort(e)) shareFailed(stop, failureFromThrown(e).kind === "offline" ? "offline" : "server");
+      return;
     }
     setTimeout(() => setShareSaid(null), 2600);
+  }
+  function shareFailed(stopping: boolean | undefined, cause: "offline" | "server" | "gone") {
+    const again = { label: "Try again", onClick: share };
+    if (cause === "gone") {
+      showError({ title: "This trip isn’t saved here any more, so it can’t be shared.", action: { label: "See your memories", onClick: () => router.push("/trips") } });
+    } else if (stopping) {
+      showError(
+        cause === "offline"
+          ? { title: "You’re offline, so the share link is still on.", detail: "Anyone with it can still see this trip. Turn it off once you’re back online.", action: again }
+          : { title: "The share link is still on: TripMate couldn’t turn it off.", detail: "Anyone with it can still see this trip.", action: again }
+      );
+    } else {
+      showError(
+        cause === "offline"
+          ? { title: "You’re offline, so no share link was made.", detail: "Try again once you’re back online.", action: again }
+          : { title: "TripMate couldn’t make a share link just now.", action: again }
+      );
+    }
   }
 
   function play(e: React.MouseEvent<HTMLButtonElement>) {
@@ -357,9 +403,13 @@ export default function TripBoard({
           {trip.status === "draft" && (
             <p className="tb-draft" role="status">
               <span>Draft · cleared after {DRAFT_TTL_DAYS} days unless kept</span>
-              <button type="button" onClick={onKeep} disabled={keeping}>
+              <button type="button" onClick={onKeep} disabled={keeping} aria-describedby="tb-keep-note">
                 {keeping ? "Keeping…" : "Keep this trip"}
               </button>
+              {/* Copy rows T-06/T-07. Not its own live region: the notice around it already is. */}
+              <InlineNote size="item" tone="error" id="tb-keep-note" live={false}>
+                {keepNote}
+              </InlineNote>
             </p>
           )}
         </div>
@@ -435,9 +485,17 @@ export default function TripBoard({
                 <button type="button" onClick={overspend.onDismiss} disabled={overspend.rebalancing}>
                   Dismiss
                 </button>
-                <button type="button" className="is-go" onClick={overspend.onRebalance} disabled={overspend.rebalancing}>
-                  {overspend.rebalancing ? "Rebalancing…" : "Rebalance"}
-                </button>
+                <RebalanceButton rebalancing={overspend.rebalancing} onClick={overspend.onRebalance} />
+                {/* Copy rows T-09..T-14. Not live itself: the strip is. */}
+                {overspend.note?.hold ? (
+                  <HeldNote size="item" bucket={overspend.note.hold.bucket} resolved={overspend.note.hold.resolved} id="tb-rebalance-note" live={false}>
+                    {overspend.note.text}
+                  </HeldNote>
+                ) : (
+                  <InlineNote size="item" tone="error" id="tb-rebalance-note" live={false}>
+                    {overspend.note?.text ?? ""}
+                  </InlineNote>
+                )}
               </div>
             )}
             <AnchorReceipt itinerary={itinerary} onFitAnchor={onFitAnchor} kept={trip.status === "saved"} />
@@ -467,7 +525,15 @@ export default function TripBoard({
                   </li>
                 ))}
                 <li className="tb-card-slot">
-                  <DayTotal day={day} dayIndex={di} spend={spend} confirmed={confirmed} onLodgingActualCost={onLodgingActualCost} />
+                  <DayTotal
+                    day={day}
+                    dayIndex={di}
+                    spend={spend}
+                    confirmed={confirmed}
+                    onLodgingActualCost={onLodgingActualCost}
+                    costNote={costNote?.key === `${di}:lodging` ? costNote.text : ""}
+                    onRetryCost={onRetryCost}
+                  />
                 </li>
               </ol>
             )}
@@ -515,6 +581,17 @@ function StopCard({ stop, n, dayIndex, lit, onHover, onOpen }: { stop: Stop; n: 
   );
 }
 
+/** Rebalance, held while the `edit` limit is (copy row T-12): "Rebalance in {mm:ss}", disabled. Its own
+ *  component so the countdown's per-second render stays off the board. */
+function RebalanceButton({ rebalancing, onClick }: { rebalancing: boolean; onClick: () => void }) {
+  const { secondsLeft } = useHold("edit");
+  return (
+    <button type="button" className="is-go" onClick={onClick} disabled={rebalancing || secondsLeft !== null} aria-describedby="tb-rebalance-note">
+      {rebalancing ? "Rebalancing…" : secondsLeft !== null ? `Rebalance in ${formatWait(secondsLeft)}` : "Rebalance"}
+    </button>
+  );
+}
+
 /** The way between two cards: the mode, the time, the distance, on a dashed line. */
 function Leg({ leg }: { leg: Parameters<typeof meaningfulLeg>[0] }) {
   const profile = useRouteProfile();
@@ -558,12 +635,16 @@ function DayTotal({
   spend,
   confirmed,
   onLodgingActualCost,
+  costNote,
+  onRetryCost,
 }: {
   day: DayPlan;
   dayIndex: number;
   spend: ReturnType<typeof daySpendByCategory> | null;
   confirmed: boolean;
   onLodgingActualCost: (dayIndex: number, value: number | undefined) => void;
+  costNote: string;
+  onRetryCost: () => void;
 }) {
   if (!spend) return null;
   const rows = (
@@ -605,11 +686,18 @@ function DayTotal({
               defaultValue={day.lodging.actualCost}
               placeholder={String(Math.round(day.lodging.cost))}
               aria-label={`Actual lodging cost in dollars for day ${dayIndex + 1}, ${day.lodging.name}`}
+              aria-describedby="tb-stay-note"
               onBlur={(e) => onLodgingActualCost(dayIndex, e.target.value === "" ? undefined : Number(e.target.value))}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             />
           </span>
         </label>
+      )}
+      {/* Copy row T-05, under the amount. Mounted empty so it is announced. */}
+      {day.lodging && (
+        <InlineNote size="field" tone="error" id="tb-stay-note" action={{ label: "Try again", onClick: onRetryCost }}>
+          {costNote}
+        </InlineNote>
       )}
       <p>{EVIDENCE_FOOTNOTE}</p>
     </div>
