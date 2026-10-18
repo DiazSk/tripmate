@@ -92,3 +92,16 @@ test("off_topic and too_long map to refused with the server's sentence, from a r
   // A code with no sentence to show is not a refusal.
   assert.equal(failureFromStreamError({ code: "off_topic" }, "plan").kind, "server");
 });
+
+test("bad_request with a sentence (SV-21..23) maps to refused, from a response or a stream", async () => {
+  const unreadable = "TripMate couldn’t read that request. Try again, and if it keeps happening, reload the page.";
+  assert.deepEqual(await failureFromResponse(res(400, { error: unreadable, code: "bad_request" }), "edit"), {
+    kind: "refused",
+    message: unreadable,
+  });
+  assert.deepEqual(failureFromStreamError({ code: "bad_request", error: unreadable }, "plan"), {
+    kind: "refused",
+    message: unreadable,
+  });
+  assert.equal(failureFromStreamError({ code: "bad_request" }, "plan").kind, "server");
+});

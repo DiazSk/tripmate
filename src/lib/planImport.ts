@@ -8,6 +8,7 @@ import {
   type ImportedStop,
 } from "./importedPlan";
 import { formatClock, parseClock } from "./itinerary";
+import { CAPS } from "./inputLimits";
 import { SCOPE_BLOCK, fenceUserText, tagUserText } from "./promptScope";
 
 /**
@@ -75,10 +76,11 @@ export function parsePlanRead(raw: string): ImportedPlan | null {
     const stops: ImportedStop[] = [];
     for (const rawStop of Array.isArray(d.stops) ? d.stops : []) {
       const s = (rawStop ?? {}) as Record<string, unknown>;
-      const name = text(s.name);
+      // Sliced to the caps checkItinerary holds every later edit of this trip to.
+      const name = text(s.name)?.slice(0, CAPS.placeName);
       if (!name) continue;
       const time = clock(s.time);
-      const note = text(s.note);
+      const note = text(s.note)?.slice(0, CAPS.stringField);
       stops.push({ name, ...(time ? { time } : {}), ...(note ? { note } : {}) });
     }
     if (stops.length > MAX_STOPS_PER_DAY) {
@@ -88,7 +90,7 @@ export function parsePlanRead(raw: string): ImportedPlan | null {
       stops.length = MAX_STOPS_PER_DAY;
     }
     const date = realDate(d.date);
-    const lodging = text(d.lodging);
+    const lodging = text(d.lodging)?.slice(0, CAPS.stringField);
     days.push({ stops, ...(date ? { date } : {}), ...(lodging ? { lodging } : {}) });
   }
 

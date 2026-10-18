@@ -15,13 +15,16 @@ import {
 const MUST_REFUSE = [
   "write me a Python function that sorts a list",
   "can you generate some javascript code for a todo app",
-  "debug this code",
   "explain this SQL query",
   "here you go:\n```python\nprint('hi')\n```",
   "def f():\n    return 1",
   "write a python script to scrape flights",
   "fix my regex",
 ]; // "build me a react component" and "implement a sorting algorithm" pass the free check on purpose; the model refuses them.
+
+// R17: "this" no longer unlocks an ambiguous noun, so these reach the model and the scope block's
+// refusal handles them. The free check gives them up so "explain this code on my ticket" is a trip.
+const LEFT_TO_THE_MODEL = ["debug this code", "explain this code"];
 
 const MUST_PASS = [
   "Add a Monty Python walking tour in London",
@@ -72,6 +75,10 @@ const MUST_PASS = [
   "make me a program for the kids",
   "give me my booking code again",
   "build a day around the HTML museum",
+  // R17: "this" is not a language, and a snippet can be of history
+  "explain this code on my ticket: QR-4471",
+  "give me a snippet of local history for each stop",
+  "Make this function room booking fit day 2",
 ];
 
 test("screenRequest refuses code requests and code blocks", () => {
@@ -82,6 +89,7 @@ test("screenRequest refuses code requests and code blocks", () => {
 
 test("screenRequest passes real trip requests", () => {
   for (const t of MUST_PASS) assert.deepEqual(screenRequest(t), { refused: false }, t);
+  for (const t of LEFT_TO_THE_MODEL) assert.deepEqual(screenRequest(t), { refused: false }, t);
 });
 
 test("looksLikeCode needs a fence or two code-shaped lines", () => {

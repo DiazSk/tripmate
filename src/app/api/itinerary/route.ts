@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
   const bucket = body.rebalance || (body.previousItinerary && body.feedback) ? "edit" : "plan";
   // Caps and the free check, before the throttle, so a refusal costs none of the allowance.
   for (const c of [
+    checkText(body.destination, CAPS.destination),
     checkText(body.feedback, CAPS.feedback),
     body.previousItinerary ? checkItinerary(body.previousItinerary) : null,
     body.remainingDays ? checkItinerary(body.remainingDays) : null,

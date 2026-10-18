@@ -284,6 +284,13 @@ export default function EditChatPanel({
       // A `Failure` thrown above, or whatever the fetch or the JSON threw.
       const f: Failure = e && typeof e === "object" && "kind" in e ? (e as Failure) : failureFromThrown(e);
       holdFromFailure(f);
+      // A refused turn leaves the transcript and goes back in the box, as on the phone, so it is
+      // never replayed to the model on a later turn (the rebuild path sends `messages`).
+      if (f.kind === "refused") {
+        const last = nextMessages[nextMessages.length - 1];
+        setMessages((prev) => (prev[prev.length - 1] === last ? prev.slice(0, -1) : prev));
+        setInput(last.content);
+      }
       setError(chatFailure(f));
     } finally {
       setBusy(false);

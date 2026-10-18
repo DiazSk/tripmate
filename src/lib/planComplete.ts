@@ -1,5 +1,7 @@
 import { parseJsonResponse } from "./claude";
 import { NO_EM_DASH_RULE } from "./writingStyle";
+import { CAPS } from "./inputLimits";
+import { SCOPE_BLOCK, tagUserText } from "./promptScope";
 import {
   MAX_STOPS_PER_DAY,
   realDate,
@@ -44,10 +46,11 @@ export function readCompleteRequest(body: unknown): CompletePlanRequest | string
       .slice(0, MAX_STOPS_PER_DAY)
       .flatMap((rawStop): ImportedStop[] => {
         const s = (rawStop ?? {}) as Record<string, unknown>;
-        const name = trimmed(s.name);
+        // Sliced to the caps checkItinerary holds every later edit of this trip to.
+        const name = trimmed(s.name)?.slice(0, CAPS.placeName);
         if (!name) return [];
         const minutes = typeof s.time === "string" ? parseClock(s.time) : null;
-        const note = trimmed(s.note);
+        const note = trimmed(s.note)?.slice(0, CAPS.stringField);
         const lat = s.lat;
         const lng = s.lng;
         const placed =
@@ -61,7 +64,7 @@ export function readCompleteRequest(body: unknown): CompletePlanRequest | string
         }];
       });
     const date = realDate(d.date);
-    const lodging = trimmed(d.lodging);
+    const lodging = trimmed(d.lodging)?.slice(0, CAPS.stringField);
     return { stops, ...(date ? { date } : {}), ...(lodging ? { lodging } : {}) };
   });
 
@@ -118,8 +121,12 @@ export function datesFor(days: ImportedDay[], startDate?: string): DatedDay[] | 
 export const stopId = (dayIndex: number, stopIndex: number) => `d${dayIndex}s${stopIndex}`;
 
 export function buildFillPrompt(destination: string, dated: DatedDay[]): string {
-  const lines = dated.flatMap(({ date, day }, d) => day.stops.map((s, i) => `${stopId(d, i)}: ${s.name} (${date})`));
-  return `These are the stops of a traveller's own plan for a trip to ${destination}. Do not add, remove, rename or reorder anything: answer for exactly these ids.
+  const lines = dated.flatMap(({ date, day }, d) =>
+    day.stops.map((s, i) => `${stopId(d, i)}: ${tagUserText(s.name)} (${date})`)
+  );
+  return `${SCOPE_BLOCK}
+
+These are the stops of a traveller's own plan for a trip to ${tagUserText(destination)}. Do not add, remove, rename or reorder anything: answer for exactly these ids.
 
 For each stop id, estimate for one visitor:
 - "cost": typical cost in USD, a number; 0 if free

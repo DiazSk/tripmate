@@ -32,24 +32,26 @@ export function tagUserText(text: string): string {
 // filler, so "the wifi code" passes; `class` and `program` are not nouns ("a cooking class", "a program
 // of events"), and a real class definition is caught line-wise below.
 // Two noun lists. Unambiguous nouns have no travel meaning, so plain adjacency refuses. Ambiguous
-// ones also mean something on a trip ("a function room", "a code for the museum discount"), so they
-// refuse only when the fillers include a language name or "this" ("write me a Python function",
-// "debug this code").
+// ones also mean something on a trip ("a function room", "a code for the museum discount", "a
+// snippet of local history"), so they refuse only when the fillers include a language name ("write
+// me a Python function"). "this" does not unlock them: "explain this code on my ticket" and "make
+// this function room booking fit day 2" are trips, and "debug this code" is left to the scope
+// block's refusal.
 // ponytail: "build me a react component" and "implement a sorting algorithm" slip through; the scope
 // block's refusal covers them, and widening this is how real trips get refused.
 const LANG = "python|java(?:script)?|typescript|c\\+\\+|c#|rust|go|bash|ruby|php|sql|react|node";
 const VERB = "\\b(?:write|generate|create|give me|fix|debug|refactor|explain|make|build|implement)";
 const FILLERS = `((?:\\s+(?:me|us|a|an|some|this|that|my|our|${LANG})){0,3})`;
 const SURE_NOUN = new RegExp(
-  `${VERB}${FILLERS}\\s+(?:regex|sql(?: query)?|javascript|typescript|python script|script in \\w+|source code|snippet)\\b`,
+  `${VERB}${FILLERS}\\s+(?:regex|sql(?: query)?|javascript|typescript|python script|script in \\w+|source code)\\b`,
   "i",
 );
-const MAYBE_NOUN = new RegExp(`${VERB}${FILLERS}\\s+(?:code|function|algorithm|html|css|api)\\b`, "gi");
-const LANG_OR_THIS = new RegExp(`\\s(?:this|${LANG})(?=\\s|$)`, "i");
+const MAYBE_NOUN = new RegExp(`${VERB}${FILLERS}\\s+(?:code|function|algorithm|html|css|api|snippet)\\b`, "gi");
+const NAMES_A_LANGUAGE = new RegExp(`\\s(?:${LANG})(?=\\s|$)`, "i");
 
 function isCodeRequest(text: string): boolean {
   if (SURE_NOUN.test(text)) return true;
-  return [...text.matchAll(MAYBE_NOUN)].some((m) => LANG_OR_THIS.test(m[1]));
+  return [...text.matchAll(MAYBE_NOUN)].some((m) => NAMES_A_LANGUAGE.test(m[1]));
 }
 
 // One line of source. SELECT/FROM stay upper-case: "Select a cafe from the list" is a sentence.
@@ -81,7 +83,8 @@ export type ReplyCheck =
 
 // Measured 2026-10-18 on a scratch copy of the dev tripmate.db: 55 parseable `chat` replies (CLI and
 // API envelopes; 33 auth-error rows skipped), p50 237, p99 592, max 592 characters. p99 x 2 = 1184,
-// rounded up to 500. No element-edit traces existed, so `why` shares the chat number unmeasured.
+// rounded up to 1500 for headroom over a sample that small. No element-edit traces existed, so
+// `why` shares the chat number unmeasured.
 export const MAX_REPLY_CHARS = 1500;
 
 // Every string inside a field, whatever its shape (string, array, array of objects); the rest is ignored.

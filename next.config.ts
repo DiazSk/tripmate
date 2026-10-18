@@ -50,7 +50,8 @@ const KOKORO = [
 ];
 
 /** Enforced, after a clean report-only run on every surface: `/`, `/trip/[id]` on both map engines
- *  with a story film playing, sign-in and the saved-places import. A new origin a feature starts
+ *  with a story film playing, sign-in, the saved-places import, and a shared trip at `/s/[token]`
+ *  (its fonts are inlined as `data:` woff2, hence `font-src data:`). A new origin a feature starts
  *  calling has to be added here or the browser refuses the request. `'unsafe-inline'` stays on
  *  script-src deliberately — App Router emits inline scripts and nonces would force every page
  *  dynamic. */
@@ -59,6 +60,7 @@ const CSP = [
   `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", ...CLERK_SCRIPT)}`,
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   `connect-src ${list("'self'", ...KOKORO, OPENFREEMAP, TERRAIN, ...CESIUM, OSM_TILES, "https://geocoding-api.open-meteo.com", ...CLERK_CONNECT)}`,
   `img-src ${list("'self'", "data:", "blob:", OPENFREEMAP, OSM_TILES, "https://assets.ion.cesium.com", "https://upload.wikimedia.org", "https://thumb.wikimedia.org", COMMONS, ...CLERK_IMG)}`,
   `frame-src ${list("https://challenges.cloudflare.com", ...CLERK_API)}`,

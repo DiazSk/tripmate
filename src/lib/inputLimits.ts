@@ -15,7 +15,10 @@ export const CAPS = {
   destination: 200,
   historyTurns: 20,
   stopsPerDay: 15,
-  stringField: 500,
+  // Any one string in a client-sent itinerary. 4,000 because an imported plan keeps the
+  // traveller's own `note`, and the import reads its source in 4,000-character slices
+  // (planImport.ts, planComplete.ts): a lower cap refused every later edit of an imported trip.
+  stringField: 4000,
   bodyBytes: 256 * 1024,
 } as const;
 

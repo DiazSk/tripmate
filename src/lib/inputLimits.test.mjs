@@ -45,7 +45,7 @@ test("checkItinerary: more than MAX_TRIP_DAYS days is 400", () => {
 });
 
 test("checkItinerary: a long string anywhere deep is 400 with SV-17 at stringField", () => {
-  const long = "x".repeat(501);
+  const long = "x".repeat(CAPS.stringField + 1);
   for (const it of [
     { days: [{ stops: [stop({ description: long })] }] },
     { days: [{ lodging: { name: "Hotel", notes: { a: [long] } } }] },
@@ -53,7 +53,8 @@ test("checkItinerary: a long string anywhere deep is 400 with SV-17 at stringFie
   ]) {
     assert.deepEqual(checkItinerary(it), { ok: false, status: 400, code: "too_long", error: SV17(CAPS.stringField) });
   }
-  assert.deepEqual(checkItinerary({ days: [{ summary: "x".repeat(500) }] }), { ok: true });
+  assert.deepEqual(checkItinerary({ days: [{ summary: "x".repeat(CAPS.stringField) }] }), { ok: true });
+  assert.equal(CAPS.stringField, 4000);
 });
 
 test("checkItinerary: accepts a bare days array as well as { days }", () => {
@@ -61,7 +62,7 @@ test("checkItinerary: accepts a bare days array as well as { days }", () => {
   assert.deepEqual(checkItinerary(days(2, [stop()])), { ok: true });
   assert.equal(checkItinerary(days(31, [])).code, "bad_request");
   assert.equal(checkItinerary(days(1, Array.from({ length: 16 }, () => stop()))).code, "bad_request");
-  assert.deepEqual(checkItinerary([{ summary: "x".repeat(501) }]), { ok: false, status: 400, code: "too_long", error: SV17(CAPS.stringField) });
+  assert.deepEqual(checkItinerary([{ summary: "x".repeat(CAPS.stringField + 1) }]), { ok: false, status: 400, code: "too_long", error: SV17(CAPS.stringField) });
 });
 
 test("checkItinerary: a non-array days or stops passes (the route owns the shape)", () => {
@@ -155,6 +156,6 @@ test("chatHistory: an unsaved trip drops traveller turns the free check refuses,
 });
 
 test("checkItinerary scans fields beside days (trip-story's legs); UNREADABLE_REQUEST is SV-23", () => {
-  assert.equal(checkItinerary({ days: [{ stops: [] }], legs: [{ mode: "y".repeat(501) }] }).code, "too_long");
+  assert.equal(checkItinerary({ days: [{ stops: [] }], legs: [{ mode: "y".repeat(CAPS.stringField + 1) }] }).code, "too_long");
   assert.deepEqual(UNREADABLE_REQUEST, { ok: false, status: 400, code: "bad_request", error: UNREADABLE });
 });

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { runClaude } from "@/lib/claude";
 import { cheapModel } from "@/lib/llmConfig";
+import { CAPS, capFailureResponse, checkText, readJsonCapped } from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
 import { capResponse, limitResponse } from "@/lib/limitResponse";
 import { dailyCapResumesAt } from "@/lib/spendCap";
@@ -38,15 +39,21 @@ const FILL_TIMEOUT_MS = 60_000;
 export async function POST(req: NextRequest) {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
+  const read = await readJsonCapped(req);
+  if (!read.ok) return capFailureResponse(read);
+  // The destination and stop names reach the fill prompt; capped before the throttle, so a
+  // refusal costs none of the allowance. Notes and lodging are sliced in readCompleteRequest.
+  const raw = (read.value ?? {}) as { destination?: unknown; plan?: { days?: unknown } };
+  const rawDays = Array.isArray(raw.plan?.days) ? raw.plan.days : [];
+  const names = rawDays.flatMap((d: { stops?: unknown } | null) =>
+    Array.isArray(d?.stops) ? d.stops.map((s: { name?: unknown } | null) => s?.name) : []
+  );
+  for (const c of [checkText(raw.destination, CAPS.destination), ...names.map((n) => checkText(n, CAPS.placeName))]) {
+    if (!c.ok) return capFailureResponse(c);
+  }
   const limit = throttle(req, "import-plan-complete");
   if (limit.limited) return limitResponse(limit, "import-plan-complete");
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-  }
-  const request = readCompleteRequest(body);
+  const request = readCompleteRequest(read.value);
   if (typeof request === "string") return NextResponse.json({ error: request }, { status: 400 });
   const { plan, destination, startDate, budget } = request;
 

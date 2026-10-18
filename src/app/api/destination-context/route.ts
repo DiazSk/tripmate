@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDestinationContext } from "@/lib/destinationContext";
+import { capFailureResponse, readJsonCapped } from "@/lib/inputLimits";
 import { throttle } from "@/lib/ipThrottle";
 import { capResponse, limitResponse } from "@/lib/limitResponse";
 import { dailyCapResumesAt } from "@/lib/spendCap";
@@ -23,7 +24,9 @@ export async function POST(req: NextRequest) {
   if (capped) return capResponse(capped);
   const limit = throttle(req, "context");
   if (limit.limited) return limitResponse(limit, "context");
-  const { destination, startDate, endDate } = await req.json();
+  const read = await readJsonCapped(req);
+  if (!read.ok) return capFailureResponse(read);
+  const { destination, startDate, endDate } = (read.value ?? {}) as { destination?: unknown; startDate?: string; endDate?: string };
   if (!destination || !startDate || !endDate) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
