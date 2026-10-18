@@ -132,7 +132,7 @@ function Masthead({
   const photo = !lead || found === null ? FALLBACK_PHOTO : found;
   const first = name?.trim().split(/\s+/)[0] || "Traveller";
   return (
-    <section className="pb-mast" aria-labelledby="pb-name" data-nav-theme="photo" data-hero>
+    <section className="pb-mast" aria-labelledby="pb-name" data-hero>
       {/* The landing's hero motion (`heroParallax`): the media holds still as the form rises over it. */}
       <div className="tm-hero-media" aria-hidden="true">
         {photo && <Image key={photo} src={photo} alt="" fill priority sizes="100vw" className="pb-mast-img" />}
@@ -469,7 +469,7 @@ export default function ProfileForm({
 
   // `map-chrome-hidden`: a settings page, not a map being read.
   return (
-    <main ref={rootRef} className="tm pb map-chrome-hidden" data-nav-theme="light">
+    <main ref={rootRef} className="tm pb map-chrome-hidden">
       <Masthead id={accountId} name={accountName} email={accountEmail} image={accountImage} lead={recentTrips[0]} stats={stats} />
 
       <section className="pb-sentence" aria-labelledby="pb-sentence-title">

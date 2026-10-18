@@ -9,12 +9,11 @@ import "@/components/polar/SignInPass.css";
  * form, the Suspense fallback and the "accounts aren't set up" page all render inside it, so the
  * route never flashes a different background while the client half arrives.
  *
- * `data-nav-theme="photo"` puts the app's own Polar nav in white over the photograph.
  * `map-chrome-hidden` stands the globe's controls down: there is no map being read here.
  */
 export function SignInPassFrame({ children }: { children: ReactNode }) {
   return (
-    <main className="tm sp map-chrome-hidden" data-nav-theme="photo">
+    <main className="tm sp map-chrome-hidden">
       <div className="sp-bg" aria-hidden="true">
         <Image src="/scenes/wadi-rum-desert.webp" alt="" fill priority sizes="100vw" />
       </div>

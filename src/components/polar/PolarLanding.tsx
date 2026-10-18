@@ -153,7 +153,6 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         <section
           className={`tm-hero${heroPaused ? " is-paused" : ""}`}
           aria-label="TripMate"
-          data-nav-theme="photo"
           style={{ "--rotate-ms": `${ROTATE_MS}ms` } as CSSProperties}
           onPointerEnter={(e) => e.pointerType === "mouse" && setHeroPaused(true)}
           onPointerLeave={() => setHeroPaused(false)}
@@ -202,13 +201,13 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           <Ways lens={lens} setLens={setLens} />
           {/* A stable box for the motion to hold: PlanGlobe is a lazy import, so the element it
               renders arrives after the scroll effects (and the navbar's section observer) are bound. */}
-          <div className="tm-night" id="the-plan" data-nav-theme="photo">
+          <div className="tm-night" id="the-plan">
             <PlanGlobe lens={lens} setLens={setLens} hot={hot} setHot={setHot} when={sampleDay} onOpen={() => setSheet(true)} />
           </div>
         </div>
 
         {/* ───── More journeys ───── */}
-        <section className="tm-plans" id="plans" data-nav-theme="light">
+        <section className="tm-plans" id="plans">
           <div className="tm-section-title">
             <p className="tm-kicker">Sample journeys</p>
             <h2 className="tm-display">More journeys to imagine</h2>
@@ -265,7 +264,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         </section>
 
         {/* ───── What a plan knows ───── */}
-        <section className="tm-knows" id="knows" data-nav-theme="light">
+        <section className="tm-knows" id="knows">
           <div className="tm-section-title">
             <p className="tm-kicker">Four things built in</p>
             <h2 className="tm-display">What a plan knows</h2>
@@ -287,7 +286,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         </section>
 
         {/* ───── Footer: Variant B "Monument" ───── */}
-        <footer className="tm-fb" ref={formRef} id="plan" data-nav-theme="photo">
+        <footer className="tm-fb" ref={formRef} id="plan">
           <div className="tm-fb-photo" aria-hidden="true">
             <Image src={FOOT_PHOTO} alt="" fill sizes="100vw" />
           </div>

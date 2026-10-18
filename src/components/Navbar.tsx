@@ -151,24 +151,18 @@ function useActiveSection(ids: string[], enabled: boolean): string | null {
 const SECTION_IDS = SECTION_LINKS.map((l) => l.id);
 
 /**
- * The two things white-desert.com's nav does on scroll, read off AppShell's content overlay (the
- * window never scrolls here).
+ * Hide on the way down, return on the way up, after the first 10px — white-desert.com's nav
+ * (`yPercent: -100` over 0.3s on sine), read off AppShell's content overlay (the window never
+ * scrolls here). Reduced motion keeps the behaviour and drops the slide.
  *
- * - **Theme.** Each band of a page can say what it is with `data-nav-theme="light" | "photo"`; the
- *   bar takes the theme of whichever band is under its middle, so its chips are ink over paper and
- *   white over a photograph. Pages that say nothing are dark, which is every page over the map.
- * - **Hide on the way down, return on the way up**, after the first 10px — the reference's
- *   `yPercent: -100` over 0.3s on sine. Reduced motion keeps the behaviour and drops the slide.
+ * The bar used to also take a `dark | photo | light` theme from the band under it. It is one dark
+ * band on every route now: chips in ink over a photograph or paper were unreadable over mixed
+ * content, and a header that redraws itself between pages is the last thing that should.
  *
- * One rAF-throttled scroll listener for both; state only changes when a value does.
+ * One rAF-throttled scroll listener; state only changes when the value does.
  */
-type NavTheme = "dark" | "light" | "photo";
-
-function useNavChrome(pathname: string): { theme: NavTheme; hidden: boolean } {
+function useNavHidden(pathname: string): boolean {
   const container = useScrollContainer();
-  // `/` opens on the landing's hero, so it starts on `photo`: a band flashing in for the frame
-  // before the first read is exactly the seam this theme exists to remove.
-  const [theme, setTheme] = useState<NavTheme>(pathname === "/" ? "photo" : "dark");
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
@@ -183,34 +177,20 @@ function useNavChrome(pathname: string): { theme: NavTheme; hidden: boolean } {
       else if (y > last + 2) setHidden(true);
       else if (y < last - 2) setHidden(false);
       last = y;
-      const mid = el.getBoundingClientRect().top + 28;
-      let next: NavTheme = "dark";
-      for (const band of el.querySelectorAll<HTMLElement>("[data-nav-theme]")) {
-        const r = band.getBoundingClientRect();
-        const t = band.dataset.navTheme;
-        if (r.top <= mid && r.bottom > mid) next = t === "light" || t === "photo" ? t : "dark";
-      }
-      setTheme(next);
     };
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(read);
     };
-    // The first read waits a frame, so a route's bands exist and so no state is set during the
-    // effect itself.
+    // The first read waits a frame, so no state is set during the effect itself.
     frame = requestAnimationFrame(read);
     el.addEventListener("scroll", onScroll, { passive: true });
-    // A band can change its own theme without a scroll: the landing's day story goes dark on its
-    // night beat a moment after the scroll that reached it has already been read.
-    const themes = new MutationObserver(onScroll);
-    themes.observe(el, { subtree: true, attributeFilter: ["data-nav-theme"] });
     return () => {
       el.removeEventListener("scroll", onScroll);
-      themes.disconnect();
       cancelAnimationFrame(frame);
     };
   }, [container, pathname]);
 
-  return { theme, hidden };
+  return hidden;
 }
 
 export default function Navbar() {
@@ -249,7 +229,7 @@ export default function Navbar() {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const activeSection = useActiveSection(SECTION_IDS, pathname === "/");
-  const { theme, hidden } = useNavChrome(pathname);
+  const hidden = useNavHidden(pathname);
 
   // Section links only exist on `/`, so there's nothing for the menu to hold — and
   // nothing to leave stuck open — on any other route. Reset during render rather
@@ -318,10 +298,9 @@ export default function Navbar() {
 
   return (
     <nav
-      /* The Polar nav, on every route: no band, three columns — links, the wordmark, the trailing
-         controls — and each link its own glass chip. `data-theme` is ink or white for whatever is
-         under the bar (see `useNavTheme`); `is-hidden` is the reference's hide-on-scroll-down. */
-      data-theme={theme}
+      /* The Polar nav, on every route: one dark glass band, three columns — links, the wordmark,
+         the trailing controls — and each link its own glass chip. `is-hidden` is the reference's
+         hide-on-scroll-down. */
       className={`polar-nav pointer-events-auto fixed inset-x-0 top-0 z-20 grid h-[var(--nav-h)] grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-5 ${
         menuOpen ? "is-menu-open" : ""
       } ${hidden && !menuOpen ? "is-hidden" : ""}`}
@@ -356,7 +335,7 @@ export default function Navbar() {
       </div>
 
       {/* The wordmark, centred: the mark, then TRIPMATE in the condensed face — the reference's
-          own header arrangement. `LogoMark` fills `currentColor`, so it follows the theme. */}
+          own header arrangement. `LogoMark` fills `currentColor`, so it follows the bar. */}
       <Link
         href="/"
         className="polar-wordmark inline-flex min-h-11 items-center gap-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

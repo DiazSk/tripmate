@@ -21,9 +21,6 @@ export { useReveal } from "./motion";
 
 /* ---------------------------------------------------------- picture a day */
 
-// Each beat is a stop in the slow plan, so the story and the plan are the same day told twice.
-const LAST = PETRA_BEATS.length - 1;
-
 export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
   const [active, setActive] = useState(0);
   const refs = useRef<(HTMLElement | null)[]>([]);
@@ -42,7 +39,7 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
   return (
     // One id over both bands, so the navbar's "A day in Petra" stays lit through the whole story.
     <div id="day">
-      <section className="bg-white" data-nav-theme="light">
+      <section className="bg-white">
         <div className="mx-auto grid max-w-[1440px] gap-8 px-4 pb-16 pt-28 md:pb-24 lg:grid-cols-12 md:pl-8 md:pr-20 md:pt-40">
           <p className="pl-eyebrow text-[var(--signal-text)] lg:col-span-3" data-reveal>
             Picture a day
@@ -59,12 +56,10 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
         </div>
       </section>
 
-      {/* The navbar goes dark with the sky on the night beat, and stays light over the day's paper. */}
       <section
         className="pl-sky relative"
         style={{ backgroundColor: sky.bg, color: sky.fg }}
         aria-label="One day in Petra, morning to evening"
-        data-nav-theme={active === LAST ? "dark" : "light"}
       >
         <div className="mx-auto grid max-w-[1440px] gap-10 px-4 md:pl-8 md:pr-20 lg:grid-cols-[1.08fr_.92fr] lg:gap-16">
           <div className="sticky top-0 hidden h-[100svh] items-center lg:flex">
@@ -148,7 +143,7 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
 
 export function Ways({ lens, setLens }: { lens: LensId; setLens: (l: LensId) => void }) {
   return (
-    <section id="ways" className="bg-white" data-nav-theme="light">
+    <section id="ways" className="bg-white">
       <div className="mx-auto max-w-[1440px] px-4 py-24 md:py-36 md:pl-8 md:pr-20">
         <div className="grid gap-8 md:grid-cols-12">
           <p className="pl-eyebrow text-[var(--signal-text)] md:col-span-3" data-reveal>

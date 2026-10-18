@@ -21,7 +21,7 @@ import "@/components/polar/MemoriesWall.css";
 /**
  * The first screen: the next trip still to come (or the one that started last), its photograph full
  * bleed and its city set across the foot as the monument, under the page's own sentence about
- * everything kept. `data-nav-theme="photo"` puts the Polar nav in white over it.
+ * everything kept.
  *
  * The photograph resolves late (`usePlacePhoto` → Wikipedia), so the night ground is the permanent
  * layer and the photo fades in over it; a miss leaves the ground, never a hole back to the globe.
@@ -32,7 +32,7 @@ function Hero({ trips }: { trips: TripSummary[] }) {
   if (!hero) return null;
   const word = city(hero);
   return (
-    <section className="ma-hero" aria-labelledby="ma-title" data-nav-theme="photo" data-hero>
+    <section className="ma-hero" aria-labelledby="ma-title" data-hero>
       {/* The landing's hero motion (`heroParallax`): the media holds still as the wall rises over it. */}
       <div className="tm-hero-media" aria-hidden="true">
         {photo && <Image key={photo} src={photo} alt="" fill priority sizes="100vw" className="ma-hero-img" />}
@@ -214,7 +214,7 @@ export default function TripsView({
 
   // `map-chrome-hidden`: nothing on this page is a map being read, so the globe's controls stand down.
   return (
-    <main ref={rootRef} className="tm ma map-chrome-hidden" data-nav-theme="light">
+    <main ref={rootRef} className="tm ma map-chrome-hidden">
       {trips.length > 0 ? (
         <Hero trips={trips} />
       ) : (

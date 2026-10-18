@@ -652,10 +652,10 @@ inset clips are scroll effects on photographs, not shapes.
 - **Always 16px text** (`{typography.field}`).
 
 ### Navigation
-One bar, `.polar-nav`, `--nav-h` tall, in three themes chosen by the band under it (`data-nav-theme`):
-**dark** (night glass, 16px blur), **photo** (no ground; chips at 0.2 with a 3px blur over a photograph)
-and **light**. The LogoMark and the Oswald wordmark sit centred in a three-column grid; route links
-are chips (2.5rem, `{rounded.nav}`) and the current one inverts to foreground on canvas; the landing
+One bar, `.polar-nav`, `--nav-h` tall, always the same dark glass band on every route, landing
+included (the slate at 0.72, 16px blur, white text, a hairline under it; 2026-10-17 ruling: ink or
+white text on a bare photograph was unreadable, so there are no `photo` or `light` themes). The
+LogoMark and the Oswald wordmark sit centred in a three-column grid; route links are chips (2.5rem, `{rounded.nav}`) and the current one inverts to foreground on canvas; the landing
 adds a Plan a trip CTA in signal. The bar hides on scroll down and returns on scroll up. On a phone
 the links collapse into a full-screen menu (not a dropdown). The landing's CTA stays visible on phones
 (2026-10-16 ruling, as the design shows): beside the menu button, 44px tall with tighter padding

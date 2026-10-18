@@ -1672,17 +1672,17 @@ html[data-story-mode="true"] .marker-day-label {
    The hero's top scrim went with the transparent variant. It existed only to give a groundless bar
    something to sit on, and with a real surface above it, it was darkening 140px of photograph for
    no one. */
-/* The Polar nav (Navbar.tsx). Three themes, set by whatever band of the page is under the bar:
-
-   - `dark`, every route over the map: the band above, unchanged in material — the slate at 0.72
-     with a 16px blur — because the measurement above is about the map, and it still holds.
-   - `photo`, the landing's hero, night map and footer: no band. The reference's nav is groundless
-     over its photographs, and each chip carries its own glass (Polar's veil-20 and a 3px blur).
-   - `light`, the landing's paper bands: no band, ink chips.
+/* The Polar nav (Navbar.tsx): one dark band on every route, landing included — the slate at 0.72
+   with a 16px blur, white chips, a hairline under it. It used to take a `photo` (no band) or `light`
+   (ink chips, no band) theme from whatever was under it, and over mixed content (the landing's photo
+   strip, a page's paper and a photograph meeting under the bar) ink or white text on a bare
+   photograph was unreadable. The measurement above holds on every ground, so the band stays.
 
    Hide-on-scroll-down is a transform on the whole bar, on the reference's 0.3s sine. */
 .polar-nav {
-  border-bottom: 1px solid transparent;
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border-bottom: 1px solid var(--card-border);
   color: var(--foreground);
   transition:
     transform 0.3s cubic-bezier(0.37, 0, 0.63, 1),
@@ -1691,21 +1691,6 @@ html[data-story-mode="true"] .marker-day-label {
   --chip-bg: rgba(255, 255, 255, 0.06);
   --chip-bg-hover: rgba(255, 255, 255, 0.14);
   --chip-blur: 0px;
-}
-.polar-nav[data-theme="dark"] {
-  background: rgb(var(--surface-deep-rgb) / 0.72);
-  backdrop-filter: blur(16px) saturate(1.1);
-  border-bottom-color: var(--card-border);
-}
-.polar-nav[data-theme="photo"] {
-  --chip-bg: rgba(31, 42, 68, 0.2);
-  --chip-bg-hover: rgba(31, 42, 68, 0.5);
-  --chip-blur: 3px;
-}
-.polar-nav[data-theme="light"] {
-  --foreground: #1f2a44;
-  --chip-bg: rgba(31, 42, 68, 0.05);
-  --chip-bg-hover: rgba(31, 42, 68, 0.12);
 }
 .polar-nav.is-hidden {
   transform: translateY(-100%);
@@ -1727,9 +1712,6 @@ html[data-story-mode="true"] .marker-day-label {
 .polar-chip.is-current {
   background: var(--foreground);
   color: var(--canvas);
-}
-.polar-nav[data-theme="light"] .polar-chip.is-current {
-  color: #ffffff;
 }
 .polar-wordmark {
   font-family: var(--font-condensed-stack), "Arial Narrow", Arial, sans-serif;

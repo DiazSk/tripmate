@@ -172,7 +172,7 @@ function ShellBody({
           {/* The navbar stays up during a film. It used to go with the rest of the chrome, and the
               way out of a playing film was Esc or the film's own ✕ — which is fine once you know
               it and a dead end before you do, since the whole page had no visible exit. */}
-          {/* Given the scroll container too: the nav's active section, its theme and its
+          {/* Given the scroll container too: the nav's active section and its
               hide-on-scroll all read the overlay, which is outside the provider above. */}
           <ScrollContainerContext.Provider value={scrollRef}>
             <Navbar />
