@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import type { DayEditUpdates } from "@/components/DayHeader";
-import { fitMessage } from "@/components/AnchorReceipt";
-import FeedbackLoop, { type DraftState } from "@/components/FeedbackLoop";
+import { draftFailedNote, type DraftState } from "@/components/FeedbackLoop";
 import { DEFAULT_PARTY } from "@/components/PartyCounter";
 import {
   legacyExplorerStyle,
@@ -15,7 +12,6 @@ import {
   travelStyleOf,
 } from "@/lib/userAnswers";
 import type { SuggestOption } from "@/components/SuggestInput";
-import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import PolarLanding from "@/components/polar/PolarLanding";
 import PlanningFlow, { type PlannerModel } from "@/components/polar/planner/PlanningFlow";
@@ -23,11 +19,6 @@ import { suggestionLabel } from "@/lib/weather";
 import { setHomeScreen } from "@/lib/homeScreen";
 import type { PlanPrefill } from "@/lib/planExamples";
 import DockedPanel from "@/components/DockedPanel";
-import { useStoryControls } from "@/lib/storyMode";
-import { PlayIcon } from "@/components/icons";
-import InlineNote, { HeldNote } from "@/components/InlineNote";
-import OnboardingCard from "@/components/OnboardingCard";
-import { backPillClass } from "@/components/BrandMark";
 import { capsuleDays } from "@/lib/planProgress";
 import { closestTier, perPersonBudget, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
@@ -50,12 +41,9 @@ import type { SketchDay } from "@/lib/sketch";
 import { CandidatePoi } from "@/lib/pois";
 import { useStreamingCamera, useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
-import { upcomingStopsAfter } from "@/lib/itinerary";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
-import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
 import { announceDraftRevision } from "@/lib/draftRevision";
-import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
@@ -65,7 +53,6 @@ import { formatDateRange } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { shouldFallBack } from "@/lib/streamRetry";
 import { useToast } from "@/lib/toast";
-import type { Bucket } from "@/lib/ipThrottle";
 import {
   failureFromResponse,
   failureFromStreamError,
@@ -76,33 +63,29 @@ import {
   type Failure,
 } from "@/lib/failure";
 
-/* Five `next/dynamic` boundaries, the same `{ ssr: false }` idiom AppShell uses for the globe.
+/* `next/dynamic` boundaries, the same `{ ssr: false }` idiom AppShell uses for the globe.
    None of these renders on the landing step — the landing renders `<PolarLanding>` and nothing
-   else — yet all five were parsed at module scope before its first paint, because this module is
+   else — yet all of them were parsed at module scope before its first paint, because this module is
    one `"use client"` component covering all three steps of the flow. `ssr: false` costs nothing:
    the initial server render is always `step: "landing"`.
 
    ItineraryCard is the one that matters. It pulls DayHeader, StopList, BudgetBar, Typewriter and
-   icons.tsx behind it — about half of what this module used to parse up front. `DayEditUpdates`
-   above is now a `type` import for the same reason: without the keyword it dragged DayHeader and
-   framer-motion in for an annotation, defeating this boundary from a different direction.
+   icons.tsx behind it — about half of what this module used to parse up front.
 
-   Six other pickers stayed static (`InterestPicker`, `ExplorerStylePicker`, `GroupTypePicker`,
-   `PoiCandidatePicker`, `FeedbackLoop`, `OnboardingCard`): 1-4KB each, 20KB across six more
-   boundaries, which one ItineraryCard boundary already beats. `ChoicePicker` *cannot* be split —
+   Four other pickers stayed static (`InterestPicker`, `ExplorerStylePicker`, `GroupTypePicker`,
+   `PoiCandidatePicker`): 1-4KB each, which one ItineraryCard boundary already beats. `ChoicePicker` *cannot* be split —
    it exports CROWD_PREFERENCES and ENERGY_LEVELS as values used in the render below.
    `DestinationSearch` is deliberately static too: it is the first field of the plan step,
    rendered in the same tick as the "Plan a trip" click, and the failure mode of a prefetch miss
    there is a form with no destination input. `PolarLanding` static is the whole point. */
 const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
-const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
-const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
-// Behind its own boundary like every other blue-hour piece: it is only ever on stage during the
-// plan step, and its two crops should not be fetched by a traveller who never opens the form.
-const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
-  ssr: false,
-});
-// Behind its own boundary for the same reason: it is only on stage while a plan is being written.
+/** The result step: the trip page's own board, read-only, for a plan whose draft insert failed (see
+ *  `showPlan`). Its stylesheet comes with it, so the landing never pays for a screen this rare. */
+const loadTripBoard = () => import("@/components/polar/trip/TripBoard.css").then(() => import("@/components/polar/trip/TripBoard"));
+const TripBoard = dynamic(loadTripBoard, { ssr: false });
+const BoardInsets = dynamic(() => loadTripBoard().then((m) => m.BoardInsets), { ssr: false });
+const noop = () => {};
+// Behind its own boundary too: it is only on stage while a plan is being written.
 const WritingThePlan = dynamic(() => import("@/components/polar/WritingThePlan"), { ssr: false });
 
 /** Why a run failed. `dropped` is this page's own: the connection died under a stream that had
@@ -124,9 +107,8 @@ function runFailureOf(e: unknown): RunFailure {
   return f.kind === "server" && e instanceof TypeError ? { kind: "dropped" } : f;
 }
 
-/** A failure written where it happened (the planner's bar, the result panel). `hold` counts the
- *  `{mm:ss}` in `text` down and then says `resolved`. */
-type Note = { text: string; hold?: { bucket: Bucket; resolved: string } };
+/** A failure written where it happened (the planner's bar, the result board's Keep note). */
+type Note = { text: string };
 
 /** Copy rows P-33..P-36, P-38, P-39. P-37 (the limit) is a toast, raised by `generate`. */
 function planFailureText(f: RunFailure, destination: string): string {
@@ -168,32 +150,6 @@ function causeShort(f: RunFailure): string {
   }
 }
 
-/** Copy rows W-05..W-10: a rework that didn't land. The plan on screen is the one from before. */
-function refineFailureNote(f: RunFailure): Note {
-  switch (f.kind) {
-    case "offline":
-      return { text: "You’re offline, so your change wasn’t made. Your current plan is unchanged. Press Rework the plan when you’re back online." };
-    case "dropped":
-      return { text: "The connection dropped while TripMate was reworking the plan. Your current plan is unchanged. Press Rework the plan to try again." };
-    case "timeout":
-      return { text: "Reworking the plan took longer than TripMate allows, so it stopped. Your current plan is unchanged. Try again, or ask for one change at a time." };
-    case "rate_limited":
-      return {
-        text: "You’ve asked TripMate for 6 changes in the last 10 minutes, which is the limit. Your current plan is unchanged. You can ask for another in {mm:ss}.",
-        hold: { bucket: f.bucket, resolved: "You can ask for changes again." },
-      };
-    case "daily_cap":
-      return {
-        text: `Changes by TripMate are paused for everyone until ${formatResumeTime(f.resumesAt)}. It has reached its limit for the day; it isn’t anything you did. Your plan is unchanged, and you can still keep it and edit it by hand on its trip page.`,
-      };
-    // The server wrote this sentence (copy rows SV-14..SV-17, SV-20); shown as it is, with nothing to retry.
-    case "refused":
-      return { text: f.message };
-    default:
-      return { text: "TripMate hit a problem reworking the plan. Your current plan is unchanged. Press Rework the plan to try again." };
-  }
-}
-
 /** Copy rows W-11..W-15: Keep this trip didn't keep it. */
 function keepFailureText(f: RunFailure, plan: Itinerary): string {
   if (f.kind === "offline") return "You’re offline, so this trip wasn’t kept. Leave this tab open and press Keep this trip once you’re back online.";
@@ -205,10 +161,10 @@ function keepFailureText(f: RunFailure, plan: Itinerary): string {
     for (const [d, day] of plan.days.entries()) {
       const stop = day.stops.find((x) => !Number.isFinite(x.lat) || !Number.isFinite(x.lng));
       if (stop) {
-        return `${stop.name} on day ${d + 1} has no place on the map, so this plan can’t be kept yet. Ask TripMate to replace that stop, then keep it.`;
+        return `${stop.name} on day ${d + 1} has no place on the map, so this plan can’t be kept. Plan the trip again to get one that can be.`;
       }
     }
-    return "This plan came back incomplete, so it can’t be kept. Rework the plan, or plan the trip again.";
+    return "This plan came back incomplete, so it can’t be kept. Plan the trip again to get a complete one.";
   }
   return "TripMate couldn’t keep this trip: its server had a problem. Your plan is still here. Press Keep this trip to try again.";
 }
@@ -230,33 +186,6 @@ function defaultPartyForGroup(group: GroupType): PartyCounts {
  *  enough that nobody waiting two minutes notices it as a delay. */
 const ARRIVAL_HOLD_MS = 650;
 const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** How long an edit on the pre-save result view sits before it is written back to the draft row.
- *
- *  Every local edit here — a drag on the board, a retimed day, an inline cost — used to be state
- *  only, and drag-and-drop fires a new itinerary object on every drop. Writing each one straight
- *  through would mean a PATCH per drop for a row nobody has committed to yet, so edits are
- *  coalesced: the timer restarts on each change and only the settled plan is persisted. Short
- *  enough that a traveler who rearranges a day and immediately hits Back has already been saved
- *  — which is the entire point of the draft. */
-const DRAFT_AUTOSAVE_MS = 1200;
-
-/** The draft row's edit write, shared by the coalescing timer and the leave-now flush below so
- *  the two cannot send different bodies. `keepalive` lets the request outlive the document, which
- *  is the whole point of the flush — a normal fetch fired during unload is cancelled with it. */
-function patchDraft(
-  tripId: string,
-  plan: Itinerary,
-  sessionId: string | null,
-  keepalive = false
-): Promise<Response> {
-  return fetch(`/api/trips/${tripId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ itinerary: plan, chatSessionId: sessionId }),
-    keepalive,
-  });
-}
 
 type Step = "landing" | "plan" | "result";
 /** Three questions and a review, replacing the old four ("basics" -> "purpose" -> "group" ->
@@ -370,17 +299,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [anchors, setAnchors] = useState<Anchor[]>([]);
 
   // Durable, and unlike the others it has no wizard screen — /profile is where it's set.
-  // Held here only so generate()/refine() can send it.
+  // Held here only so generate() can send it.
   const [dietary, setDietary] = useState<DietaryNeeds>(
     initialProfile?.dietary ?? { tags: [], note: "" }
   );
-
-  // Shown once, after the first generation, only when there is no profile yet. Still state,
-  // because the onboarding card flips it on save — but no longer `boolean | null`. The null
-  // meant "the profile fetch hasn't resolved yet", so the card couldn't flash before it did;
-  // the profile now arrives with the first render, leaving no unknown state to model.
-  const [hasProfile, setHasProfile] = useState(initialProfile !== null);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   // Step 2a — fired fire-and-forget right alongside the existing destination-context
   // warmer, the moment basics are submitted. Never blocks the wizard from advancing;
@@ -393,7 +315,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // model call has already been paid for — the alternative, fetching destination facts when
   // the loader appears, would mean a second model call for data already sitting in cache.
   const [destContext, setDestContext] = useState<DestinationContext | null>(null);
-  // Aborts the in-flight generate/refine. A ref, not state: cancelling must not re-render the
+  // Aborts the in-flight generate. A ref, not state: cancelling must not re-render the
   // loader, and nothing renders off this value.
   const abortRef = useRef<AbortController | null>(null);
 
@@ -402,21 +324,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     abortRef.current?.abort();
     abortRef.current = null;
     setGenerating(false);
-    setRefining(false);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     // Half a plan is not a plan. The draft used to be safe to leave lying around because nothing
     // rendered it; it is the card and the map's route now, so a cancelled run would otherwise
-    // leave a partial itinerary on screen — and, on a refine, sitting *over* the finished plan it
-    // was meant to replace — until the next run happened to reset it.
+    // leave a partial itinerary on screen until the next run happened to reset it.
     setDraftItinerary(null);
     setCoordsDay(null);
     // Clearing the draft unmounts the card, and the card is the only thing that calls
-    // `showTripRoute` — so on a *generate* there is nothing left to redraw the map, and the
-    // half-drawn route and its pins would sit on the globe until something else wiped them (the
-    // form's own backdrop hides them, but the next Generate uncovers them again). A refine needs
-    // the opposite: the finished plan is still there, its card re-renders from it, and its own
-    // route effect puts the real geometry back.
-    if (step !== "result") resetToHome();
+    // `showTripRoute` — so there is nothing left to redraw the map, and the half-drawn route and
+    // its pins would sit on the globe until something else wiped them (the form's own backdrop
+    // hides them, but the next Generate uncovers them again).
+    resetToHome();
     // `resetToHome` flies the camera home and drops the pin, but the *reason* the destination was
     // ever framed is `lastFlownRef`, and nothing re-flies on Generate — `flyToTypedDestination`
     // only fires on blur of a field whose value changed. Left set, a Cancel-then-Generate on the
@@ -430,71 +348,26 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   // Id of the LLM pipeline run that produced the current `itinerary` — tracks
-  // the most recent generate/refine call so save() can attach it to the
+  // the most recent generate call so save() can attach it to the
   // trip, letting later place-detail calls append to that same run.
   const [lastRunId, setLastRunId] = useState<string | null>(null);
-  // The CLI session the generate call ran in. Handed to the edit chat so refinement continues
-  // that same conversation, and saved with the trip so it survives a reload. Null whenever the
+  // The CLI session the generate call ran in. Saved with the trip, so the trip page's edit chat
+  // continues that same conversation. Null whenever the
   // session is unknown or gone — every consumer treats that as "rebuild the full prompt".
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
-  /**
-   * The `trips` row this plan already lives in, written as a `draft` the moment the generation
-   * landed — and the fix for the way this page used to lose work.
-   *
-   * A generated itinerary was React state and nothing else until Save ran, so a Back press, a
-   * reload or a closed tab discarded a two-minute model call with no way to get it back. It now
-   * has a row from the moment it exists; `Keep this trip` promotes that row rather than inserting
-   * a second one, which is what keeps the plan's chat session, its `generations` link and any
-   * pre-save edits attached to the trip the traveler ends up with.
-   *
-   * Null means there is no draft to promote — the write hasn't landed yet, or it failed. `save()`
-   * falls back to a plain insert in that case, exactly as it behaved before drafts existed.
-   */
-  const [draftTripId, setDraftTripId] = useState<string | null>(null);
   const [draftState, setDraftState] = useState<DraftState>(null);
-  /** The edit that is waiting out the coalescing timer, if any — the flush effect's only input.
-   *  Holds the trip id and session alongside the plan so it stays a complete, self-contained
-   *  request even if `draftTripId` has since moved on. */
-  const pendingDraftRef = useRef<{
-    tripId: string;
-    plan: Itinerary;
-    sessionId: string | null;
-  } | null>(null);
-  /** The exact itinerary object last written to the draft row. Compared by reference, not by
-   *  value: every edit path here produces a fresh object (`structuredClone`, `moveStop`), so
-   *  identity is a sound "has this changed" test and costs nothing — where a deep compare of a
-   *  whole plan would run on every keystroke. Its job is to stop the autosave effect from
-   *  re-PATCHing the plan the insert just stored. */
-  const persistedDraftRef = useRef<Itinerary | null>(null);
-  // Plays the staggered card reveal + typewriter effect once, right after a fresh
-  // generation — cleared the moment a stop is opened so backing out of the detail view
-  // doesn't replay the whole entrance again.
-  const [revealAnimation, setRevealAnimation] = useState(false);
-  /**
-   * Whether the plan panel is shut, which is also what puts the globe into the whole-trip
-   * overview — hence owned here rather than inside DockedPanel: `ItineraryCard` needs the same
-   * boolean to decide whether to frame the active day or the entire trip.
-   *
-   * Starts true. A finished itinerary opens on its own map, every day clustered and labelled,
-   * and the plan is one click behind the panel's arrow.
-   */
-  const [planCollapsed, setPlanCollapsed] = useState(true);
-  // Story mode, for the capsule's Play button. One film at a time, owned by the app rather than
-  // by this page (`storyMode.tsx`) — so this and the card's own Play button are one control
-  // reached from two places.
-  const story = useStoryControls();
+  /** The unsaved board (result step) folded to its ticket, the map whole. */
+  const [boardShut, setBoardShut] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [refining, setRefining] = useState(false);
   const [notifyOnDone, setNotifyOnDone] = useState(false);
   const [notifyBlocked, setNotifyBlocked] = useState(false);
   const [stages, setStages] = useState<StageProgress[]>(
     STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const }))
   );
   /** The plan as it is being written, assembled from `stop` and `day-coords` frames. Null
-   *  outside a generation or a refine — both drive the same `stop`/`day-coords`/`plan` events
-   *  off the one `runStreamed`, so both reset this to null at the start and clear it once their
-   *  own plan lands. This is what the map and the itinerary card render during the wait — there
-   *  is no separate loading view to keep in sync with it. */
+   *  outside a generation — reset to null at the start and cleared once the plan lands. This is
+   *  what the map and the itinerary card render during the wait — there is no separate loading
+   *  view to keep in sync with it. */
   const [draftItinerary, setDraftItinerary] = useState<Itinerary | null>(null);
   /** The highest day index whose `day-coords` frame has landed, or null before the first one.
    *
@@ -507,11 +380,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  discard it. */
   const editedSincePlanRef = useRef(false);
   const [saving, setSaving] = useState(false);
-  // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
-  // state there would reset the view to Day 1 on the way back.
+  // The day on screen: the result board's tabs set it, and the streaming card is handed it.
   const [activeDayIndex, setActiveDayIndex] = useState(0);
-  /** 0-based days a chat turn changed while the traveler was reading a different one. Owned here
-   *  rather than in the card because the chat that produces them lives beside it, not inside it. */
+  /** 0-based days the critique's revision changed while the traveler was reading a different one,
+   *  dotted on the result board's tabs until visited. */
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
   /** The day on screen, readable from a closure that has been alive for minutes. `generate()`'s
    *  `revised` hook runs ~150s after the click and needs to know which tab the traveller is on
@@ -521,36 +393,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   useEffect(() => {
     activeDayRef.current = activeDayIndex;
   }, [activeDayIndex]);
-  /** True from the moment the plan is interactive until the stream closes — i.e. exactly while
-   *  the background critique is still running over a plan the traveller can already read. The
-   *  band is gone by then (`showPlan` drops `generating`), so this is what tells them a change
-   *  may still arrive. Generate-only: a refine keeps `refining` true through its own critique
-   *  and keeps the band up instead. */
-  const [reviewing, setReviewing] = useState(false);
-  // Step 7 edit session. `chatScope` null = closed; { dayIndex: null } = whole trip.
-  const focus = useFocusEdit(itinerary);
   // Publishes the plan to surfaces mounted outside this tree — the map's search control, which
-  // lives with the map chrome in `AppShell`. Same commit path the result card's own drag-and-drop
-  // uses, so a café added from the map is saved exactly like a dragged stop.
+  // lives with the map chrome in `AppShell`. A café added from the map lands in `itinerary`, so
+  // Keep saves it with the rest of the plan.
   usePublishItinerary(itinerary, handleRearrange);
   const [error, setError] = useState<Note | null>(null);
   const { showError } = useToast();
 
-  const {
-    destinationCoords,
-    flyToDestinationByName,
-    flyToDestinationByCoords,
-    selectStop,
-    closeDetail,
-    selectedStop,
-    detail,
-    detailLoading,
-    detailError,
-  } = useTripCamera(destination);
+  const { destinationCoords, flyToDestinationByName, flyToDestinationByCoords } = useTripCamera(destination);
   const { resetToHome, showTripRoute, setRouteConnectorsHidden, setNightLens } = useMapCamera();
   // The camera for the length of a run. Holds `showTripRoute`'s own per-stop framing and moves
   // once per day instead, when that day's real coordinates land — see `useStreamingCamera`.
-  useStreamingCamera(generating || refining, draftItinerary, coordsDay);
+  useStreamingCamera(generating, draftItinerary, coordsDay);
 
   // Mount-only on purpose. The globe lives above the route boundary and never unmounts, so
   // arriving here from /trips ("New trip") would otherwise keep the last trip's route, markers
@@ -704,10 +558,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // These hit the same module registry, fully typed.
   useEffect(() => {
     if (step === "landing") return;
-    void import("@/components/GenerationScreen");
     void import("@/components/ItineraryCard");
-    void import("@/components/PlaceDetailPanel");
-    void import("@/components/FocusEditMode");
   }, [step]);
 
   // Drives this page's own cosmetics (dark dashboard header/nav once results exist,
@@ -720,16 +571,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // warm globe for nothing: MapCameraProvider already queued the plan step's destination flight
   // and highway fetch in `pendingRef`/`pendingHighwaysRef`, and those replay on `setViewer`, so
   // the result view opens already framed on the destination with its highways drawn.
-  // `refining` is deliberately absent: refine is only reachable from `result`, where this is
-  // already true.
   useGlobeOnScreen(generating || step === "result");
 
   // The night lens for the length of a generate (WritingThePlan's ground), lifting as the plan opens.
-  // A refine runs from the result view on the day map, so it is not lit. Off on the way out, too.
-  const nightLens = generating && !refining;
+  // Off on the way out, too.
   useEffect(() => {
-    setNightLens(nightLens);
-  }, [nightLens, setNightLens]);
+    setNightLens(generating);
+  }, [generating, setNightLens]);
   useEffect(() => () => setNightLens(false), [setNightLens]);
 
   const preResult = step !== "result";
@@ -747,18 +595,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * the model writes them. A second "streaming" card would mean a second thing to keep in step
    * with the real one.
    *
-   * **`itinerary` is only a fallback on the result step, and that condition is load-bearing.**
-   * Nothing clears `itinerary` when a traveller presses Back and plans a second trip — the page
-   * never unmounts between the two — so before this branch existed, pressing Generate for
-   * Reykjavik put *Kyoto's* finished plan and route on screen for the ten seconds until the first
-   * real stop arrived. A generate has nothing to fall back to by definition; a refine, which runs
-   * from the result step, falls back to the plan it is reworking, which is exactly right.
+   * `itinerary` only on the result step: a generate has nothing to fall back to by definition.
    *
-   * Read only where the question is "what is being shown": the card, the capsule's day count, and
-   * the gate below. Everything that *edits* or *saves* still reads `itinerary`, because a draft is
-   * not a plan anybody can keep yet.
+   * Read only where the question is "what is being shown": the streaming card, its capsule's day
+   * count, and the anchor pins below. Everything that *edits* or *saves* still reads `itinerary`,
+   * because a draft is not a plan anybody can keep yet.
    */
-  const shownItinerary = step === "result" ? (draftItinerary ?? itinerary) : draftItinerary;
+  const shownItinerary = step === "result" ? itinerary : draftItinerary;
 
   // The pile, on the map, before any plan exists: pins only, no route between them — they are
   // not an order yet. Hands the map back the moment a plan (draft or final) takes over.
@@ -773,51 +616,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       showTripRoute([], null, true, false);
     };
   }, [anchors, shownItinerary, showTripRoute, setRouteConnectorsHidden]);
-
-  /** True exactly while the card is showing a half-written plan. Preferred over `generating` for
-   *  gating the card's own controls: the two come apart at both ends of a run — `generating` is
-   *  true for the ten-odd seconds before the first stop arrives, and stays true through the
-   *  background critique after the plan is interactive — and it is the *draft* that makes an edit
-   *  or a narrated film a bad idea, not the run. */
-  const streamingPlan = draftItinerary !== null;
-
-  const { prefetch: warmStory } = story;
-
-  /**
-   * Warm the narration for the day on screen, so pressing Play starts a film instead of a wait.
-   *
-   * One day, not all of them: `MAX_TRIP_DAYS` is 30 and the CLI transport spawns a subprocess per
-   * call, so warming a whole trip would be half an hour of serialised Sonnet for films nobody has
-   * asked for. The dwell that stops a click along the day tabs from warming every one of them
-   * lives in `story.prefetch`.
-   *
-   * `step === "result"` is the same guard the Play button carries, for the same reason: nothing
-   * clears `itinerary` when a traveller presses Back and plans a second trip (see
-   * `shownItinerary` above), so without it, filling in the wizard for Reykjavik would warm Kyoto's
-   * day one against Reykjavik's `destination` — a script belonging to neither trip.
-   *
-   * `itinerary` rather than `shownItinerary`, and `!streamingPlan` beside it: this file already
-   * draws that line two lines up — it is the *draft* that makes a narrated film a bad idea, not
-   * the run. A half-written day is a call keyed on stops that are about to change.
-   *
-   * The dependency is the **destructured** `prefetch`, not `story`: the controls object changes
-   * identity when a film starts, pauses and ends, and depending on the whole of it would re-arm
-   * the warm mid-playback. `exhaustive-deps` will not accept the member expression, so it is
-   * pulled out into a local — which is stable by construction, being a `useCallback([])`.
-   *
-   * ponytail: the background critique can still revise a day ~150s after the plan lands
-   * (`reviewing`), which changes the key and wastes this call. Gating on `!reviewing` would delay
-   * the warm past the window it exists to serve; one occasionally-wasted cheap call is the price.
-   */
-  useEffect(() => {
-    if (step !== "result" || streamingPlan || !itinerary) return;
-    // Clamped the way `ItineraryCard` clamps it. A chat turn that removes days leaves
-    // `activeDayIndex` past the end for a render, and an unclamped warm there fetches a key no
-    // Play button will ever ask for.
-    const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
-    if (!itinerary.days[dayIndex]?.stops.length) return;
-    warmStory({ itinerary, dayIndex, destination });
-  }, [step, streamingPlan, itinerary, activeDayIndex, destination, warmStory]);
 
   // Null until both dates are set, so the tier cards show per-day rates rather than a total
   // derived from tripDays' floor-at-1.
@@ -1081,8 +879,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * richer events arrive.
    */
   async function runStreamed<T>(
-    /** The allowance this run spends: `plan` for a generate, `edit` for a refine. */
-    bucket: "plan" | "edit",
     body: Record<string, unknown>,
     hooks?: { planned?: (result: T) => void; revised?: (days: DayPlan[]) => void }
   ): Promise<T> {
@@ -1099,7 +895,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-      if (!res.ok) throw new RunError(await failureFromResponse(res, bucket));
+      if (!res.ok) throw new RunError(await failureFromResponse(res, "plan"));
       return (await res.json()) as T;
     };
 
@@ -1123,7 +919,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // as a plain POST would spend the allowance a second time on a request already refused. Only a
     // stream that never opened gets the one retry (`shouldFallBack`, tested in streamRetry.test.mjs).
     if (shouldFallBack({ response: res, aborted: false, online: true })) return plainFallback();
-    if (!res.ok) throw new RunError(await failureFromResponse(res, bucket));
+    if (!res.ok) throw new RunError(await failureFromResponse(res, "plan"));
     const stream = res.body!;
 
     let result: T | null = null;
@@ -1227,7 +1023,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         if (planReceived) {
           console.error("[home] background review failed", parsed.error);
         } else {
-          failure = failureFromStreamError(parsed, bucket);
+          failure = failureFromStreamError(parsed, "plan");
         }
       }
     };
@@ -1253,10 +1049,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // `validateBasics`, copy rows P-04, P-05, P-07, P-08).
     setGenerating(true);
     setError(null);
-    // Back to the map for the new trip. Without this, a traveler who opened the plan on their
-    // last result, backed out and generated again would land straight in the panel — this page
-    // never unmounts between the two, so the collapse state would otherwise carry over.
-    setPlanCollapsed(true);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     setDraftItinerary(null);
     setCoordsDay(null);
@@ -1315,22 +1107,19 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         /* nothing to clean up if storage was never writable */
       }
       window.history.replaceState(null, "", window.location.pathname);
-      // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
-      // previous run's id in place for even one render would point the autosave effect at the
-      // old draft row and overwrite the plan it holds with this new one. Both updates batch, so
-      // the effect never sees the new plan beside the old id.
-      setDraftTripId(null);
-      setDraftState(null);
-      persistedDraftRef.current = null;
-      // Null, not the previous run's plan, while the insert lands: `writeDraft` arms the autosave
-      // effect with the new row's id, and a stale itinerary beside it would be PATCHed into it.
-      setItinerary(null);
       // **A finished plan opens on its trip page, as a draft.** The writing screen stays up for
       // the insert (one cached geocode and a row, well under a second) and the router then moves
       // to the page every kept trip uses: the board, the draft notice and Keep. The critique is
       // still running; its revision lands on this row server-side, and the trip page is told
       // through `announceDraftRevision` above. `writeDraft` swallows its own failures.
-      const tripId = await writeDraft(plan, runId, sessionId);
+      let tripId = await writeDraft(plan, runId, sessionId);
+      // One quiet retry before falling back: a failed insert is usually a blip, and the trip page is
+      // the better place to land. Not offline, where a second try fails the same way. `draftState`
+      // keeps whichever attempt ran last.
+      if (!tripId && navigator.onLine && abortRef.current === owner) {
+        await settle(800);
+        if (abortRef.current === owner) tripId = await writeDraft(plan, runId, sessionId);
+      }
       insertPending = false;
       if (abortRef.current !== owner) return;
       if (tripId) {
@@ -1339,7 +1128,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         // through the ordinary PATCH, before the page that reads it opens. Fail-soft: the plan
         // still opens if this does not land.
         if (earlyRevision) {
-          await patchDraft(tripId, { ...plan, days: earlyRevision }, sessionId)
+          await fetch(`/api/trips/${tripId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ itinerary: { ...plan, days: earlyRevision }, chatSessionId: sessionId }),
+          })
             .then((r) => {
               if (!r.ok) throw new Error(`PATCH ${r.status}`);
             })
@@ -1348,15 +1141,15 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         router.push(`/trip/${tripId}`);
         return;
       }
-      // No draft row, so nowhere to open it: the result view, as before drafts existed. `save()`
-      // inserts the trip outright from here, and the revision below lands on this view. The
-      // streamed draft stays on the map until here, so the wait for the insert shows no blank map.
+      // No draft row, so nowhere to open it: the result step, the trip board read-only with Keep
+      // (see the render). `save()` inserts the trip outright from here, and a revision lands on this
+      // view. The streamed draft stays on the map until here, so the wait shows no blank map.
       setDraftItinerary(null);
       setCoordsDay(null);
       setItinerary(earlyRevision ? { ...plan, days: earlyRevision } : plan);
       setLastRunId(runId);
       setLastSessionId(sessionId);
-      setRevealAnimation(true);
+      setBoardShut(false);
       setStep("result");
       setGenerating(false);
     };
@@ -1380,7 +1173,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         runId?: string | null;
         sessionId?: string | null;
       }>(
-        "plan",
         {
           destination,
           startDate,
@@ -1395,8 +1187,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           planned: (plan) => {
             planShown = true;
             plannedDays = plan.itinerary.days;
-            // The plan is interactive but the run is not over — the critique is still reading it.
-            setReviewing(true);
             void showPlan(abortRef.current, plan.itinerary, plan.runId ?? null, plan.sessionId ?? null);
           },
           revised: (days) => {
@@ -1426,7 +1216,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // Deliberately no profile write here. The preferences step's values are a per-trip
       // override, and writing them back would silently make one unusual trip the traveler's
       // permanent default — the bug this codebase already hit twice with `tier`. /profile and
-      // the onboarding card are the only writers.
+      // the welcome are the only writers.
     } catch (e) {
       // Same reason as in cancelGeneration: a run that failed halfway leaves whatever stops it
       // got in `draftItinerary`, and that value is now on screen. Cleared for the abort case too
@@ -1475,85 +1265,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       }
     } finally {
       setGenerating(false);
-      setReviewing(false);
     }
   }
 
-  async function refine(feedback: string) {
-    setRefining(true);
-    setError(null);
-    setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
-    // `runStreamed` drives the same `stop`/`day-coords`/`plan` events for a refine as for a
-    // from-scratch generate (the server's `live` sink isn't gated by which one this is), so a
-    // refine gets its own progressive reveal too — and needs the same clean start.
-    setDraftItinerary(null);
-    setCoordsDay(null);
-    editedSincePlanRef.current = false;
-    try {
-      const data = await runStreamed<{
-        itinerary: Itinerary;
-        runId?: string | null;
-        sessionId?: string | null;
-      }>("edit", {
-        destination,
-        startDate,
-        endDate,
-        budget,
-        previousItinerary: itinerary,
-        feedback,
-        userAnswers: currentAnswers(),
-        dietary,
-      });
-      setDraftItinerary(null);
-      setCoordsDay(null);
-      setItinerary(data.itinerary);
-      setLastRunId(data.runId ?? null);
-      setLastSessionId(data.sessionId ?? null);
-    } catch (e) {
-      // "Your current plan is unchanged" has to be true on screen as well as in state. The draft
-      // is what the card renders while a refine streams, so leaving it here would show the
-      // traveller the abandoned half-rework under a message telling them nothing changed.
-      setDraftItinerary(null);
-      setCoordsDay(null);
-      if (!isAbort(e)) {
-        const f = runFailureOf(e);
-        if (f.kind === "rate_limited") holdFromFailure(f);
-        setError(refineFailureNote(f));
-      }
-    } finally {
-      setRefining(false);
-    }
-  }
-
-  // Pre-save editing is local-state only — there's no trip row to persist to
-  // until save() runs, so these just mutate the in-progress itinerary.
-  /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed the
-   *  affected days, so there is nothing to recompute here — and nothing to persist yet, same as the
-   *  inline day edits.
-   *
-   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `SplitEditor`
-   *  itself, but `onItineraryChange` is optional and a caller that omits it gets an editor whose
-   *  drops, edits and deletes all go nowhere. The handler lived in `page.tsx` until that file was
-   *  split into this one, so the merge that brought the board across would otherwise have landed
-   *  it dead. Now carries every edit the split editor makes, not only drags — the name is older
-   *  than its job. */
+  /** A changed plan from outside this tree — the map search adding a stop (`usePublishItinerary`
+   *  above). Local state only: with no trip row there is nothing to persist to until save() runs.
+   *  The name is older than its job: it carried the result card's drag-and-drop when that card
+   *  was on this view. */
   function handleRearrange(next: Itinerary) {
-    setRevealAnimation(false);
     // A local edit outranks a critique revision that lands after it — see editedSincePlanRef.
     editedSincePlanRef.current = true;
     setItinerary(next);
   }
-
-  function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
-    if (!itinerary) return;
-    const updated: Itinerary = structuredClone(itinerary);
-    Object.assign(updated.days[dayIndex], updates);
-    // A local edit outranks a critique revision that lands after it — see editedSincePlanRef.
-    editedSincePlanRef.current = true;
-    setItinerary(updated);
-  }
-
-
 
   /**
    * Writes the just-generated plan to its own `draft` row.
@@ -1561,10 +1284,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * **Fail-soft, and deliberately silent on failure.** This runs in the seconds after a
    * two-minute wait finally paid off; an error block at that moment would report a problem the
    * traveler did not cause and cannot act on, about a plan that is on screen and working. The
-   * failure is logged, surfaced as one quiet line in the footer beside Keep, and `save()` still
-   * has its insert path — so the worst case is the behaviour this whole feature replaced.
+   * failure is logged, surfaced as one quiet line beside Keep on the result board, and `save()`
+   * inserts the trip outright — so the worst case is the behaviour this whole feature replaced.
    *
-   * Returns the new id (or null) so `save()` can await an insert still in flight.
+   * Returns the new id (or null) so `showPlan` can open it.
    */
   async function writeDraft(
     plan: Itinerary,
@@ -1590,11 +1313,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save draft");
-      // The ref before the state, and in that order. Setting `draftTripId` is what arms the
-      // autosave effect below; if the ref were still null when it re-ran, it would immediately
-      // PATCH back the very itinerary this insert just stored.
-      persistedDraftRef.current = plan;
-      setDraftTripId(data.id);
       setDraftState("saved");
       return data.id as string;
     } catch (e) {
@@ -1604,107 +1322,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     }
   }
 
-  /**
-   * Keeps the draft row level with the plan on screen.
-   *
-   * One effect rather than a PATCH at each of the four edit sites (refine, drag, day edit, stop
-   * cost): they all land in the same `itinerary` state, so watching that state catches every one
-   * of them — including any added later, which is the failure mode a per-site call has.
-   *
-   * `lastSessionId` is a dependency because a refine replaces the conversation the plan was
-   * written in, and a promoted trip whose row still points at the generate-only session opens its
-   * chat having forgotten the rework. Both change in the same tick, so this is still one write.
-   */
-  useEffect(() => {
-    if (!draftTripId || !itinerary) {
-      pendingDraftRef.current = null;
-      return;
-    }
-    if (persistedDraftRef.current === itinerary) {
-      pendingDraftRef.current = null;
-      return;
-    }
-    const snapshot = itinerary;
-    // Recorded before the timer, not inside it: between an edit and the write there is a window
-    // where the traveler can leave, and this is what the flush below sends if they do.
-    pendingDraftRef.current = { tripId: draftTripId, plan: snapshot, sessionId: lastSessionId };
-    const timer = setTimeout(() => {
-      patchDraft(draftTripId, snapshot, lastSessionId)
-        .then((res) => {
-          if (!res.ok) throw new Error(String(res.status));
-          // Only on success, so a failed write is retried by the next edit rather than being
-          // recorded as persisted.
-          persistedDraftRef.current = snapshot;
-          pendingDraftRef.current = null;
-          setDraftState("saved");
-        })
-        .catch((e) => {
-          console.error("[home] draft autosave failed", e);
-          setDraftState(failureFromThrown(e).kind === "offline" ? "offline" : "failed");
-        });
-    }, DRAFT_AUTOSAVE_MS);
-    // Restarted on every change, which is what coalesces a run of drags into one write.
-    return () => clearTimeout(timer);
-  }, [itinerary, draftTripId, lastSessionId]);
-
-  /**
-   * Sends a pending edit immediately when the page is going away.
-   *
-   * Without this, the coalescing window above is a hole exactly the shape of the bug this feature
-   * exists to close: rearrange a day, press Back inside 1.2s, and the write is cancelled with the
-   * timer. `pagehide` covers a closed tab, a reload and a back/forward-cache freeze; the cleanup
-   * covers a client-side route change, which unmounts this view without any of those firing.
-   *
-   * Reads only refs and declares no dependencies on purpose — it must subscribe once, not re-run
-   * on every keystroke, and the ref always holds the latest unwritten plan.
-   */
-  useEffect(() => {
-    const flush = () => {
-      const pending = pendingDraftRef.current;
-      if (!pending) return;
-      pendingDraftRef.current = null;
-      // Fire-and-forget by definition: nothing is left to render the outcome to. A rejection here
-      // is not even reportable, so it is swallowed rather than left as an unhandled rejection.
-      patchDraft(pending.tripId, pending.plan, pending.sessionId, true).catch(() => {});
-    };
-    window.addEventListener("pagehide", flush);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      flush();
-    };
-  }, []);
-
   async function save() {
     if (!itinerary) return;
     setSaving(true);
     setError(null);
     try {
-      // A finished plan leaves for its trip page once its draft row exists, so this view is shown
-      // with a row only in the moment before that navigation; usually there is none and the plan
-      // is inserted outright below. Kept for that moment.
-      const draftId = draftTripId;
-
-      // With a row: the plan is already a row, so keeping it is a promotion. It carries the
-      // current itinerary too, which both flushes an edit the autosave timer hasn't written yet and
-      // makes the status flip and the plan it applies to one atomic request.
-      if (draftId) {
-        const res = await fetch(`/api/trips/${draftId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ itinerary, chatSessionId: lastSessionId, status: "saved" }),
-        });
-        if (!res.ok) throw new RunError(await failureFromResponse(res, "edit"));
-        // This request carried the itinerary, so there is nothing pending any more — recorded
-        // before the navigation so the unmount flush doesn't re-send a plan that just saved.
-        persistedDraftRef.current = itinerary;
-        pendingDraftRef.current = null;
-        router.push(`/trip/${draftId}`);
-        return;
-      }
-
-      // No draft to promote, because its write failed (or never ran). Inserts the trip outright —
-      // the behaviour this page had before drafts existed, kept as the fallback so a draft outage
-      // costs the traveler nothing.
+      // Only the result board calls this, and it exists only when the plan has no draft row (both
+      // inserts failed, see `showPlan`), so keeping it inserts the trip outright — the behaviour this
+      // page had before drafts existed.
       const res = await fetch("/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1723,14 +1348,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       const data = await res.json();
       router.push(`/trip/${data.id}`);
     } catch (e) {
-      const f = runFailureOf(e);
-      // The draft row is gone (copy row W-13): the next Keep inserts the plan as a new trip, and
-      // the footer stops saying it is saved as a draft.
-      if (f.kind === "not_found") {
-        setDraftTripId(null);
-        setDraftState(null);
-      }
-      setError({ text: keepFailureText(f, itinerary) });
+      setError({ text: keepFailureText(runFailureOf(e), itinerary) });
       setSaving(false);
     }
   }
@@ -1951,7 +1569,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // now, arriving stop by stop, and the marker cards are what the traveller is watching. So a
       // generating run is neither a form step nor a result — it keeps the markers without taking
       // `dashboard-page`'s token overrides, which belong to the solid-background result view.
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : generating || refining ? "" : "map-chrome-hidden"}`}
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : generating ? "" : "map-chrome-hidden"}`}
     >
       {/* No SceneBackdrop here any more: the planner page draws its own stage (the place's photograph,
           or the night over Wadi Rum) behind every step. */}
@@ -1961,8 +1579,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           fetches its chunk on first render — i.e. on the landing, which is the one thing the
           boundary exists to prevent. */}
       {/* A generate is written on the live map under the Polar screen (the canvas design "Live map,
-          writing the plan · C Monument"); a refine, from the result view, keeps the foot band. */}
-      {generating && !refining && (
+          writing the plan · C Monument"). */}
+      {generating && (
         <WritingThePlan
           stages={stages}
           facts={destinationFacts}
@@ -1977,22 +1595,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           onCancel={cancelGeneration}
         />
       )}
-      {refining && (
-        <GenerationScreen
-          mode="refine"
-          stages={stages}
-          facts={destinationFacts}
-          destination={destination}
-          dateRange={startDate && endDate ? formatDateRange(startDate, endDate) : null}
-          tripDays={days}
-          tierName={TIERS.find((t) => t.id === tier)?.name ?? null}
-          budget={budget}
-          rawFetch={rawFetch}
-          onCancel={cancelGeneration}
-          // A `sketch` frame fills the draft with day themes and no stops, so it does not count.
-          streaming={draftItinerary?.days.some((d) => d.stops.length > 0) ?? false}
-        />
-      )}
 
       {/* The Polar Interior landing: a destination hero, sample plans, a day on a night map, what a
           plan knows, and a closing form. Full-bleed sections with real scroll height, handing off
@@ -2003,247 +1605,87 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       {/* The planner (src/components/polar/planner), from the canvas design "TripMate Planning flow
           (web)": four steps over the place being planned. Full-bleed like PolarLanding, so it cancels
           this <main>'s padding the same way. Every answer still lives here; `plannerModel` is how it
-          reaches the page. Gone while a plan is written: the live map, the streaming plan panel and
-          GenerationScreen's band take the screen, as they always have. */}
+          reaches the page. Gone while a plan is written: the live map and WritingThePlan take the
+          screen. */}
       {step === "plan" && !generating && (
         <div className="-mx-5 -mb-5 -mt-[calc(var(--nav-h)+1.25rem)] sm:-mx-6 sm:-mb-6 sm:-mt-[calc(var(--nav-h)+1.5rem)]">
           <PlanningFlow model={plannerModel} />
         </div>
       )}
 
-      {/* Also mounted while a generation streams, because the card inside it — kept mounted rather
+      {/* The result step, reached only when the draft insert failed twice (`showPlan`): the trip
+          page's board with nothing that needs a trip row — read the plan, switch days, Keep it. The
+          note under Keep says why it isn't saved (W-16/W-17), then why Keep failed (W-11..W-15).
+          `.trip-page` gives it the trip page's map chrome and pointer rules (globals.css). */}
+      {step === "result" && itinerary && (
+        <div className="trip-page">
+          <BoardInsets shape={boardShut ? "ticket" : "board"} />
+          <TripBoard
+            trip={{ id: "", destination, startDate, endDate, budget, itinerary, status: "draft" }}
+            itinerary={itinerary}
+            dayIndex={activeDayIndex}
+            onDayChange={(next) => {
+              setActiveDayIndex(next);
+              setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
+            }}
+            shape={boardShut ? "ticket" : "board"}
+            unseenChangedDays={unseenChangedDays}
+            drawerOpen={false}
+            onSelectStop={noop}
+            onRefine={noop}
+            onEdit={noop}
+            onFitAnchor={noop}
+            onShut={() => setBoardShut(true)}
+            onOpen={() => setBoardShut(false)}
+            onKeep={save}
+            keeping={saving}
+            keepNote={error?.text ?? draftFailedNote(draftState)}
+            costNote={null}
+            onRetryCost={noop}
+            onShareChange={noop}
+            onLodgingActualCost={noop}
+            overspend={null}
+            unsaved
+          />
+        </div>
+      )}
+
+      {/* Mounted only while a generation streams, because the card inside it — kept mounted rather
           than unmounted, see DockedPanel — runs its `showTripRoute` effect on every arriving stop, so
           the route and the marker cards build themselves on the live map behind the foot band. It is
-          not *shown* then: the writing screen is the wait's own surface, and a finished plan opens on
-          its trip page, so the old capsule over the map was only ever a second, stale itinerary
-          (Zaid, 2026-10-17). `invisible` rather than `hidden`, so the panel keeps its geometry and the
-          camera frames exactly as it did; `inert` so nothing in it takes focus. The fallback result
-          view (draft write failed) and a refine still show it. */}
-      {(step === "result" || generating || refining) && shownItinerary && (
-        <div className={step === "result" ? undefined : "invisible pointer-events-none"} inert={step !== "result" || undefined}>
+          not *shown*: the writing screen is the wait's own surface, and a finished plan opens on its
+          trip page, so the old capsule over the map was only ever a second, stale itinerary (Zaid,
+          2026-10-17). `invisible` rather than `hidden`, so the panel keeps its geometry and the
+          camera frames exactly as it did; `inert` so nothing in it takes focus. Never on the result
+          step, which is the board above: two route drivers would fight over the camera (`generating`
+          is false there; `showPlan` drops it in the same batch). Shut to its capsule, and the card
+          told so: the whole trip so far on the map, no day singled out. */}
+      {generating && shownItinerary && (
+        <div className="invisible pointer-events-none" inert>
           <DockedPanel
             collapsible
-            busy={refining}
-            // The panel stays through the film, shut to its capsule — see the same note in TripView.
-            capsuleAction={
-              // Not offered mid-run: the film narrates a finished day, and a day that is still
-              // arriving has neither a script to write from nor a camera to spare — the route
-              // replay owns it until the last stop lands.
-              // And gone once one starts: the button leaves for `StoryStage`'s transport row rather
-              // than being mirrored in two places — see the note there.
-              step === "result" && !streamingPlan && itinerary?.days.length && !story.active
-                ? {
-                    label: `Play day ${activeDayIndex + 1} as a story`,
-                    onClick: () =>
-                      itinerary &&
-                      story.start({
-                        itinerary,
-                        dayIndex: activeDayIndex,
-                        destination,
-                        // No trip id: the pre-save view's `trip` prop is the `"preview"`
-                        // placeholder, so its scripts are cached in the browser for the session
-                        // and not against a row.
-                      }),
-                    icon: <PlayIcon className="h-4 w-4" />,
-                  }
-                : undefined
-            }
-            wide={!!focus.target}
-            collapsed={planCollapsed}
-            // Opening the plan mid-film ends the film — see the same handler in TripView.
-            onCollapsedChange={(next) => {
-              if (!next && story.active) story.exit();
-              setPlanCollapsed(next);
-            }}
-            // What the capsule carries while the panel is shut — the trip at a glance, so
-            // "which day was I reading" survives a look at the map. Pre-save there is no trip
-            // row yet, so this reads the form's own destination, the way the arrange board does.
+            collapsed
+            // What the capsule carries while the panel is shut. There is no trip row yet, so this
+            // reads the form's own destination.
             capsule={
               destination
                 ? {
                     title: destination,
-                    ...capsuleDays({ days: shownItinerary?.days, streaming: streamingPlan, tripDays: days, activeDayIndex }),
+                    ...capsuleDays({ days: shownItinerary.days, streaming: true, tripDays: days, activeDayIndex }),
                   }
                 : undefined
             }
           >
-            <div className="space-y-6" {...devLabel("ResultPanel")}>
-              {/* refine()/save() can fail after the card is already showing — this is the
-                  only place either error would otherwise have nowhere to render (copy rows
-                  W-05..W-15). Always mounted, so a note put in it is announced; on the panel's own
-                  glass, since this slot sits straight on the map. */}
-              <div aria-live="polite" className={error ? "glass-itinerary rounded-2xl" : undefined}>
-                {error &&
-                  (error.hold ? (
-                    <HeldNote size="section" bucket={error.hold.bucket} resolved={error.hold.resolved}>
-                      {error.text}
-                    </HeldNote>
-                  ) : (
-                    <InlineNote size="section" tone="error">
-                      {error.text}
-                    </InlineNote>
-                  ))}
-              </div>
-
-              {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active
-                  day and this panel's scroll position both survive the round trip instead of
-                  resetting when ItineraryCard remounts. */}
-              <div className={selectedStop ? "hidden" : "space-y-6"}>
-                {/* Withheld while a run streams. `backToLanding` does not abort the request, so
-                    from here it would leave a five-minute model call running invisibly — Cancel in
-                    the generation band is the one way out of a run, and it is right there. */}
-                {step === "result" && !streamingPlan && (
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={backToLanding} className={backPillClass}>
-                      <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
-                      Back
-                    </button>
-                  </div>
-                )}
-                {/* Focus Mode takes over the card while editing a day. */}
-                {focus.target && focus.draft && (
-                  <FocusEditMode
-                    trip={{ id: "", destination, startDate, endDate, budget }}
-                    userAnswers={currentAnswers()}
-                    draft={focus.draft}
-                    dayIndex={focus.target.dayIndex}
-                    scope={focus.target.scope}
-                    sessionId={lastSessionId}
-                    initialMessage={focus.target.initialMessage}
-                    dirty={focus.dirty}
-                    onDaysModified={(days) =>
-                      setUnseenChangedDays((prev) =>
-                        markUnseenDays(days, focus.target?.dayIndex ?? activeDayIndex, prev)
-                      )
-                    }
-                    onDraftChange={focus.applyDraft}
-                    onCancel={focus.cancel}
-                    onSave={() => {
-                      const committed = focus.save();
-                      if (committed) {
-                        // A local edit outranks a critique revision that lands after it — see
-                        // editedSincePlanRef.
-                        editedSincePlanRef.current = true;
-                        setItinerary(committed);
-                      }
-                    }}
-                  />
-                )}
-
-                {!focus.target && hasProfile === false && !onboardingDismissed && (
-                  <OnboardingCard
-                    answers={{
-                      group,
-                      pace,
-                      discovery,
-                      explorerStyle,
-                      energy,
-                      crowds,
-                      priorities: interests,
-                      topPriorities: starredInterests,
-                      // The wizard already asked; carry it so the saved profile starts out
-                      // matching what they just said rather than blank.
-                      accessibility: accessibility ?? NO_ACCESSIBILITY_NEEDS,
-                    }}
-                    onSaved={(dietary) => {
-                      setHasProfile(true);
-                      setOnboardingDismissed(true);
-                      setDietary(dietary);
-                    }}
-                    onDismiss={() => setOnboardingDismissed(true)}
-                  />
-                )}
-
-                {!focus.target && (
-                  <ItineraryCard
-                    itinerary={shownItinerary}
-                    budget={budget}
-                    destination={destination}
-                    onSelectStop={(stop) => {
-                      setRevealAnimation(false);
-                      selectStop(stop);
-                    }}
-                    // Read-only while the plan is still being written: a drag or an inline day edit
-                    // lands in `itinerary`, and the very next streamed stop would overwrite it.
-                    editable={!streamingPlan}
-                    activeDayIndex={activeDayIndex}
-                    unseenChangedDays={unseenChangedDays}
-                    onActiveDayChange={(next) => {
-                      setActiveDayIndex(next);
-                      // Looking at the day is what marks it read.
-                      setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
-                    }}
-                    onEditDay={handleEditDay}
-                    // Same window "Refine with AI" opens, just starting on the day whose icon was
-                    // clicked: one chat surface with day navigation, rather than a second
-                    // day-locked variant that looked identical but couldn't reach other days.
-                    onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
-                    onItineraryChange={handleRearrange}
-                    // The board only needs a name, a budget and the dates; pre-save there is no trip
-                    // row yet, so this is assembled from the form's own values.
-                    trip={{ id: "preview", destination, startDate, endDate, budget }}
-                    animateReveal={revealAnimation}
-                    panelCollapsed={planCollapsed}
-                    onMinimize={() => setPlanCollapsed(true)}
-                    onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
-                  />
-                )}
-
-                {/* The one thing that reports the background critique once the band is gone.
-                    Spec §5 keeps the progress strip on the list of what must survive, and Risk 3
-                    asks for the review to be "visibly in progress so a change is expected rather
-                    than startling" — but the literal answer, keeping the band up, means a status
-                    bar over a finished editable plan for another two minutes. A phrase in the
-                    footer sets the expectation at the cost of one line; the arriving change itself
-                    is announced by the day dots `markUnseenDays` sets from the `revised` hook.
-                    `!generating` rather than plain `reviewing`: the two overlap for ARRIVAL_HOLD_MS
-                    while the band is still up, and both saying it at once is noise. */}
-                {step === "result" && !focus.target && itinerary && reviewing && !generating && (
-                  <p role="status" aria-live="polite" className="px-1 text-xs text-muted">
-                    Still reviewing this plan. A day or two may change in a minute.
-                  </p>
-                )}
-                {/* `step === "result"`, because `itinerary` is not cleared when a traveller presses
-                    Back and plans a second trip: on trip B's generation this row would otherwise
-                    offer trip A's Keep and Refine under trip B's streaming card — and unlike a
-                    refine, a generate leaves the panel interactive (`busy={refining}` is false), so
-                    both would work. `save()` would promote trip A's draft row and `router.push`
-                    away without aborting the run, and `onRefine` would fire a second model call
-                    against trip A mid-generate. `itinerary` rather than `shownItinerary` on top of
-                    that, because Keep and Refine act on a finished plan and a half-written draft is
-                    not one.
-
-                    **Deliberately NOT `!streamingPlan`, unlike its two neighbours above.** That
-                    term does real work on the card render and the Play button, which both act on
-                    the draft. Here it could only ever fire during a refine — where `step` is already
-                    `"result"` and `itinerary` is the *current* trip, so there is no stale-trip
-                    hazard left to guard — and it would unmount this row for the whole rework,
-                    losing its in-place busy state for no safety at all. Don't "fix" the
-                    inconsistency with its neighbours; the inconsistency is the point. */}
-                {step === "result" && !focus.target && itinerary && (
-                  <FeedbackLoop
-                    onSave={save}
-                    onRefine={refine}
-                    saving={saving}
-                    refining={refining}
-                    draftState={draftState}
-                  />
-                )}
-              </div>
-
-              {selectedStop && (
-                <PlaceDetailPanel
-                  stop={selectedStop}
-                  detail={detail}
-                  loading={detailLoading}
-                  error={detailError}
-                  onRetry={() => selectStop(selectedStop)}
-                  onBack={closeDetail}
-                  upcomingStops={upcomingStopsAfter(shownItinerary, selectedStop)}
-                  onSelectUpcoming={selectStop}
-                />
-              )}
-            </div>
+            {/* Read-only (no `editable`, no `onItineraryChange`): the next streamed stop would
+                overwrite any edit. */}
+            <ItineraryCard
+              itinerary={shownItinerary}
+              budget={budget}
+              destination={destination}
+              onSelectStop={noop}
+              activeDayIndex={activeDayIndex}
+              panelCollapsed
+            />
           </DockedPanel>
         </div>
       )}

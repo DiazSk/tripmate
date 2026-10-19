@@ -21,7 +21,7 @@ import { useAnchoredToMap } from "@/lib/useAnchoredToMap";
  * the basemap down (HomeView turns it on with the run), the fact rotates as the hero's standfirst in
  * the display face, the days light up as the stream reaches them, each new stop arrives as a glass
  * card beside its own pin, and the city is set as the monument along the foot under one hairline of
- * instruments. Replaces `GenerationScreen`'s foot band for a generate; a refine keeps the band.
+ * instruments. Replaced `GenerationScreen`'s foot band (since deleted).
  *
  * Everything on it is the stream's: the four step groups from `stage` frames, the facts from
  * `buildDestinationFacts`, the days and stops from the draft as `sketch` and `stop` frames land, the
@@ -136,7 +136,7 @@ export default function WritingThePlan({
     if (!el || !foot) return;
     const measure = () => {
       const right = Math.round(el.getBoundingClientRect().right + 16);
-      const wide = window.innerWidth > 760;
+      const wide = window.matchMedia("(width >= 48rem)").matches;
       setClearLeft(wide ? right : 0);
       setViewPadding({ left: wide ? right : 0, bottom: Math.max(0, Math.round(window.innerHeight - foot.getBoundingClientRect().top)) });
     };

@@ -268,7 +268,7 @@ export default function SplitEditor({
       // Not `inset-0`: the strip the panel leaves is left alone so the map stays visible *and*
       // clickable — clicking a pin is one of this editor's inputs, and a full-screen overlay would
       // eat it.
-      className={`split-editor glass-itinerary${polar ? " tm is-polar" : ""} fixed z-[70] flex flex-col overflow-hidden rounded-none sm:rounded-2xl top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[40%] sm:max-w-[520px]`}
+      className={`split-editor glass-itinerary${polar ? " tm is-polar" : ""} fixed z-[70] flex flex-col overflow-hidden rounded-none sm:rounded-md top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[40%] sm:max-w-[520px]`}
       {...devLabel("SplitEditor")}
     >
       {/* The result page's header, not a dialog's.

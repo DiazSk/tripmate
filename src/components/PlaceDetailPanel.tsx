@@ -259,7 +259,7 @@ export default function PlaceDetailPanel({
     // itinerary's compressing hero, where "scrolling to 40, 80, 120 and 160px all settled back at
     // 0". A bleed is not worth trading a working sticky header for.
     <div
-      className="glass-itinerary flex flex-col rounded-none sm:rounded-2xl"
+      className="glass-itinerary flex flex-col rounded-none sm:rounded-md"
       {...devLabel("PlaceDetailPanel")}
     >
       <div className="px-5 pt-5 sm:px-6 sm:pt-6">

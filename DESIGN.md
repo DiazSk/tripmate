@@ -183,7 +183,6 @@ rounded:
   card: "0.375em"
   nav: "2px"
   pill: "999px"
-  panel: "16px"
 spacing:
   space-1: "0.35em"
   space-2: "0.75em"
@@ -290,7 +289,7 @@ components:
   card-glass:
     backgroundColor: "{colors.surface-deep}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.panel}"
+    rounded: "{rounded.card}"
     padding: "20px"
   marker-title-card:
     backgroundColor: "rgb(9 11 16 / 0.75)"
@@ -439,7 +438,7 @@ All three are self-hosted through `next/font/local` (`src/app/layout.tsx`) as va
 `display: swap`, exposed as `--font-display-stack`, `--font-sans-stack` and
 `--font-condensed-stack` and aliased on `.tm` as `--wd-font-display`, `--wd-font-sans` and
 `--wd-font-condensed`. **Refer to them only through those variables**: `next/font` does not register
-the family names, so a rule that asks for `'Oswald'` by name silently gets Arial Narrow (Open Items).
+the family names, so a rule that asks for `'Oswald'` by name silently gets Arial Narrow.
 
 ### Hierarchy
 Every Polar size is an em of `{typography.polar-base}` — `clamp(14px, 1.111vw, 18px)`, 16px at 1440.
@@ -462,9 +461,10 @@ Every Polar size is an em of `{typography.polar-base}` — `clamp(14px, 1.111vw,
 
 ### Named Rules
 **The One-Base Rule.** Inside `.tm`, size in em of `--wd-base`, never in px. A px size inside a Polar
-screen stops scaling with the rest of it and drifts out of proportion at both ends of the range —
-ImagineDay's px-based `.pl` sections are the current case (Open Items). Recorded canvas exceptions
-are in the table above.
+screen stops scaling with the rest of it and drifts out of proportion at both ends of the range.
+Under-11px labels take `max(0.6875rem, …em)`, fields keep `{typography.field}`, and a root that is
+deliberately smaller than the base says so as `calc(var(--wd-base) * n)` (the spotlight's closed
+pill and its map tag). Recorded canvas exceptions are in the table above.
 
 **The Three Jobs Rule.** Cormorant speaks, Inter Tight is read, Oswald names. A paragraph is never
 set in Cormorant, a label never in Oswald, a place name never in Inter Tight at monument scale.
@@ -494,18 +494,27 @@ landing to clear the How it works tab). The landing draws a 12-column gridline f
 `auto-fit, minmax(min(100%, 17em), 1fr)` grids. Only ImagineDay caps a width (1440px); full-bleed
 photographs and the night map reach all four edges, cancelling `<main>`'s padding.
 
-**Breakpoints are not yet a shared set.** In use, by surface:
-- **Landing:** 1100 / 760 / 560 wide, 899 tall; ImagineDay's two columns at 1024 (`lg`); the night
-  map at 899.
-- **Planner:** 640 / 760 / 1100. **Writing screen:** 760 wide, 860 / 520 tall.
-- **Trip page:** the board's column at `(width > 960px)` and its drawer at `(width <= 960px)`; the
-  drawer widens at 64rem; the spotlight at 40rem, plus a `@container tsl (width < 23rem)` query.
-- **Shell (globals.css):** 40rem (the phone navbar closes there), 48rem, 64rem, 100rem, and 760.
-- **Elsewhere:** story player 960; profile 960 / 720 / 640; memories 1100 / 680; sign-in 860; offline
-  900 / 520.
+**Breakpoints are one shared set**, in rem so they track the browser's text size rather than the
+`.tm` base: **40rem** (the phone navbar closes; planner and landing phone layouts; the spotlight
+sheet stops drawing below it), **48rem** (landing, planner, writing screen, memories and profile
+collapse; the landing's GSAP desktop motion starts at it), **60rem** (the trip page's board becomes
+the column at `(width > 60rem)` and the drawer, story player and profile close at
+`(width <= 60rem)`; the night map and its plan panel, sign-in and offline also turn at 60rem),
+**64rem** (ImagineDay's two columns, the drawer widens, the shell), **68.75rem** (landing desktop,
+the planner's trip card) and **100rem** (the shell's widest step). They match Tailwind's
+`sm`/`md`/`lg` at 40/48/64rem. Queries use range syntax, `width < 48rem` below a step and
+`width >= 48rem` from it, so the two sides of a step never overlap; the trip pair alone uses
+`>`/`<=` because `COLUMN_QUERY` in `TripBoard.tsx` mirrors it in JS. JS that mirrors a step
+(`COLUMN_QUERY`, `motion.ts`'s `DESKTOP`, PlanGlobe's `wide()`, the writing screen and the date
+range picker) uses `matchMedia` with the same rem query, never an `innerWidth` number. Inside a
+component, `@container tsl (width < 23rem)` is the spotlight's own query.
 
-Plus Tailwind's `sm`/`md`/`lg`. New work should reuse one of these rather than add another, and a wide-but-short laptop (about 1470×830 CSS px on a 13" MacBook
-Air) is the case to check first: sizes follow width, so height runs out before width does.
+Height steps are separate and stay in px: the landing's short-desktop condensing at
+`(max-height: 899px)` and the writing screen's at 860 and 520 tall.
+
+New work reuses a step rather than adding one, and a wide-but-short laptop (about 1470×830 CSS px
+on a 13" MacBook Air) is the case to check first: sizes follow width, so height runs out before
+width does.
 
 **Short screens condense, then scroll.** Type and controls keep their designed size; spacing and
 decorative type may shrink with the viewport's height; what still does not fit scrolls — the page on
@@ -599,8 +608,9 @@ press — buttons, chips, board tools; `{rounded.sm}` (0.25em) on inputs, photos
 `{rounded.card}` (0.375em) on cards, panels, the board, sheets and the pass; `{rounded.nav}` (2px) on
 the nav's chips and CTA. Pills (`{rounded.pill}`) are kept for the spotlight's tokens and category row,
 the story player's controls and a few profile pills — round things that are filters or toggles.
-Circles are reserved for markers, Play and avatars. `{rounded.panel}` (16px) survives only on the
-older glass surfaces (`.glass-itinerary`, the confirm dialog) and is not for new work.
+Circles are reserved for markers, Play and avatars. The older glass surfaces (`.glass-itinerary`
+panels, the confirm dialog) sit outside `.tm`, so they take `{rounded.card}` as Tailwind's
+`rounded-md` (0.375rem, the same 6px at the root's 16px).
 
 Edges are hairlines: `{colors.frost-20}` on night, `{colors.rule}` on light. A selected day row is
 marked by a 3px edge in that day's own route colour (left on desktop, bottom on a phone).
@@ -648,7 +658,7 @@ inset clips are scroll effects on photographs, not shapes.
 - **Beat cards** (landing): an 11:14 photograph with a night-glass card; hover or focus opens the card's
   copy and scales the photo 1.04.
 - **Sample-plan strip** (landing): an accordion of photographs whose open panel grows to 4.5× the
-  others; closed panels desaturate and blur slightly. Below 760px it becomes a vertical accordion.
+  others; closed panels desaturate and blur slightly. Below 48rem it becomes a vertical accordion.
 - **Night glass panels** (`panel-glass-night`): the landing's footer form, the planner's panel.
 - **Sheets** (`sheet-paper`): How it works slides in from the right (0.8s), ice, 2em padding.
 
@@ -693,14 +703,18 @@ The trip page's plan, on ice, along the foot of the map (canvas "Trip page · B"
 (city, span, Play, Share, Download, draft notice, budget bar, day rows each edged in its route colour)
 beside the day (title, stay, travel modes, Refine with AI, Edit day, then stop cards in a horizontal
 strip with walking legs between them, then the day's total). It shuts to a one-line ticket over the
-map and becomes a day strip while a stop's drawer is open. **Decided 2026-10-16:** at 961px and wider
+map and becomes a day strip while a stop's drawer is open. **Decided 2026-10-16:** wider than 60rem
 the board becomes the right-hand column of "Trip page · A", stops first, with the map full height
-beside it (see `docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`).
+beside it (see `docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`). **Unsaved (2026-10-18):**
+when a finished plan's draft cannot be written (after one quiet retry), `/` shows this same board
+read-only: the tools that need a saved trip are gone, and the draft notice reads "Not saved yet" with
+Keep this trip and the reason it didn't save beneath (copy W-16/W-17/W-17a).
 
 ### Map Search (signature)
 The trip page's spotlight (canvas "Map search · 4"): ⌘K opens it over the map with the day's gaps on a
 timeline, category chips, results that fit a gap ("Add at 3:35 PM") and rows that open to the place's
-address and hours. **Since 2026-10-16** it is the left side sheet of "Map search · 3" (27rem, narrowing
+address and hours. A result's map callout is a card with a category-coloured pointer and a dot on its
+kind line, never a coloured side border. **Since 2026-10-16** it is the left side sheet of "Map search · 3" (27rem, narrowing
 to 36vw on smaller laptops), keeping every per-place detail: a row opens to it as in "Map search · 2".
 
 ### The Story Player (signature)
@@ -1437,25 +1451,28 @@ screens, the trip map framing a hill town off screen) are tracked in
 2. ~~**Labels under the 11px floor.**~~ Fixed: `.tb-label`, `.tb-day-when`, the leg tags and the budget unit
    are `max(0.6875rem, 0.6875em)`, 11px at the smallest base, and the map search's and the drawer's
    labels follow (2026-10-17); `src/lib/contrast.test.mjs` fails on a bare em below 0.786 only for the selectors it lists, so a new label has to be added there.
-3. **Faces named by family.** The time picker asks for `'Cormorant Garamond'` and `'Oswald'` by name
-   (`PlanningFlow.css` `.tmp-read input`, `.tmp-k`); `next/font` registers neither, so they render in
-   Georgia and Arial Narrow.
-4. **A keyframe that does not exist.** `tm-in` is used eight times across `WritingThePlan.css` and
-   `PlanningFlow.css` and defined nowhere, so those entrances — including each rotating fact's — never
-   run.
-5. **Sizes outside the one base.** ImagineDay's `.pl` sections size in px and keep their own copy of
-   the action colour, whose hover darkens (`#e86f0c`) where the system's lightens (`#ff9440`); the
-   story player and the map search size in rem (0.64–1.6rem in `StoryPlayer.css` and
-   `TripSpotlight.css`). Both stop scaling with the rest of their screen, and the design check reports
-   them as off the ramp. Fold them onto `--wd-base` ems rather than widening the ramp to fit them.
+3. ~~**Faces named by family.**~~ Fixed: the time picker (`PlanningFlow.css` `.tmp-read input`,
+   `.tmp-k`) now asks for `--font-display-stack` and `--font-condensed-stack`, the `next/font`
+   variables, rather than the family names `next/font` never registers.
+4. ~~**A keyframe that does not exist.**~~ Fixed: `@keyframes tm-in` is defined in
+   `PolarLanding.css`, so the eight entrances in `WritingThePlan.css` and `PlanningFlow.css`,
+   including each rotating fact's, run.
+5. ~~**Sizes outside the one base.**~~ Fixed (2026-10-18): ImagineDay's `.pl` sections set their type
+   in ems of `--wd-base` (`.pl` itself is `var(--wd-base)`), and their action is `--wd-signal` with
+   the system's lightening `--wd-signal-hover`; `StoryPlayer.css` and `TripSpotlight.css` set every
+   font size in em, labels under 11px as `max(0.6875rem, …em)`. Each is the size it was at 1440 (two story-player labels rose to the 11px floor). Box
+   geometry there (bar height, control and touch-target sizes, sheet padding) stays rem, and the
+   spotlight's field keeps its rem size, since a field is never on the em scale.
 6. **The mark's stop is still Kiln jade** (`#28b981` in `LogoMark.tsx`), the one Kiln colour left in the
    interface.
 7. ~~**The landing's only `h1` rotates.**~~ Fixed: the hero carries one stable visually-hidden `h1`,
    the rotating place name is `aria-hidden`, and the ghost CTA reads "Picture a day ↓" — it names no place,
    because `#day` is always the Petra story.
-8. **Breakpoints are not shared** (see Layout).
-9. **Radius drift on the older glass surfaces.** `.glass-itinerary` and the confirm dialog keep 16px
-   (`{rounded.panel}`) from before Polar; recorded so the frontmatter tells the truth, not as doctrine.
+8. ~~**Breakpoints are not shared.**~~ Fixed (2026-10-18): one set, 40 / 48 / 60 / 64 / 68.75 / 100rem,
+   in range syntax, with the JS mirrors on the same queries (see Layout).
+9. ~~**Radius drift on the older glass surfaces.**~~ Fixed (2026-10-18): `.glass-itinerary` panels and
+   the confirm dialog are `rounded-md`, `{rounded.card}` at the root's 16px, and `{rounded.panel}`
+   (16px) is gone from the frontmatter.
 
 ## History
 

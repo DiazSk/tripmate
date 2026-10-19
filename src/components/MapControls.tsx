@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMapCamera } from "@/lib/mapCamera";
+import { useHomeScreen } from "@/lib/homeScreen";
 import { ROUTE_FRAME_PITCH_DEG } from "@/lib/mapRenderer";
 
 /**
@@ -58,8 +59,11 @@ export default function MapControls() {
   const pendingRangeRef = useRef<number | null>(null);
   const zoomSeqRef = useRef(0);
   // The trip page draws the map's controls in Polar (canvas "Trip page · B"): four square night
-  // buttons, no tilt slider, since 2D/3D is the one tilt the design offers.
-  const polar = usePathname()?.startsWith("/trip/") ?? false;
+  // buttons, no tilt slider, since 2D/3D is the one tilt the design offers. So does `/`'s result
+  // step, which is the same board (HomeView's unsaved fallback).
+  const pathname = usePathname();
+  const homeScreen = useHomeScreen();
+  const polar = (pathname?.startsWith("/trip/") ?? false) || (pathname === "/" && homeScreen === "result");
 
   // Live readout of the camera. Compass angle and slider position are DOM properties, so they
   // get written directly rather than through state — that keeps the steady-state re-render count

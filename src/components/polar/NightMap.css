@@ -230,7 +230,7 @@
 }
 
 /* Small screens: the map on top, the plan card beneath it */
-@media (max-width: 899px) {
+@media (width < 60rem) {
   .nm {
     min-height: 0;
     display: grid;

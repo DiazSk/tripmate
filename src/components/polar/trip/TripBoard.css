@@ -58,7 +58,7 @@
 .tb-grab span {
   width: 2em;
   height: 0.22em;
-  border-radius: 1em;
+  border-radius: 999px;
   background: var(--wd-veil-20);
 }
 .tb-grab:hover span {
@@ -826,13 +826,9 @@
   font-weight: 600;
   color: var(--wd-ink);
   background: var(--wd-ice);
-  border-left: 3px solid var(--wd-alert-text);
   border-radius: var(--wd-radius-sm);
   box-shadow: 0 1em 2em -0.8em rgba(0, 0, 0, 0.6);
   pointer-events: auto;
-}
-.tm.trip-loading {
-  border-left-color: var(--wd-signal);
 }
 
 /* ── Trip page · A, stops first ─────────────────────────────────────────────────────────────────
@@ -845,7 +841,7 @@
    first one below the fold. The column scrolls; nothing in it clamps or clips. `docked-panel` (set
    by TripBoard while this applies) is what the camera aims beside and what the map's chrome below
    stands clear of. The strip, the ticket and the film's hidden board are untouched at every width. */
-@media (width > 960px) {
+@media (width > 60rem) {
   .tm.trip-board:not(.is-strip) {
     top: calc(var(--nav-h) + 1rem);
     right: 1.25rem;
@@ -1087,7 +1083,7 @@
   }
 }
 
-@media (width <= 960px) {
+@media (width <= 60rem) {
   .tm.trip-board {
     left: 0;
     right: 0;

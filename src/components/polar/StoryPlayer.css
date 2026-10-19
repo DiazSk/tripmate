@@ -101,7 +101,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 .sp-sub-eyebrow {
   margin: 0;
   font-family: var(--wd-font-condensed);
-  font-size: 0.82rem;
+  font-size: 0.82em;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--wd-signal);
@@ -111,7 +111,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   margin: 0;
   font-family: var(--wd-font-display);
   font-weight: 500;
-  font-size: clamp(1.5rem, 2.2vw, 2.05rem);
+  font-size: clamp(1.5em, 2.2vw, 2.05em);
   line-height: 1.2;
   text-wrap: balance;
   text-shadow: 0 2px 22px rgba(9, 11, 16, 0.9);
@@ -128,7 +128,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 }
 .sp-sub-next {
   margin: 0.1rem 0 0;
-  font-size: 0.78rem;
+  font-size: max(0.6875rem, 0.78em);
   font-weight: 600;
   color: var(--wd-night-text-2);
   text-shadow: 0 1px 10px rgba(9, 11, 16, 0.9);
@@ -143,12 +143,12 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   margin: 0;
   font-family: var(--wd-font-display);
   font-style: italic;
-  font-size: 1.6rem;
+  font-size: 1.6em;
   color: var(--wd-night-text-2);
   animation: sp-breathe 1.6s ease-in-out infinite;
 }
 .sp-wait.is-small {
-  font-size: 1.05rem;
+  font-size: 1.05em;
 }
 @keyframes sp-breathe {
   50% {
@@ -157,7 +157,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 }
 .sp-note {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: max(0.6875rem, 0.74em);
   color: var(--wd-night-text-2);
 }
 .sp-end {
@@ -177,7 +177,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   gap: 0.45em;
   min-height: 2.6rem;
   padding: 0 1.1rem;
-  font-size: 0.85rem;
+  font-size: 0.85em;
   font-weight: 600;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -211,14 +211,14 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   gap: 0.75rem;
 }
 .sp-chapters header b {
-  font-size: 0.9rem;
+  font-size: 0.9em;
 }
 .sp-chapters header span {
   flex: 1;
   min-width: 0;
   font-family: var(--wd-font-display);
   font-style: italic;
-  font-size: 1rem;
+  font-size: 1em;
   color: var(--wd-night-text-2);
   white-space: nowrap;
   overflow: hidden;
@@ -270,7 +270,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   left: 0.75rem;
   padding: 0.1em 0.4em;
   font-family: var(--wd-font-condensed);
-  font-size: 0.72rem;
+  font-size: max(0.6875rem, 0.72em);
   color: var(--wd-ink);
   background: rgba(255, 255, 255, 0.92);
   border-radius: var(--wd-radius-hairline);
@@ -279,14 +279,14 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   background: var(--wd-signal);
 }
 .sp-chapter b {
-  font-size: 0.86rem;
+  font-size: 0.86em;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sp-chapter > span:last-child {
-  font-size: 0.72rem;
+  font-size: max(0.6875rem, 0.72em);
   color: var(--wd-night-text-2);
 }
 .sp-chapter.is-day {
@@ -348,7 +348,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 .sp-art b {
   font-family: var(--wd-font-display);
   font-weight: 500;
-  font-size: 1.25rem;
+  font-size: 1.25em;
   color: rgba(255, 255, 255, 0.5);
 }
 .sp-now {
@@ -363,14 +363,14 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   min-width: 0;
 }
 .sp-now-text b {
-  font-size: 0.92rem;
+  font-size: 0.92em;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sp-now-text span {
-  font-size: 0.72rem;
+  font-size: max(0.6875rem, 0.72em);
   color: var(--wd-night-text-2);
   white-space: nowrap;
   overflow: hidden;
@@ -412,7 +412,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 }
 .sp-nextday {
   font-family: var(--wd-font-condensed);
-  font-size: 0.8rem;
+  font-size: 0.8em;
   letter-spacing: 0.06em;
 }
 .sp-center {
@@ -455,7 +455,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 }
 .sp-time {
   font-family: var(--wd-font-condensed);
-  font-size: 0.74rem;
+  font-size: max(0.6875rem, 0.74em);
   letter-spacing: 0.04em;
   text-align: center;
   color: var(--wd-night-text-2);
@@ -541,7 +541,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   margin-bottom: 0.2rem;
 }
 .sp-peek b {
-  font-size: 0.76rem;
+  font-size: max(0.6875rem, 0.76em);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -549,7 +549,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 }
 .sp-peek span {
   font-family: var(--wd-font-condensed);
-  font-size: 0.7rem;
+  font-size: max(0.6875rem, 0.7em);
   color: var(--wd-night-text-2);
 }
 .sp-right {
@@ -568,7 +568,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   gap: 0.4em;
   margin-right: 0.4rem;
   padding: 0.25em 0.65em 0.25em 0.45em;
-  font-size: 0.68rem;
+  font-size: max(0.6875rem, 0.68em);
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -630,7 +630,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   min-height: 2.5rem;
   margin-left: 0.4rem;
   padding: 0 0.85rem;
-  font-size: 0.8rem;
+  font-size: 0.8em;
   font-weight: 600;
   color: var(--wd-ink);
   background: #fff;
@@ -644,7 +644,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   right: 1.25rem;
   bottom: calc(var(--story-bar-h) + 0.6rem);
   margin: 0;
-  font-size: 0.66rem;
+  font-size: max(0.6875rem, 0.66em);
   color: rgba(255, 255, 255, 0.45);
 }
 .story-player.has-chapters .sp-keys {
@@ -668,7 +668,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   }
 }
 
-@media (max-width: 960px) {
+@media (width <= 60rem) {
   html[data-story-mode="true"] {
     --story-bar-h: 8.25rem;
   }
@@ -693,7 +693,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
     padding: 0.5rem 2.5rem;
   }
   .sp-sub-line {
-    font-size: 1.3rem;
+    font-size: 1.3em;
   }
 }
 @media (prefers-reduced-motion: reduce) {

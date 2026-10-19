@@ -67,7 +67,7 @@ export default function ConfirmDialog({
         if (e.target === ref.current && !pending) onCancel();
       }}
       aria-labelledby="confirm-dialog-title"
-      className="confirm-dialog glass-itinerary w-[calc(100vw-2.5rem)] max-w-md rounded-2xl p-5 sm:p-6"
+      className="confirm-dialog glass-itinerary w-[calc(100vw-2.5rem)] max-w-md rounded-md p-5 sm:p-6"
     >
       <h2 id="confirm-dialog-title" className="font-display text-lg font-semibold text-foreground">
         {title}

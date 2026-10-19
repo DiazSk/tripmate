@@ -110,7 +110,7 @@
   padding: 2.5em calc(var(--wd-pad) + 3em) 2em var(--wd-pad);
   align-items: start;
 }
-@media (min-width: 1100px) {
+@media (width >= 68.75rem) {
   .pp-main {
     grid-template-columns: minmax(0, 1fr) 24em;
     gap: 4em;
@@ -191,7 +191,7 @@
   display: grid;
   gap: 1em;
 }
-@media (min-width: 640px) {
+@media (width >= 40rem) {
   .pp-grid-2 {
     grid-template-columns: 1fr 1fr;
   }
@@ -341,7 +341,7 @@
   display: grid;
   gap: 0.5em;
 }
-@media (min-width: 640px) {
+@media (width >= 40rem) {
   .pp-cards.is-2 {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -547,7 +547,7 @@
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
 }
-@media (min-width: 1100px) {
+@media (width >= 68.75rem) {
   .pp-trip-strip {
     display: none;
   }
@@ -581,7 +581,7 @@
 .pp-review-row dd.is-empty {
   color: rgba(255, 255, 255, 0.45);
 }
-@media (max-width: 640px) {
+@media (width < 40rem) {
   .pp-review-row {
     grid-template-columns: 1fr auto;
   }
@@ -768,7 +768,7 @@
 }
 
 /* No side "How it works" tab on this page, so the right gutter only matches the left on phones. */
-@media (max-width: 760px) {
+@media (width < 48rem) {
   .pp-main {
     padding-right: var(--wd-pad);
   }
@@ -811,7 +811,7 @@
   border: 0;
   background: none;
   color: #1f2a44;
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--font-display-stack), Georgia, serif;
   font-size: 20px;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
@@ -821,7 +821,7 @@
 .tmp .tmp-read :focus-visible { outline: none; }
 .tmp-k {
   margin: 0 0 6px;
-  font-family: 'Oswald', 'Arial Narrow', sans-serif;
+  font-family: var(--font-condensed-stack), 'Arial Narrow', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;

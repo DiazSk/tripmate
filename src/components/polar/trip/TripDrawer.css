@@ -675,7 +675,7 @@ html[data-story-mode="true"] .tm.trip-drawer {
   outline-offset: 2px;
 }
 
-@media (width <= 960px) {
+@media (width <= 60rem) {
   .tm.trip-drawer,
   .tm.trip-drawer.is-wide {
     width: auto;

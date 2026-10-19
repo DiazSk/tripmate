@@ -123,7 +123,7 @@ function RangeCalendar({
 }) {
   const [today] = useState(todayISO);
   const panel = useRef<HTMLDivElement>(null);
-  const [twoUp, setTwoUp] = useState(() => window.innerWidth >= 760);
+  const [twoUp, setTwoUp] = useState(() => window.matchMedia("(width >= 48rem)").matches);
   const [view, setView] = useState(() => monthKey((edge === "end" && value.end) || value.start || today));
   const [focus, setFocus] = useState(() => (edge === "end" && value.end) || value.start || today);
   const [hover, setHover] = useState<string | null>(null);
@@ -140,7 +140,7 @@ function RangeCalendar({
       const el = anchor.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const wide = window.innerWidth >= 760;
+      const wide = window.matchMedia("(width >= 48rem)").matches;
       const width = Math.min(wide ? 664 : 340, window.innerWidth - 24);
       const h = panel.current?.offsetHeight ?? 420;
       // Below the fields if it fits, above them if that fits, otherwise as low as the screen

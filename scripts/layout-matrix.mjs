@@ -2,7 +2,7 @@
 //
 //   npm run build && npm start -- -p 3200
 //   npm run verify-layout [-- --base http://localhost:3200] [--only landing,planner,writing,trip,secondary]
-//                         [--trip <id>] [--long-trip <id>] [--vp 390x844,...] [--out .layout-matrix] [--headed]
+//                         [--trip <id>] [--owner <uuid>] [--long-trip <id>] [--vp 390x844,...] [--out .layout-matrix] [--headed]
 //
 // Exits 1 and prints one `FAIL <surface> <WxH> <assertion>: <detail>` line per failing assertion
 // per checkpoint, 0 when every assertion holds. Screenshots land in --out.
@@ -15,9 +15,10 @@
 // DEV MODE IS NOT REPRESENTATIVE: run it against `next start`. Dev serves unminified, un-split
 // chunks and a different first paint, which moves exactly the things measured here.
 //
-// A FRESH CONTEXT PER SURFACE. The default --trip is a saved trip, readable only by a browser with
-// no `tripmate_owner` cookie (a context that has already loaded the app has been issued one), so
-// sharing a context across surfaces would turn a layout check into a 404. The writing surface
+// A FRESH CONTEXT PER SURFACE, and --owner says whose trip --trip is. `next start` runs in
+// production, where the cookieless legacy "local" owner no longer reads anything (owner.ts), so the
+// trip surface needs the owner's id: every context is given it as its `tripmate_owner` cookie. Without
+// --owner a cookieless context is used, which only reads a legacy-owned trip outside production. The writing surface
 // stalls /api/itinerary on purpose, so it never spends a model call and writes no trip.
 //
 // --long-trip names a saved trip of many days (30 is what it was written against) for the one check
@@ -31,10 +32,10 @@ import { chromium } from "playwright";
 import fs from "node:fs";
 
 const usage = (msg) => {
-  console.error(`layout-matrix: ${msg}\nusage: node scripts/layout-matrix.mjs [--base URL] [--only landing,planner,writing,trip,secondary] [--trip ID] [--long-trip ID] [--vp 390x844,...] [--out DIR] [--headed]`);
+  console.error(`layout-matrix: ${msg}\nusage: node scripts/layout-matrix.mjs [--base URL] [--only landing,planner,writing,trip,secondary] [--trip ID] [--owner UUID] [--long-trip ID] [--vp 390x844,...] [--out DIR] [--headed]`);
   process.exit(2);
 };
-const FLAGS = ["base", "only", "trip", "long-trip", "vp", "out"];
+const FLAGS = ["base", "only", "trip", "owner", "long-trip", "vp", "out"];
 process.argv.slice(2).forEach((a) => { if (a.startsWith("--") && a !== "--headed" && !FLAGS.includes(a.slice(2))) usage(`unknown flag ${a}`); });
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -46,6 +47,7 @@ const arg = (name, fallback) => {
 const BASE = arg("base", "http://localhost:3200").replace(/\/$/, "");
 const OUT = arg("out", ".layout-matrix");
 const TRIP = arg("trip", "095b4bb9-4fa1-4c6a-8959-81230e3996fd");
+const OWNER = arg("owner", process.env.LAYOUT_OWNER ?? null);
 const LONG_TRIP = arg("long-trip", null);
 const ONLY = arg("only", "")?.split(",");
 const VPS = arg("vp", "")?.split(","); // e.g. --vp 390x844,375x667; "" when absent
@@ -456,6 +458,7 @@ for (const [group, s] of Object.entries(SURFACES)) {
       const body = async () => {
         browser = await chromium.launch({ channel: "chrome", headless: !HEADED, timeout: 30000 });
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, isMobile: w < 640, hasTouch: w < 640 });
+        if (OWNER) await ctx.addCookies([{ name: "tripmate_owner", value: OWNER, url: BASE }]);
         const page = await ctx.newPage();
         const shot = (tag) => page.screenshot({ path: `${OUT}/${surface}-${vp}${tag ? "-" + tag : ""}.png`, timeout: 15000 });
         step = "goto";

@@ -284,7 +284,7 @@ export default function FocusEditMode({
 
   return (
     <section
-      className={k("glass-itinerary pointer-events-auto flex h-[min(78vh,760px)] flex-col overflow-hidden rounded-2xl", "td-refine")}
+      className={k("glass-itinerary pointer-events-auto flex h-[min(78vh,760px)] flex-col overflow-hidden rounded-md", "td-refine")}
       aria-label={scope === "trip" ? "Refining the whole trip" : `Editing day ${dayIndex + 1}`}
       {...devLabel("FocusEditMode")}
     >

@@ -222,13 +222,13 @@
   -webkit-text-stroke-color: #fff;
 }
 
-@media (max-width: 900px) {
+@media (width < 60rem) {
   .ofl-main {
     grid-template-columns: 1fr;
     gap: var(--wd-space-6);
   }
 }
-@media (max-width: 520px) {
+@media (width < 40rem) {
   .ofl-row {
     grid-template-columns: minmax(0, 1fr) 1.5rem;
   }

@@ -28,7 +28,7 @@ export default function PageError({
 }) {
   return (
     <main className="map-chrome-hidden pointer-events-auto flex min-h-full items-center justify-center p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)]">
-      <div className="glass-itinerary is-opaque w-full max-w-xl rounded-2xl p-3">
+      <div className="glass-itinerary is-opaque w-full max-w-xl rounded-md p-3">
         <InlineNote
           size="section"
           tone={tone}

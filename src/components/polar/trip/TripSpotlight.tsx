@@ -384,7 +384,8 @@ export default function TripSpotlight({
     );
   }
 
-  const pos = (m: number) => `${((Math.min(DAY_END_MIN, Math.max(DAY_START_MIN, m)) - DAY_START_MIN) / (DAY_END_MIN - DAY_START_MIN)) * 100}%`;
+  const frac = (m: number) => (Math.min(DAY_END_MIN, Math.max(DAY_START_MIN, m)) - DAY_START_MIN) / (DAY_END_MIN - DAY_START_MIN);
+  const pos = (m: number) => `${frac(m) * 100}%`;
   const width = (a: number, b: number) => `calc(${pos(b)} - ${pos(a)})`;
   const ghost = cur && !added[cur.place.id] ? when(cur) : null;
   const fitting = rows.filter((r) => r.fit?.ok && !added[r.place.id]).length;
@@ -500,7 +501,7 @@ export default function TripSpotlight({
               // Over the stop it became, in signal: added from here. Spaced as the day spaces it.
               <span key={i} className="tsl-new" style={{ left: pos(a.minutes!), width: width(a.minutes!, a.minutes! + DEFAULT_VISIT_MIN) }} />
             ))}
-            {ghost && <span className="tsl-ghost" style={{ left: pos(ghost.start), width: width(ghost.start, ghost.end) }} aria-hidden="true" />}
+            {ghost && <span className="tsl-ghost" style={{ translate: `${frac(ghost.start) * 100}cqw 0`, width: width(ghost.start, ghost.end) }} aria-hidden="true" />}
           </div>
         </header>
 

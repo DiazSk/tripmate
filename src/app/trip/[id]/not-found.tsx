@@ -17,7 +17,7 @@ export default async function TripNotFound() {
     <main className="pointer-events-auto flex min-h-full items-center justify-center p-8">
       {/* `is-opaque` — no TripView mounts here, so no globe. Kept identical to `/trip/latest`'s
           empty card, per the note above. */}
-      <div className="glass-itinerary is-opaque max-w-md rounded-2xl p-6 text-center">
+      <div className="glass-itinerary is-opaque max-w-md rounded-md p-6 text-center">
         <h1 className="font-display text-lg font-semibold text-foreground">That trip isn&rsquo;t here.</h1>
         <p className="mt-2 text-sm text-muted">
           It may have been deleted, or it belongs to another account. If you kept it while signed in, sign in to open it.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Bike, Car, Footprints } from "lucide-react";
@@ -66,12 +66,102 @@ const longDate = (iso: string) => {
 const city = (destination: string) => destination.split(",")[0].trim();
 
 /** Where the board becomes the column. TripView reads the same query to tell the map. */
-export const COLUMN_QUERY = "(width > 960px)";
+export const COLUMN_QUERY = "(width > 60rem)";
 const subscribeColumn = (onChange: () => void) => {
   const mql = window.matchMedia(COLUMN_QUERY);
   mql.addEventListener("change", onChange);
   return () => mql.removeEventListener("change", onChange);
 };
+
+/**
+ * Tell the map how much of the screen is the plan's. The board along the foot is a bottom inset
+ * (`setViewPadding`, honoured by MapLibre; Cesium centres in the full view and draws the day
+ * partly behind the board, see docs/frontend.md). A drawer, and the board when it is the column
+ * at 961px and wider, are found by the camera itself through their `.docked-panel` class
+ * (`panelLeftEdgePx`), so the column is no bottom inset at all. The same two numbers move the map's
+ * own controls clear of all three, through `--trip-board-h` and `--trip-drawer-w` (globals.css,
+ * TripBoard.css). Mounted beside the board by TripView, and by `/`'s unsaved fallback (HomeView).
+ */
+export function BoardInsets({ shape, drawer = null, spotlight = false }: { shape: BoardShape; drawer?: string | null; spotlight?: boolean }) {
+  const story = useStoryControls();
+  const { setViewPadding, reframeRoute } = useMapCamera();
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    let frame = 0;
+    /** Set when the window crossed 961px, for the measure to re-frame the day once it has the new
+     *  insets. TripBoard re-frames on the same crossing, but whether its effect or this frame runs
+     *  first is React's business, and the one that runs first frames with the other's stale half
+     *  (old padding, or the old `panelVisible`). Measured: the day left behind the bottom board after
+     *  1470 → 900. Either order ends right with both: the later one has both halves new. */
+    let reframe = false;
+    const measure = () => {
+      frame = 0;
+      const column = shape === "board" && window.matchMedia(COLUMN_QUERY).matches;
+      const foot = column ? null : document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
+      const side = document.querySelector<HTMLElement>(column ? ".trip-board" : ".trip-drawer, .split-editor");
+      // Where the foot comes to rest, not where its entrance has it this frame: the board rises 2rem
+      // into place over 0.5s (`tb-rise`), and a rect read mid-rise put the map's controls 32px short
+      // until a re-measure jumped them up at 560ms. The transform's own offset is taken back out.
+      const restTop = foot ? foot.getBoundingClientRect().top - new DOMMatrixReadOnly(getComputedStyle(foot).transform).m42 : 0;
+      const bottom = foot ? Math.max(0, Math.round(window.innerHeight - restTop + 16)) : 0;
+      // The fixed nav covers the top, so the day is framed below it. Without that the day centred in
+      // a band that started at y = 0, and at 375x667 its first stop's name sat under the nav (the bar
+      // is 56px of a 254px map there). AppShell keeps the nav through a film, so it counts then too.
+      // `.polar-nav`, not the first `<nav>` in the DOM, which need not be the bar.
+      const nav = document.querySelector<HTMLElement>(".polar-nav");
+      const top = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 0;
+      // The open map search is a sheet down the left (none below 40rem, where its rect is empty).
+      // Its edge is stored as padding, not applied: opening the search leaves the view where it is
+      // (it is about the view on screen), and every camera command after it (a result panned out from
+      // under the sheet, the sheet's own day arrows) frames in the map to its right.
+      // Where it comes to rest, as for the foot: it slides in 1.5rem from the left (`tsl-in`).
+      const sheet = document.querySelector<HTMLElement>(".trip-spotlight");
+      const rect = sheet?.getBoundingClientRect();
+      const left = sheet && rect?.width ? Math.round(rect.right - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m41) : 0;
+      setViewPadding({ left, bottom, top });
+      // Only the open board re-frames on the crossing: a drawer, the map search or a film is what
+      // the traveller is reading, and replaying the day's framing over it would move it away.
+      if (reframe && shape === "board" && !story.active) reframeRoute();
+      reframe = false;
+      // With nothing along the foot (the map search open) the controls stand clear of the corner's
+      // trace button (`LlmTraceFab`: 20px in, 48px tall) instead. `0px` would beat the CSS fallback
+      // and put them on the screen's edge, partly off it.
+      root.style.setProperty("--trip-board-h", `${bottom || 80}px`);
+      root.style.setProperty("--trip-drawer-w", side ? `${Math.round(side.getBoundingClientRect().width)}px` : "0px");
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    schedule();
+    window.addEventListener("resize", schedule);
+    // Crossing 961px swaps the bottom board for the column: one inset becomes the other.
+    const columnQuery = window.matchMedia(COLUMN_QUERY);
+    const crossed = () => {
+      reframe = true;
+      schedule();
+    };
+    columnQuery.addEventListener("change", crossed);
+    // The search grows and shrinks with its results.
+    const bar = document.querySelector<HTMLElement>(".trip-spotlight");
+    const observer = new ResizeObserver(schedule);
+    if (bar) observer.observe(bar);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      columnQuery.removeEventListener("change", crossed);
+      observer.disconnect();
+    };
+  }, [shape, drawer, story.active, spotlight, setViewPadding, reframeRoute]);
+  useEffect(
+    () => () => {
+      setViewPadding(null);
+      document.documentElement.style.removeProperty("--trip-board-h");
+      document.documentElement.style.removeProperty("--trip-drawer-w");
+    },
+    [setViewPadding]
+  );
+  return null;
+}
 
 export default function TripBoard({
   trip,
@@ -95,6 +185,7 @@ export default function TripBoard({
   onShareChange,
   onLodgingActualCost,
   overspend,
+  unsaved = false,
 }: {
   trip: Trip;
   itinerary: Itinerary;
@@ -120,6 +211,10 @@ export default function TripBoard({
   onShareChange: () => void;
   onLodgingActualCost: (dayIndex: number, value: number | undefined) => void;
   overspend: { dayIndex: number; amount: number; rebalancing: boolean; onRebalance: () => void; onDismiss: () => void; note: Note | null } | null;
+  /** `/`'s fallback when the draft insert failed: a plan with no row behind it. Read and Keep only —
+   *  everything that writes to, plays from or links to a trip row is withheld, and the Keep line
+   *  says it isn't saved rather than how long a draft lasts. `keepNote` carries why (copy W-16/W-17). */
+  unsaved?: boolean;
 }) {
   const days = itinerary.days;
   const di = Math.min(dayIndex, Math.max(0, days.length - 1));
@@ -375,34 +470,36 @@ export default function TripBoard({
               ) : null}
             </p>
           </div>
-          <div className="tb-actions">
-            <button type="button" className="tb-play" onClick={play} disabled={!day?.stops.length}>
-              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-                <path d="M4.5 2.8v10.4L13 8z" fill="currentColor" />
-              </svg>
-              Play day {di + 1}
-            </button>
-            {canShare && (
-              <button type="button" className={`tb-share${trip.shared ? " is-on" : ""}`} onClick={share} aria-live="polite" title={trip.shared ? "Stop sharing" : "Share a link"}>
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden="true">
-                  <path d="M9.5 13.5a4 4 0 0 0 5.66 0l2.3-2.3a4 4 0 0 0-5.66-5.66l-1 1" />
-                  <path d="M14.5 10.5a4 4 0 0 0-5.66 0l-2.3 2.3a4 4 0 0 0 5.66 5.66l1-1" />
-                  {trip.shared && <path d="M3 3l18 18" />}
+          {!unsaved && (
+            <div className="tb-actions">
+              <button type="button" className="tb-play" onClick={play} disabled={!day?.stops.length}>
+                <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                  <path d="M4.5 2.8v10.4L13 8z" fill="currentColor" />
                 </svg>
-                {shareSaid ?? (trip.shared ? "Stop sharing" : "Share")}
+                Play day {di + 1}
               </button>
-            )}
-            {canShare && (
-              <a className="tb-ibtn" href={`/api/trips/${trip.id}/export`} download aria-label="Download itinerary" title="Download itinerary">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden="true">
-                  <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16" />
-                </svg>
-              </a>
-            )}
-          </div>
+              {canShare && (
+                <button type="button" className={`tb-share${trip.shared ? " is-on" : ""}`} onClick={share} aria-live="polite" title={trip.shared ? "Stop sharing" : "Share a link"}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden="true">
+                    <path d="M9.5 13.5a4 4 0 0 0 5.66 0l2.3-2.3a4 4 0 0 0-5.66-5.66l-1 1" />
+                    <path d="M14.5 10.5a4 4 0 0 0-5.66 0l-2.3 2.3a4 4 0 0 0 5.66 5.66l1-1" />
+                    {trip.shared && <path d="M3 3l18 18" />}
+                  </svg>
+                  {shareSaid ?? (trip.shared ? "Stop sharing" : "Share")}
+                </button>
+              )}
+              {canShare && (
+                <a className="tb-ibtn" href={`/api/trips/${trip.id}/export`} download aria-label="Download itinerary" title="Download itinerary">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden="true">
+                    <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16" />
+                  </svg>
+                </a>
+              )}
+            </div>
+          )}
           {trip.status === "draft" && (
             <p className="tb-draft" role="status">
-              <span>Draft · cleared after {DRAFT_TTL_DAYS} days unless kept</span>
+              <span>{unsaved ? "Not saved yet" : `Draft · cleared after ${DRAFT_TTL_DAYS} days unless kept`}</span>
               <button type="button" onClick={onKeep} disabled={keeping} aria-describedby="tb-keep-note">
                 {keeping ? "Keeping…" : "Keep this trip"}
               </button>
@@ -462,19 +559,23 @@ export default function TripBoard({
                   </span>
                 )}
                 {legs?.some((l) => meaningfulLeg(l)) && <RouteProfile />}
-                <button type="button" className="tb-tool" onClick={() => onRefine(di)} aria-label={`Refine with AI, day ${di + 1}`}>
-                  <Meridian size={16} state="idle" quiet /> Refine with AI
-                </button>
-                <button type="button" className="tb-tool" onClick={onEdit}>
-                  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-                    <path d="M10.5 2.8l2.7 2.7L6 12.7 2.8 13.2l.5-3.2z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                  </svg>
-                  Edit day
-                </button>
+                {!unsaved && (
+                  <>
+                    <button type="button" className="tb-tool" onClick={() => onRefine(di)} aria-label={`Refine with AI, day ${di + 1}`}>
+                      <Meridian size={16} state="idle" quiet /> Refine with AI
+                    </button>
+                    <button type="button" className="tb-tool" onClick={onEdit}>
+                      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                        <path d="M10.5 2.8l2.7 2.7L6 12.7 2.8 13.2l.5-3.2z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                      </svg>
+                      Edit day
+                    </button>
+                  </>
+                )}
               </div>
             </header>
 
-            {overspend && (
+            {overspend && !unsaved && (
               <div className="tb-alert" role="status">
                 <span>
                   <b>
@@ -498,7 +599,7 @@ export default function TripBoard({
                 )}
               </div>
             )}
-            <AnchorReceipt itinerary={itinerary} onFitAnchor={onFitAnchor} kept={trip.status === "saved"} />
+            <AnchorReceipt itinerary={itinerary} onFitAnchor={unsaved ? undefined : onFitAnchor} kept={trip.status === "saved"} />
             {dayFindings.length > 0 && (
               <ul className="tb-findings">
                 {dayFindings.map((f, i) => (
@@ -530,7 +631,7 @@ export default function TripBoard({
                     dayIndex={di}
                     spend={spend}
                     confirmed={confirmed}
-                    onLodgingActualCost={onLodgingActualCost}
+                    onLodgingActualCost={unsaved ? undefined : onLodgingActualCost}
                     costNote={costNote?.key === `${di}:lodging` ? costNote.text : ""}
                     onRetryCost={onRetryCost}
                   />
@@ -642,7 +743,8 @@ function DayTotal({
   dayIndex: number;
   spend: ReturnType<typeof daySpendByCategory> | null;
   confirmed: boolean;
-  onLodgingActualCost: (dayIndex: number, value: number | undefined) => void;
+  /** Absent where the stay can't be written (an unsaved plan): the field and its note go with it. */
+  onLodgingActualCost?: (dayIndex: number, value: number | undefined) => void;
   costNote: string;
   onRetryCost: () => void;
 }) {
@@ -673,7 +775,7 @@ function DayTotal({
           <dd>{formatMoney(spend.total)}</dd>
         </div>
       </dl>
-      {day.lodging && (
+      {day.lodging && onLodgingActualCost && (
         <label className="tb-stay" title={`What you actually paid at ${day.lodging.name}. Replaces the estimate in this trip's budget total.`}>
           <span>Actual stay</span>
           <span className="tb-money-in">
@@ -694,7 +796,7 @@ function DayTotal({
         </label>
       )}
       {/* Copy row T-05, under the amount. Mounted empty so it is announced. */}
-      {day.lodging && (
+      {day.lodging && onLodgingActualCost && (
         <InlineNote size="field" tone="error" id="tb-stay-note" action={{ label: "Try again", onClick: onRetryCost }}>
           {costNote}
         </InlineNote>

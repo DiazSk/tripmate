@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { preload } from "react-dom";
 import { useRouter } from "next/navigation";
 import ErrorDialog from "@/components/ErrorDialog";
@@ -13,11 +13,11 @@ import SplitEditor from "@/components/SplitEditor";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import TripBoard, { COLUMN_QUERY, type BoardShape, type Note } from "@/components/polar/trip/TripBoard";
+import TripBoard, { BoardInsets, type BoardShape, type Note } from "@/components/polar/trip/TripBoard";
 import TripSpotlight from "@/components/polar/trip/TripSpotlight";
 import { Itinerary, Stop, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
-import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
+import { useGlobeOnScreen } from "@/lib/mapCamera";
 import { DEFAULT_MAP_ENGINE, MAPLIBRE_STYLE_URL } from "@/lib/mapEngine";
 import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
@@ -202,16 +202,24 @@ export default function TripView({
   }, [id]);
 
   /**
-   * Warm the narration for the day on screen — same effect and same reasoning as `HomeView`'s,
-   * with less to guard: there is no half-written plan here, only a trip that may still be loading
-   * (the `/preview` fixture arrives from the dynamic import above).
+   * Warm the narration for the day on screen, so pressing Play starts a film instead of a wait.
+   * There is no half-written plan here, only a trip that may still be loading (the `/preview`
+   * fixture arrives from the dynamic import above).
+   *
+   * One day, not all of them: `MAX_TRIP_DAYS` is 30 and the CLI transport spawns a subprocess per
+   * call, so warming a whole trip would be half an hour of serialised Sonnet for films nobody has
+   * asked for. The dependency is the destructured `prefetch`, not `story`: the controls object
+   * changes identity when a film starts, pauses and ends, and depending on all of it would re-arm
+   * the warm mid-playback.
    *
    * `trip.id` is passed as-is, `"preview"` included — `/api/trip-story` already filters that, so
    * one place decides what a cacheable trip is. The dwell is in `story.prefetch`.
    */
   useEffect(() => {
     if (!trip || !itinerary) return;
-    // Clamped the way `ItineraryCard` clamps it — see the note on the same line in HomeView.
+    // Clamped the way `ItineraryCard` clamps it: a chat turn that removes days leaves
+    // `activeDayIndex` past the end for a render, and an unclamped warm fetches a key no Play
+    // button will ever ask for.
     const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
     if (!itinerary.days[dayIndex]?.stops.length) return;
     warmStory({ itinerary, dayIndex, destination: trip.destination, tripId: trip.id });
@@ -509,92 +517,6 @@ export default function TripView({
   const spotlight = searchOpen && !story.active;
   const shape: BoardShape = story.active || spotlight ? "hidden" : drawer ? "strip" : planShut ? "ticket" : "board";
 
-  /**
-   * Tell the map how much of the screen is the plan's. The board along the foot is a bottom inset
-   * (`setViewPadding`, honoured by MapLibre; Cesium centres in the full view and draws the day
-   * partly behind the board, see docs/frontend.md). A drawer, and the board when it is the column
-   * at 961px and wider, are found by the camera itself through their `.docked-panel` class
-   * (`panelLeftEdgePx`), so the column is no bottom inset at all. The same two numbers move the map's
-   * own controls clear of all three, through `--trip-board-h` and `--trip-drawer-w` (globals.css,
-   * TripBoard.css).
-   */
-  const { setViewPadding, reframeRoute } = useMapCamera();
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    let frame = 0;
-    /** Set when the window crossed 961px, for the measure to re-frame the day once it has the new
-     *  insets. TripBoard re-frames on the same crossing, but whether its effect or this frame runs
-     *  first is React's business, and the one that runs first frames with the other's stale half
-     *  (old padding, or the old `panelVisible`). Measured: the day left behind the bottom board after
-     *  1470 → 900. Either order ends right with both: the later one has both halves new. */
-    let reframe = false;
-    const measure = () => {
-      frame = 0;
-      const column = shape === "board" && window.matchMedia(COLUMN_QUERY).matches;
-      const foot = column ? null : document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
-      const side = document.querySelector<HTMLElement>(column ? ".trip-board" : ".trip-drawer, .split-editor");
-      // Where the foot comes to rest, not where its entrance has it this frame: the board rises 2rem
-      // into place over 0.5s (`tb-rise`), and a rect read mid-rise put the map's controls 32px short
-      // until a re-measure jumped them up at 560ms. The transform's own offset is taken back out.
-      const restTop = foot ? foot.getBoundingClientRect().top - new DOMMatrixReadOnly(getComputedStyle(foot).transform).m42 : 0;
-      const bottom = foot ? Math.max(0, Math.round(window.innerHeight - restTop + 16)) : 0;
-      // The fixed nav covers the top, so the day is framed below it. Without that the day centred in
-      // a band that started at y = 0, and at 375x667 its first stop's name sat under the nav (the bar
-      // is 56px of a 254px map there). AppShell keeps the nav through a film, so it counts then too.
-      // `.polar-nav`, not the first `<nav>` in the DOM, which need not be the bar.
-      const nav = document.querySelector<HTMLElement>(".polar-nav");
-      const top = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 0;
-      // The open map search is a sheet down the left (none below 40rem, where its rect is empty).
-      // Its edge is stored as padding, not applied: opening the search leaves the view where it is
-      // (it is about the view on screen), and every camera command after it (a result panned out from
-      // under the sheet, the sheet's own day arrows) frames in the map to its right.
-      // Where it comes to rest, as for the foot: it slides in 1.5rem from the left (`tsl-in`).
-      const sheet = document.querySelector<HTMLElement>(".trip-spotlight");
-      const rect = sheet?.getBoundingClientRect();
-      const left = sheet && rect?.width ? Math.round(rect.right - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m41) : 0;
-      setViewPadding({ left, bottom, top });
-      // Only the open board re-frames on the crossing: a drawer, the map search or a film is what
-      // the traveller is reading, and replaying the day's framing over it would move it away.
-      if (reframe && shape === "board" && !story.active) reframeRoute();
-      reframe = false;
-      // With nothing along the foot (the map search open) the controls stand clear of the corner's
-      // trace button (`LlmTraceFab`: 20px in, 48px tall) instead. `0px` would beat the CSS fallback
-      // and put them on the screen's edge, partly off it.
-      root.style.setProperty("--trip-board-h", `${bottom || 80}px`);
-      root.style.setProperty("--trip-drawer-w", side ? `${Math.round(side.getBoundingClientRect().width)}px` : "0px");
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(measure);
-    };
-    schedule();
-    window.addEventListener("resize", schedule);
-    // Crossing 961px swaps the bottom board for the column: one inset becomes the other.
-    const columnQuery = window.matchMedia(COLUMN_QUERY);
-    const crossed = () => {
-      reframe = true;
-      schedule();
-    };
-    columnQuery.addEventListener("change", crossed);
-    // The search grows and shrinks with its results.
-    const bar = document.querySelector<HTMLElement>(".trip-spotlight");
-    const observer = new ResizeObserver(schedule);
-    if (bar) observer.observe(bar);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", schedule);
-      columnQuery.removeEventListener("change", crossed);
-      observer.disconnect();
-    };
-  }, [shape, drawer, story.active, spotlight, setViewPadding, reframeRoute]);
-  useEffect(
-    () => () => {
-      setViewPadding(null);
-      document.documentElement.style.removeProperty("--trip-board-h");
-      document.documentElement.style.removeProperty("--trip-drawer-w");
-    },
-    [setViewPadding]
-  );
-
   async function saveRefine() {
     const target = focus.target;
     const committed = focus.save();
@@ -608,6 +530,7 @@ export default function TripView({
   return (
     <main className={`trip-page${drawer ? " has-drawer" : ""}`} {...devLabel("TripPage")}>
       {!trip && <p className="tm trip-loading">Loading…</p>}
+      <BoardInsets shape={shape} drawer={drawer} spotlight={spotlight} />
 
       {/* T-04 / T-08. Inert while closed: `open` drives showModal(). */}
       <ErrorDialog

@@ -23,7 +23,7 @@ export default async function LatestTripPage() {
     <main className="pointer-events-auto flex min-h-full items-center justify-center p-8">
       {/* `is-opaque`: this branch renders only when the database is empty, so no TripView mounts
           and the globe never boots. Same for `/trip/[id]`'s not-found, which mirrors this card. */}
-      <div className="glass-itinerary is-opaque max-w-md rounded-2xl p-6 text-center">
+      <div className="glass-itinerary is-opaque max-w-md rounded-md p-6 text-center">
         <h1 className="font-display text-lg font-semibold text-foreground">No saved trips yet</h1>
         <p className="mt-2 text-sm text-muted">
           Plan and save one trip; after that this URL always reopens the most recent itinerary, so

@@ -619,7 +619,7 @@ html[data-writing-plan] .map-engine-toggle {
    controls come back with it (`:has(.docked-panel-collapsed)`, above, outranks the rule that hides
    them) and sat on the progress rail. Hiding the capsule leaves it in the tree, so that selector
    still matches: the controls are named here with the same `:has()` to win. */
-@media (max-width: 760px) {
+@media (width < 48rem) {
   html[data-writing-plan] .docked-panel-collapsed,
   html[data-writing-plan] .app-shell:has(.docked-panel-collapsed) .map-controls {
     display: none;
@@ -3753,26 +3753,6 @@ html[data-story-mode="true"] .marker-day-label {
 }
 
 
-/* Restoring a duration rather than granting an animation.
-
-   The blanket `animation-duration: 0.01ms` further up does not stop the generation progress bar —
-   JavaScript keeps writing `--gen-progress` ten times a second regardless. It only removes the
-   interpolation *between* those writes, so the bar advances in ten visible jerks per second. The
-   setting would make the motion choppier, not calmer, which is the opposite of what it is for.
-
-   `.gen-fill` (0,1,0) outranks the blanket rule's `*` (0,0,0), so this wins between two
-   `!important`s. Narrow this exemption, don't widen it — nothing else in the app opts out.
-
-   Much smaller than it was. It used to also exempt a rotating loader ring, on the standard
-   grounds that a spinner is essential status feedback rather than decorative motion. That orb is
-   gone: the wait now states which stage is running in words, which is better status feedback than
-   a ring and needs no exemption at all. */
-@media (prefers-reduced-motion: reduce) {
-  .gen-fill {
-    transition-duration: 200ms !important;
-  }
-}
-
 /* The confirm dialog's backdrop. A real `::backdrop` rather than a sibling overlay div —
    it comes with the top layer, so it can't be covered by anything and needs no z-index in
    a shell that already stacks four of them. Darken-Never-Lighten over whatever the globe
@@ -3821,19 +3801,6 @@ html[data-story-mode="true"] .marker-day-label {
     opacity: 0;
   }
 }
-
-/* --- Generation progress: the flight-path strip -------------------------------------------
-   Segment widths come from STAGE_SECONDS, not from an even split, because the five stages are
-   nowhere near equal — `generate` alone is ~95 of the ~150 nominal seconds. Split evenly the
-   marker would reach a fifth of the rail and then not move for a minute and a half, which
-   reads as a hang. `--gen-progress` (0..1) is written from JS ten times a second. */
-/* The strip is a glass instrument panel, not marks floating on the map.
-   It shipped unbacked and was effectively invisible over bright terrain: measured against
-   sampled globe pixels, the idle stage labels ran 1.02–4.20:1 and failed the 4.5:1 body floor
-   on *every* backdrop tested including the darkest ocean. The rail, ticks and pin are all
-   low-alpha white, which is the Darken-Never-Lighten Rule being broken outright — over
-   photography this system tints toward slate, never toward white. The caption pill and the
-   fact lines were readable in the same screenshot for exactly one reason: they carry glass. */
 
 /* --- Destination facts: the stagger stack --------------------------------------------------
    One card square-on and readable, its neighbours fanned out behind it, dimmed and tilted.
@@ -4053,7 +4020,7 @@ html[data-story-mode="true"] .marker-day-label {
     left: calc(2.25rem + clamp(17.5rem, 36vw, 27rem));
   }
 }
-@media (width > 960px) {
+@media (width > 60rem) {
   :root:has(.trip-board.docked-panel) .toast-stack,
   :root:has(.trip-page.has-drawer) .toast-stack {
     right: calc(var(--trip-drawer-w, 0px) + 2.25rem);

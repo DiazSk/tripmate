@@ -25,7 +25,7 @@ const FLY_MS = 2400;
 const HOLD_MS = 2600;
 const PETRA: LngLat = [35.4444, 30.3285];
 const GLOBE = { center: [50, 30] as LngLat, zoom: 2.05, pitch: 0, bearing: 0 };
-const wide = () => window.matchMedia("(min-width: 900px)").matches;
+const wide = () => window.matchMedia("(width >= 60rem)").matches;
 const globeView = () => (wide() ? GLOBE : { ...GLOBE, center: [40, 30] as LngLat, zoom: 1.05 });
 // The card covers the left of the stage; everything the camera frames is pushed right of it.
 // MapLibre keeps `padding` on the transform between moves, so moves use a one-off `offset` and
@@ -402,13 +402,13 @@ export default function PlanGlobe({
           screen it is centred in the stage below the app's fixed navbar. */}
       <div
         data-lenis-prevent
-        className="relative z-[3] mx-4 mb-16 mt-3 flex max-h-[44rem] flex-col overflow-hidden rounded-[6px] bg-white text-[var(--ink)] shadow-[0_24px_60px_rgba(0,0,0,.35)] min-[900px]:absolute min-[900px]:left-5 min-[900px]:top-[calc(50%+var(--nav-h)/2)] min-[900px]:m-0 min-[900px]:max-h-[calc(100%-5rem-var(--nav-h))] min-[900px]:w-[min(30rem,40vw)] min-[900px]:-translate-y-1/2"
+        className="relative z-[3] mx-4 mb-16 mt-3 flex max-h-[44rem] flex-col overflow-hidden rounded-[6px] bg-white text-[var(--ink)] shadow-[0_24px_60px_rgba(0,0,0,.35)] min-[60rem]:absolute min-[60rem]:left-5 min-[60rem]:top-[calc(50%+var(--nav-h)/2)] min-[60rem]:m-0 min-[60rem]:max-h-[calc(100%-5rem-var(--nav-h))] min-[60rem]:w-[min(30rem,40vw)] min-[60rem]:-translate-y-1/2"
       >
         <header className="border-b border-[var(--rule)] p-5">
           <p className="pl-eyebrow text-[var(--signal-text)]">The plan behind it</p>
-          <h2 className="pl-display mt-3 text-[clamp(30px,2.6vw,40px)]">The same day, written down.</h2>
+          <h2 className="pl-display mt-3 text-[clamp(1.875em,2.6vw,2.5em)]">The same day, written down.</h2>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="pl-label text-[12px] text-[var(--charcoal)]">Day 2 · {when} · Sample</p>
+            <p className="pl-label text-[length:max(0.6875rem,0.75em)] text-[var(--charcoal)]">Day 2 · {when} · Sample</p>
             <div role="radiogroup" aria-label="Way to travel" className="flex gap-0.5 rounded-[3px] bg-[var(--paper)] p-0.5">
               {LENS_ORDER.map((id) => (
                 <button
@@ -417,7 +417,7 @@ export default function PlanGlobe({
                   role="radio"
                   aria-checked={id === lens}
                   onClick={() => setLens(id)}
-                  className={`rounded-[2px] px-2.5 py-1 text-[12px] font-semibold transition-colors duration-200 ${id === lens ? "bg-[var(--ink)] text-white" : "hover:bg-white"}`}
+                  className={`rounded-[2px] px-2.5 py-1 text-[length:max(0.6875rem,0.75em)] font-semibold transition-colors duration-200 ${id === lens ? "bg-[var(--ink)] text-white" : "hover:bg-white"}`}
                 >
                   {LENSES[id].short}
                 </button>
@@ -431,8 +431,8 @@ export default function PlanGlobe({
               ["Per person", `$${totals.cost}`],
             ].map(([k, v]) => (
               <div key={k}>
-                <dt className="pl-label text-[11px] text-[var(--charcoal)]">{k}</dt>
-                <dd className="text-[18px] font-normal">{v}</dd>
+                <dt className="pl-label text-[length:max(0.6875rem,0.6875em)] text-[var(--charcoal)]">{k}</dt>
+                <dd className="text-[1.125em] font-normal">{v}</dd>
               </div>
             ))}
           </dl>
@@ -468,31 +468,31 @@ export default function PlanGlobe({
                   className={`pl-row grid w-full grid-cols-[46px_22px_1fr_auto] items-start gap-x-3 px-5 py-3.5 text-left ${open ? "bg-[rgba(255,126,21,.07)]" : "hover:bg-[var(--paper)]"}`}
                 >
                   <span className="pl-tnum pt-0.5">
-                    <span className="block text-[14px] font-semibold">{s.time}</span>
-                    <span className="block text-[11px] text-[var(--charcoal)]">{fmtDur(s.min)}</span>
+                    <span className="block text-[0.875em] font-semibold">{s.time}</span>
+                    <span className="block text-[length:max(0.6875rem,0.6875em)] text-[var(--charcoal)]">{fmtDur(s.min)}</span>
                   </span>
                   <span
-                    className={`pl-tnum mt-0.5 grid h-[22px] w-[22px] place-items-center rounded-full text-[11px] font-semibold transition-colors duration-200 ${open ? "bg-[var(--signal)] text-[var(--ink)]" : "bg-[var(--ink)] text-white"}`}
+                    className={`pl-tnum mt-0.5 grid h-[22px] w-[22px] place-items-center rounded-full text-[length:max(0.6875rem,0.6875em)] font-semibold transition-colors duration-200 ${open ? "bg-[var(--signal)] text-[var(--ink)]" : "bg-[var(--ink)] text-white"}`}
                   >
                     {i + 1}
                   </span>
                   <span className="min-w-0">
-                    <span className="pl-label block text-[11px] text-[var(--charcoal)]">{s.kind}</span>
-                    <span className="pl-serif block text-[21px] leading-[1.1]">{s.title}</span>
+                    <span className="pl-label block text-[length:max(0.6875rem,0.6875em)] text-[var(--charcoal)]">{s.kind}</span>
+                    <span className="pl-serif block text-[1.3125em] leading-[1.1]">{s.title}</span>
                     <span className={`grid transition-[grid-template-rows] duration-500 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                       <span className="overflow-hidden">
-                        <span className="mt-1.5 block text-[14px] leading-[1.5]">{s.why}</span>
-                        <span className="mt-2 flex gap-2 text-[13px] leading-[1.45] text-[var(--charcoal)]">
-                          <span aria-hidden className="text-[10px] leading-[19px]">
+                        <span className="mt-1.5 block text-[0.875em] leading-[1.5]">{s.why}</span>
+                        <span className="mt-2 flex gap-2 text-[0.8125em] leading-[1.45] text-[var(--charcoal)]">
+                          <span aria-hidden className="text-[0.77em] leading-[1.9]">
                             ●
                           </span>
                           <span>{s.practical}</span>
                         </span>
-                        {s.next && <span className="pl-tnum mt-2 block text-[12px] text-[var(--charcoal)]">↓ {s.next.text}</span>}
+                        {s.next && <span className="pl-tnum mt-2 block text-[length:max(0.6875rem,0.75em)] text-[var(--charcoal)]">↓ {s.next.text}</span>}
                       </span>
                     </span>
                   </span>
-                  <span className="pl-tnum pt-0.5 text-right text-[14px] font-semibold">{fmtCost(s.cost)}</span>
+                  <span className="pl-tnum pt-0.5 text-right text-[0.875em] font-semibold">{fmtCost(s.cost)}</span>
                 </button>
               </li>
             );
@@ -504,14 +504,14 @@ export default function PlanGlobe({
             type="button"
             onClick={() => setPlaying((p) => !p)}
             aria-pressed={playing}
-            className="flex items-center gap-2 rounded-[2px] bg-[var(--ink)] px-3.5 py-2.5 text-[13px] font-semibold text-white hover:bg-[#2c374b]"
+            className="flex items-center gap-2 rounded-[2px] bg-[var(--ink)] px-3.5 py-2.5 text-[0.8125em] font-semibold text-white hover:bg-[#2c374b]"
           >
             {playing ? "Pause" : hotIndex >= 0 ? "Resume" : "Play the day"} <span aria-hidden>{playing ? "❚❚" : "▸"}</span>
           </button>
-          <span className="pl-tnum text-[12px] text-[var(--charcoal)]" aria-live="polite">
+          <span className="pl-tnum text-[length:max(0.6875rem,0.75em)] text-[var(--charcoal)]" aria-live="polite">
             {hotIndex >= 0 ? `Stop ${hotIndex + 1} of ${stops.length}` : `${stops.length} stops`}
           </span>
-          <button type="button" onClick={onOpen} className="pl-cta ml-auto px-4 py-2.5 text-[13px]">
+          <button type="button" onClick={onOpen} className="pl-cta ml-auto px-4 py-2.5 text-[0.8125em]">
             Open in the planner →
           </button>
         </footer>

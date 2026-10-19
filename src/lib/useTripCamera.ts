@@ -46,8 +46,6 @@ const STREAM_FRAME_SECONDS = 2.4;
  * `running` rather than `draft !== null` gates the suspension, so it is in force from the button
  * press: child effects commit before parent ones, and keyed on the draft the first clump of stops
  * would frame itself on hallucinated coordinates before this hook ever ran.
- *
- * Also drives a refine, which streams the same events into the same draft.
  */
 export function useStreamingCamera(
   running: boolean,

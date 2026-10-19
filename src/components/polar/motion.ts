@@ -23,7 +23,7 @@ import { prefersReducedMotion } from "@/lib/reducedMotion";
  * planner is a form a step at a time, and the trip page and the plan being written sit over the map,
  * whose wheel is the camera's. Reduced motion skips all of it and the page is its finished layout.
  */
-const DESKTOP = "(min-width: 769px)";
+const DESKTOP = "(width >= 48rem)";
 
 let lenis: Lenis | null = null;
 

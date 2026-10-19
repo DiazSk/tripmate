@@ -678,7 +678,7 @@ export default function ItineraryCard({
 
   if (!day) {
     return (
-      <div className="glass-itinerary rounded-none p-5 sm:rounded-2xl sm:p-6">
+      <div className="glass-itinerary rounded-none p-5 sm:rounded-md sm:p-6">
         <p className="text-sm text-muted">
           This plan came back with no days in it. Try generating it again.
         </p>
@@ -722,7 +722,7 @@ export default function ItineraryCard({
       // its nearest scrollport — which would be this box, which never scrolls, so the header
       // simply would not stick. `clip` creates no scrollport, so the header sticks to the panel
       // body it actually scrolls in.
-      className="glass-itinerary overflow-clip rounded-none sm:rounded-2xl"
+      className="glass-itinerary overflow-clip rounded-none sm:rounded-md"
       {...devLabel("ItineraryCard")}
     >
       {/* The min-height is the photo's frame, so it only exists when there is a photo. The

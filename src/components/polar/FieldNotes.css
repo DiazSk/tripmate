@@ -191,7 +191,7 @@
   gap: 0.4em;
 }
 
-@media (max-width: 720px) {
+@media (width < 48rem) {
   .pf-choices.is-lined {
     grid-template-columns: 1fr;
   }
@@ -521,7 +521,7 @@
   border-top: 1px solid var(--wd-rule);
 }
 
-@media (max-width: 960px) {
+@media (width <= 60rem) {
   .pb-body {
     grid-template-columns: 1fr;
     gap: 0;
@@ -544,7 +544,7 @@
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 640px) {
+@media (width < 40rem) {
   .pb-figures {
     gap: var(--wd-space-3);
   }

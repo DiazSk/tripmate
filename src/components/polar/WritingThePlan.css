@@ -176,7 +176,7 @@
   overflow: hidden;
 }
 /* Scaled, not resized: the bar is written ten times a second over a moving map, and a width change
-   is a layout each time (GenerationScreen's bar does the same). */
+   is a layout each time. */
 .wtp-progress > span {
   position: absolute;
   inset: 0;
@@ -287,7 +287,7 @@
   text-overflow: clip;
 }
 
-@media (max-width: 760px) {
+@media (width < 48rem) {
   .tm.wtp .wtp-lede {
     margin-top: 1em;
   }

@@ -1446,7 +1446,7 @@ function tripRows(f: TripFacts): [string, string][] {
 function TripCard(f: TripFacts) {
   const pace = PACES.find((p) => p.id === f.pace)!;
   return (
-    <aside className="pp-trip hidden min-[1100px]:grid" aria-label="Your trip so far">
+    <aside className="pp-trip hidden min-[68.75rem]:grid" aria-label="Your trip so far">
       <div>
         <p className="tm-kicker tm-on-dark-2">Your trip so far</p>
         <p key={f.where} className="pp-trip-name pp-swap mt-2">

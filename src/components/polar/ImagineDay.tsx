@@ -45,10 +45,10 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
             Picture a day
           </p>
           <div className="lg:col-span-9">
-            <h2 className="pl-display max-w-[16ch] text-[clamp(40px,5.6vw,88px)]" data-reveal>
+            <h2 className="pl-display max-w-[16ch] text-[clamp(2.5em,5.6vw,5.5em)]" data-reveal>
               What would a day here actually feel like?
             </h2>
-            <p className="mt-8 max-w-[52ch] text-[18px] leading-[1.55] text-[var(--charcoal)]" data-reveal style={d(120)}>
+            <p className="mt-8 max-w-[52ch] text-[1.125em] leading-[1.55] text-[var(--charcoal)]" data-reveal style={d(120)}>
               Not the sights, the hours. Here is one Wednesday in Petra, from the first coffee to the last candle, told the way you
               would remember it.
             </p>
@@ -69,12 +69,12 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
               ))}
               <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-[linear-gradient(0deg,rgba(9,11,16,.7),transparent)] p-5 pt-16 text-white">
                 <span key={active} className="pl-swap">
-                  <span className="pl-label block text-[13px] text-white/90">
+                  <span className="pl-label block text-[0.8125em] text-white/90">
                     {beat.part} · <span className="pl-tnum">{beat.time}</span>
                   </span>
-                  <span className="pl-lead block text-[22px]">{beat.caption}</span>
+                  <span className="pl-lead block text-[1.375em]">{beat.caption}</span>
                 </span>
-                <span className="pl-tnum text-[13px] text-white/90">
+                <span className="pl-tnum text-[0.8125em] text-white/90">
                   {String(active + 1).padStart(2, "0")} / {String(PETRA_BEATS.length).padStart(2, "0")}
                 </span>
               </figcaption>
@@ -87,7 +87,7 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
               {PETRA_BEATS.map((b, i) => (
                 <li key={b.stop}>
                   <span className="pl-tick block h-[2px]" style={{ backgroundColor: i <= active ? sky.fg : sky.rule }} />
-                  <span className="pl-label mt-2 block text-[11px]" style={{ color: i === active ? sky.fg : sky.fg2 }}>
+                  <span className="pl-label mt-2 block text-[length:max(0.6875rem,0.6875em)]" style={{ color: i === active ? sky.fg : sky.fg2 }}>
                     {b.part}
                   </span>
                 </li>
@@ -105,23 +105,23 @@ export function Day({ onOpenStop }: { onOpenStop: (stop: string) => void }) {
                 <div className="relative mb-6 aspect-[4/5] w-full overflow-hidden rounded-[4px] lg:hidden">
                   <Image src={photo(b.photo)} alt="" fill sizes="100vw" className="object-cover" />
                 </div>
-                <p className="pl-label text-[14px]" style={{ color: sky.fg2 }}>
+                <p className="pl-label text-[0.875em]" style={{ color: sky.fg2 }}>
                   {b.part} · <span className="pl-tnum">{b.time}</span>
                 </p>
-                <h3 className="pl-serif mt-3 text-[clamp(36px,4.2vw,64px)] leading-[1.02]">{b.line}</h3>
-                <p className="mt-5 max-w-[42ch] text-[18px] leading-[1.55]" style={{ color: sky.fg2 }}>
+                <h3 className="pl-serif mt-3 text-[clamp(2.25em,4.2vw,4em)] leading-[1.02]">{b.line}</h3>
+                <p className="mt-5 max-w-[42ch] text-[1.125em] leading-[1.55]" style={{ color: sky.fg2 }}>
                   {b.body}
                 </p>
                 <button
                   type="button"
                   onClick={() => onOpenStop(b.stop)}
-                  className="mt-6 w-fit text-[14px] font-semibold underline decoration-1 underline-offset-[6px] hover:decoration-2"
+                  className="mt-6 w-fit text-[0.875em] font-semibold underline decoration-1 underline-offset-[6px] hover:decoration-2"
                 >
                   See this stop in the plan →
                 </button>
               </article>
             ))}
-            <p className="pl-lead border-t pt-8 text-[26px] leading-[1.25]" style={{ borderColor: sky.rule }}>
+            <p className="pl-lead border-t pt-8 text-[1.625em] leading-[1.25]" style={{ borderColor: sky.rule }}>
               That was the slow way.
               <br />
               <button
@@ -150,10 +150,10 @@ export function Ways({ lens, setLens }: { lens: LensId; setLens: (l: LensId) => 
             Make it yours
           </p>
           <div className="md:col-span-9">
-            <h2 className="pl-display max-w-[14ch] text-[clamp(40px,5.6vw,88px)]" data-reveal>
+            <h2 className="pl-display max-w-[14ch] text-[clamp(2.5em,5.6vw,5.5em)]" data-reveal>
               The same day, four ways.
             </h2>
-            <p className="mt-8 max-w-[50ch] text-[18px] leading-[1.55] text-[var(--charcoal)]" data-reveal style={d(120)}>
+            <p className="mt-8 max-w-[50ch] text-[1.125em] leading-[1.55] text-[var(--charcoal)]" data-reveal style={d(120)}>
               Same valley, same Wednesday. Tell TripMate how you like to travel and the day rearranges itself around it. Pick one and
               the plan below follows.
             </p>
@@ -178,14 +178,14 @@ export function Ways({ lens, setLens }: { lens: LensId; setLens: (l: LensId) => 
                 <div className="relative aspect-[4/5] overflow-hidden bg-[var(--paper)]">
                   <Image src={photo(x.photo)} alt="" fill sizes="(min-width: 768px) 25vw, 50vw" className="object-cover" />
                   <span
-                    className={`absolute left-3 top-3 rounded-[2px] px-2 py-1 text-[12px] font-semibold transition-colors duration-300 ${on ? "bg-[var(--signal)] text-[var(--ink)]" : "bg-white/90 text-[var(--ink)]"}`}
+                    className={`absolute left-3 top-3 rounded-[2px] px-2 py-1 text-[length:max(0.6875rem,0.75em)] font-semibold transition-colors duration-300 ${on ? "bg-[var(--signal)] text-[var(--ink)]" : "bg-white/90 text-[var(--ink)]"}`}
                   >
                     {on ? "Selected" : x.short}
                   </span>
                 </div>
                 <div className={`p-4 transition-colors duration-300 md:p-5 ${on ? "bg-[var(--ink)] text-white" : "bg-white"}`}>
-                  <span className="pl-serif block text-[24px] leading-[1.05] md:text-[30px]">{x.name}</span>
-                  <span className={`mt-1 block text-[14px] ${on ? "text-white/85" : "text-[var(--charcoal)]"}`}>{x.line}</span>
+                  <span className="pl-serif block text-[1.5em] leading-[1.05] md:text-[1.875em]">{x.name}</span>
+                  <span className={`mt-1 block text-[0.875em] ${on ? "text-white/85" : "text-[var(--charcoal)]"}`}>{x.line}</span>
                 </div>
               </button>
             );
@@ -193,10 +193,10 @@ export function Ways({ lens, setLens }: { lens: LensId; setLens: (l: LensId) => 
         </div>
 
         <div key={lens} className="pl-swap mt-10 grid gap-6 border-t border-[var(--rule)] pt-8 md:grid-cols-12" aria-live="polite">
-          <p className="pl-label text-[14px] text-[var(--charcoal)] md:col-span-3">What changes</p>
+          <p className="pl-label text-[0.875em] text-[var(--charcoal)] md:col-span-3">What changes</p>
           <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-3 md:col-span-9">
             {LENSES[lens].changes.map((c) => (
-              <li key={c} className="pl-lead text-[24px] leading-[1.2]">
+              <li key={c} className="pl-lead text-[1.5em] leading-[1.2]">
                 {c}
               </li>
             ))}
@@ -247,11 +247,11 @@ export function OpenSheet({
           aria-labelledby="pl-sheet-title"
           className="pl-sheet relative w-full max-w-[520px] rounded-t-[6px] bg-white p-6 text-[var(--ink)] md:rounded-[6px] md:p-8"
         >
-          <p className="pl-label text-[13px] text-[var(--charcoal)]">Open in the planner</p>
-          <p id="pl-sheet-title" className="pl-serif mt-2 text-[36px] leading-[1.02]">
+          <p className="pl-label text-[0.8125em] text-[var(--charcoal)]">Open in the planner</p>
+          <p id="pl-sheet-title" className="pl-serif mt-2 text-[2.25em] leading-[1.02]">
             This day comes with you.
           </p>
-          <dl className="pl-tnum mt-6 divide-y divide-[var(--rule)] border-y border-[var(--rule)] text-[15px]">
+          <dl className="pl-tnum mt-6 divide-y divide-[var(--rule)] border-y border-[var(--rule)] text-[0.9375em]">
             {[
               ["Where", "Petra, Jordan"],
               ["When", `${when} · day 2`],
@@ -291,10 +291,10 @@ export function OpenSheet({
             </div>
           </dl>
           <div className="mt-7 flex gap-3">
-            <button type="button" onClick={onClose} className="pl-ghost flex-1 px-5 py-3.5 text-[15px] hover:bg-[var(--paper)]">
+            <button type="button" onClick={onClose} className="pl-ghost flex-1 px-5 py-3.5 text-[0.9375em] hover:bg-[var(--paper)]">
               Not yet
             </button>
-            <button ref={first} type="button" onClick={() => onOpen(adults)} className="pl-cta flex-[1.4] px-5 py-3.5 text-[15px]">
+            <button ref={first} type="button" onClick={() => onOpen(adults)} className="pl-cta flex-[1.4] px-5 py-3.5 text-[0.9375em]">
               Open the planner
             </button>
           </div>

@@ -10,14 +10,13 @@
   --charcoal: #535353;
   --night: #090b10;
   --night-2: #a8acb3;
-  --signal: #ff7e15;
-  --signal-pressed: #e86f0c;
+  --signal: var(--wd-signal);
   --signal-text: #a64c09;
   --rule: rgba(31, 42, 68, 0.12);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   font-family: var(--font-sans-stack), system-ui, sans-serif;
   font-weight: 500;
-  font-size: 16px;
+  font-size: var(--wd-base);
   color: var(--ink);
   overflow-x: clip;
   position: relative;
@@ -49,8 +48,8 @@
 }
 .pl-eyebrow {
   font-weight: 600;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: max(0.6875rem, 0.75em);
+  line-height: 1.333;
   letter-spacing: 0.17em;
   text-transform: uppercase;
 }
@@ -71,7 +70,7 @@
   border-radius: var(--wd-radius-hairline);
   transition: background-color 200ms var(--ease), transform 200ms var(--ease);
 }
-.pl-cta:hover { background: var(--signal-pressed); }
+.pl-cta:hover { background: var(--wd-signal-hover); }
 .pl-cta:active { transform: translateY(1px); }
 .pl-ghost {
   border: 1px solid currentColor;
@@ -100,7 +99,7 @@
 }
 .pl-frame-img.is-on { opacity: 1; transform: scale(1); }
 .pl-beat { transition: opacity 700ms var(--ease); }
-@media (min-width: 1024px) {
+@media (width >= 64rem) {
   .pl-beat { opacity: 0.32; }
   .pl-beat.is-on { opacity: 1; }
 }

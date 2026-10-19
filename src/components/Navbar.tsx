@@ -265,7 +265,7 @@ export default function Navbar() {
   // the bar would keep `is-menu-open`'s solid ground. Close it the moment the wide query matches.
   useEffect(() => {
     if (!menuOpen) return;
-    const wide = window.matchMedia("(min-width: 40rem)");
+    const wide = window.matchMedia("(width >= 40rem)");
     const onChange = (e: MediaQueryListEvent) => {
       if (e.matches) setMenuOpen(false);
     };
