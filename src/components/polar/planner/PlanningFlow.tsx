@@ -11,7 +11,7 @@ import { TimeField, time12 } from "./TimeField";
 import { INTEREST_TAGS } from "@/components/InterestPicker";
 import { DIETARY_TAGS } from "@/components/DietaryPicker";
 import type { SuggestOption } from "@/components/SuggestInput";
-import { anchorKey, foundSummary } from "@/lib/anchors";
+import { anchorKey, foundNothing, foundSummary, NO_PLACES_FOUND } from "@/lib/anchors";
 import { MAX_STARRED_PRIORITIES, PARTY_MAX_PER_BAND, priorityHint, starLabel } from "@/lib/userAnswers";
 import { MAX_TRIP_DAYS, TIERS, tripDays, type TierId } from "@/lib/tiers";
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from "@/lib/weather";
@@ -768,6 +768,8 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
   const [images, setImages] = useState<Pending[]>([]);
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
+  // Copy row P-21a, said under the box: set when a read found nothing, so the text stays in it.
+  const [empty, setEmpty] = useState("");
   const importHold = useHold("import").secondsLeft;
   const [dragging, setDragging] = useState(false);
   const [saved, setSaved] = useState<SavedPlace[]>([]);
@@ -797,6 +799,7 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
     }
     setBusy(true);
     setNotes([]);
+    setEmpty("");
     try {
       const res = await fetch("/api/import", {
         method: "POST",
@@ -839,6 +842,10 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
       setNotes([...(summary ? [{ text: summary }] : []), ...unread.map((u) => ({ text: u.reason, error: "item" as const }))]);
       const left = items.filter((_, i) => unread.some((u) => u.index === i));
       setImages(left.filter((p) => p.kind === "image"));
+      if (foundNothing(incoming.length, unread.length)) {
+        setEmpty(NO_PLACES_FOUND);
+        return;
+      }
       setText(left.map((p) => (p.kind === "url" ? p.url : p.kind === "text" ? p.text : "")).filter(Boolean).join("\n"));
     } catch (e) {
       if (!isAbort(e)) setNotes([importNote(failureFromThrown(e))]);
@@ -897,13 +904,21 @@ function SavedPlaces({ m }: { m: PlannerModel }) {
       >
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setEmpty("");
+          }}
           onPaste={(e) => {
             if (e.clipboardData.files.length) void take(Array.from(e.clipboardData.files));
           }}
           placeholder="Paste links, a list of places, or notes"
           aria-label="Saved places to read"
+          aria-describedby={empty ? "pp-saved-empty" : undefined}
         />
+        {/* Kept mounted, empty until a read finds nothing, so the words arriving are announced. */}
+        <InlineNote size="field" tone="error" id="pp-saved-empty">
+          {empty}
+        </InlineNote>
         {images.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {images.map((p, i) =>

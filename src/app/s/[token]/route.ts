@@ -36,7 +36,7 @@ const UNAVAILABLE_PAGE = `<!doctype html>
 <meta name="robots" content="noindex, nofollow"><title>Shared trip not available · TripMate</title>
 <style>
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:1.25rem;box-sizing:border-box;background:#090b10;color:#fff;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{width:100%;max-width:34rem;display:grid;justify-items:start;gap:.75rem;padding:1.25rem 1.375rem;border:1px dashed rgba(255,255,255,.28);border-radius:.25rem}
+main{box-sizing:border-box;width:100%;max-width:34rem;display:grid;justify-items:start;gap:.75rem;padding:1.25rem 1.375rem;border:1px dashed rgba(255,255,255,.28);border-radius:.25rem}
 h1{margin:0;font-size:1.0625rem;font-weight:600}
 p{margin:0;font-size:.9375rem;color:rgba(255,255,255,.86)}
 a{display:inline-flex;align-items:center;height:2.5rem;padding:0 1.125rem;border-radius:2px;background:#ff7e15;color:#1f2a44;font-weight:600;font-size:.9rem;text-decoration:none}

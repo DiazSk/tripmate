@@ -80,7 +80,6 @@
   border: 1px solid var(--wd-frost-10);
   border-radius: var(--wd-radius-sm);
   backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
   transition: color 0.3s, border-color 0.3s, background-color 0.3s;
 }
 .wtp-day.has {
@@ -125,7 +124,6 @@
   border: 1px solid var(--wd-frost-10);
   border-radius: var(--wd-radius-card);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   animation: tm-in 0.5s var(--wd-ease-reveal) both;
 }
 .wtp-arrival-in p {
@@ -257,7 +255,6 @@
   border: 1px solid rgba(255, 255, 255, 0.32);
   border-radius: var(--wd-radius-sm);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
   animation: tm-in 0.5s var(--wd-ease-reveal) both;

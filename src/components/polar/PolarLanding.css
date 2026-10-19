@@ -191,7 +191,6 @@
   color: #fff;
   background: var(--wd-veil-20);
   backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
   border-radius: var(--wd-radius-hairline);
   white-space: nowrap;
   transition: background-color 0.3s var(--wd-ease-out);
@@ -389,7 +388,6 @@
   border: 1px solid var(--wd-frost-20);
   background: rgba(9, 11, 16, 0.18);
   backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
   border-radius: var(--wd-radius-hairline);
   transition: background-color 0.3s var(--wd-ease-out), color 0.3s var(--wd-ease-out), border-color 0.3s var(--wd-ease-out);
 }
@@ -622,7 +620,6 @@
   text-align: center;
   background: var(--wd-veil-50);
   backdrop-filter: blur(7.5px);
-  -webkit-backdrop-filter: blur(7.5px);
   border: 1px solid var(--wd-frost-20);
   border-radius: var(--wd-radius-card);
 }
@@ -747,7 +744,6 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--wd-radius-card);
   backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
 }
 .tm-fb-form {
   display: grid;
@@ -955,7 +951,6 @@
   z-index: 30;
   background: var(--wd-veil-50);
   backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.4s cubic-bezier(0.37, 0, 0.63, 1);

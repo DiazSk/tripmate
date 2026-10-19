@@ -4,7 +4,7 @@
  * one function every path now goes through, including the iOS wizard's legacy fields. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { anchorKey, foundSummary, normalizeAnchors, readUnplaced } from "./anchors.ts";
+import { anchorKey, foundNothing, foundSummary, NO_PLACES_FOUND, normalizeAnchors, readUnplaced } from "./anchors.ts";
 
 test("anchorKey folds case, accents and punctuation", () => {
   assert.equal(anchorKey("  Café  de Flore! "), "cafe de flore");
@@ -79,4 +79,12 @@ test("foundSummary: all found names the city; a partial batch says what the rest
   assert.equal(foundSummary(2, 3, "Mumbai"), "Found 2 of 3 — 1 needs a nearby landmark.");
   assert.equal(foundSummary(0, 3, "Mumbai"), "Found 0 of 3 — 3 need a nearby landmark.");
   assert.equal(foundSummary(0, 0, "Mumbai"), "");
+});
+
+test("foundNothing: zero places with no unread note is the silent case that needs a sentence", () => {
+  assert.equal(foundNothing(0, 0), true);
+  assert.equal(foundNothing(0, 1), false);
+  assert.equal(foundNothing(2, 0), false);
+  assert.equal(foundSummary(0, 0, "Mumbai"), "");
+  assert.equal(NO_PLACES_FOUND, "No places found in that. Try place names, a list, or a link to a place.");
 });

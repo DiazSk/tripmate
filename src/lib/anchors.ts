@@ -95,3 +95,11 @@ export function foundSummary(found: number, total: number, city: string): string
   const left = total - found;
   return `Found ${found} of ${total} — ${left} ${left === 1 ? "needs" : "need"} a nearby landmark.`;
 }
+
+/** Copy row P-21a: a text or link import that read fine but held no places. The text stays in the box. */
+export const NO_PLACES_FOUND = "No places found in that. Try place names, a list, or a link to a place.";
+
+/** True when an import came back with nothing placed and nothing already explained by an unread note. */
+export function foundNothing(places: number, unread: number): boolean {
+  return places === 0 && unread === 0;
+}
