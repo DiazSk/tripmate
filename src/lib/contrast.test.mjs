@@ -50,7 +50,7 @@ test("the trip page's labels and footnotes never render under the 11px floor", (
     "src/components/polar/trip/TripBoard.css": [".tb-label", ".tb-day-when", ".tb-leg em", ".tb-budget em", ".tb-total p", ".tb-meta", ".tb-draft", ".tm.trip-board:not(.is-strip) .tb-card-time"],
     "src/components/polar/trip/TripDrawer.css": [".td-eyebrow", ".td-prov", ".td-pill"],
     "src/components/polar/trip/TripSpotlight.css": [".tsl-kicker", ".tsl-hour", ".tsl-gap span", ".tsl-h", ".tsl-foot", ".tsl-tag-kind"],
-    "src/components/polar/StoryPlayer.css": [".sp-time", ".sp-voice", ".sp-chapter-n", ".sp-note"],
+    "src/components/polar/StoryPlayer.css": [".sp-time", ".sp-now-text .sp-voice", ".sp-chapter-n", ".sp-note"],
   };
   for (const [file, sels] of Object.entries(labels)) for (const sel of sels) {
     const board = readFileSync(file, "utf8");

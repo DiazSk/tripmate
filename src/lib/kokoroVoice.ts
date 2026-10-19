@@ -357,15 +357,23 @@ function generate(
  * follows it is real silence rather than the model thinking.
  *
  * Any failure — a synthesis error, or a device too slow for `SYNTHESIS_DEADLINE_MS` — calls
- * `onError`, and `speakOn` hands the same beat to the platform voice from there.
+ * `onError` with the sentence that failed, and `speakOn` hands the rest of the beat to the platform
+ * voice from that sentence. `from` starts the beat at a sentence (a resume, or the voice arriving
+ * mid-beat); `onSentence` reports each one as its audio starts.
  */
 export function speakNatural(
   text: string,
-  handlers: { onEnd?: () => void; onError?: () => void } = {}
+  handlers: {
+    onEnd?: () => void;
+    onError?: (at: number) => void;
+    onSentence?: (index: number, startedAt: number) => void;
+  } = {},
+  from = 0
 ): SpeakHandle {
   const chunks = splitForSpeech(text);
+  const first = Math.max(0, Math.min(from, chunks.length));
   if (!worker || chunks.length === 0) {
-    const timer = setTimeout(() => handlers.onError?.(), 0);
+    const timer = setTimeout(() => handlers.onError?.(first), 0);
     return { cancel: () => clearTimeout(timer) };
   }
 
@@ -382,7 +390,7 @@ export function speakNatural(
   const output = gainNode;
 
   let done = false;
-  let index = 0;
+  let index = first;
   let source: AudioBufferSourceNode | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -391,7 +399,7 @@ export function speakNatural(
     done = true;
     clearTimeout(timer);
     if (outcome === "end") handlers.onEnd?.();
-    else handlers.onError?.();
+    else handlers.onError?.(index);
   };
 
   const synthesize = (i: number): Promise<AudioBuffer | null> =>
@@ -406,7 +414,7 @@ export function speakNatural(
         });
 
   /** The sentence after the one about to play, already in flight. */
-  let ahead: Promise<AudioBuffer | null> = synthesize(0);
+  let ahead: Promise<AudioBuffer | null> = synthesize(first);
 
   const playNext = async () => {
     if (done) return;
@@ -449,6 +457,7 @@ export function speakNatural(
       timer = setTimeout(playNext, pause);
     };
     source.start();
+    handlers.onSentence?.(index, performance.now());
   };
 
   void playNext();

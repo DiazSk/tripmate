@@ -35,16 +35,24 @@ test("durations come from the narration's own estimate, and the clock reads m:ss
   assert.equal(clockLabel(0), "0:00");
 });
 
-test("a subtitle is one sentence at a time, its words lit in order as the beat runs", () => {
+test("a subtitle is the sentence the voice reports, its words lit across that sentence", () => {
   const text = "The castle stands above Alfama. Walk the walls while the morning holds dry, then come down slowly.";
-  const start = subtitleAt(text, 0);
+  const start = subtitleAt(text, 0, 0);
   assert.equal(start.index, 0);
   assert.equal(start.count, 2);
   assert.equal(start.sentence, "The castle stands above Alfama.");
   assert.equal(start.said, 0);
-  const late = subtitleAt(text, 0.99);
-  assert.equal(late.index, 1);
-  assert.ok(late.said >= late.words.length - 1);
-  assert.equal(subtitleAt(text, 1).said, subtitleAt(text, 1).words.length);
-  assert.deepEqual(subtitleAt("", 0.5), { sentence: "", words: [], said: 0, index: 0, count: 0 });
+  // However long the beat has run, the caption stays on the sentence the voice is on: a voice that
+  // is late (or still downloading) holds the line fully lit, it never jumps ahead to sentence two.
+  const late = subtitleAt(text, 0, 60_000);
+  assert.equal(late.index, 0);
+  assert.equal(late.said, late.words.length);
+  // And the scrubber stops at the next sentence's start rather than running past it.
+  const second = subtitleAt(text, 1, 0);
+  assert.equal(second.index, 1);
+  assert.equal(second.said, 0);
+  assert.equal(late.withinMs, second.withinMs);
+  assert.ok(subtitleAt(text, 1, 1000).withinMs > second.withinMs);
+  assert.equal(subtitleAt(text, 9, 0).index, 1);
+  assert.deepEqual(subtitleAt("", 0, 500), { sentence: "", words: [], said: 0, index: 0, count: 0, withinMs: 0 });
 });

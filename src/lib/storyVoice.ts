@@ -4,6 +4,7 @@ import {
   NOVELTY_VOICES,
   pauseAfter,
   rateFor,
+  sentenceTimings,
   splitForSpeech,
 } from "./storyPacing";
 // `kokoroVoice` takes its pacing from `storyPacing` and only a type from here, so there is no
@@ -155,6 +156,19 @@ export interface SpeakHandle {
 }
 
 /**
+ * What a beat reports back. `onEnd` fires exactly once when the beat is over, `onError` instead of
+ * it when the voice could not speak, and `onSentence` each time a sentence (an index into
+ * `splitForSpeech(text)`) actually *starts* being heard, with the `performance.now()` it started at.
+ * The controller tracks the sentence from these, which is what lets a beat be picked up at the
+ * sentence it was on rather than from its top.
+ */
+export interface SpeakHandlers {
+  onEnd?: () => void;
+  onError?: () => void;
+  onSentence?: (index: number, startedAt: number) => void;
+}
+
+/**
  * Speak one beat, as a queue of sentences with real silence between them — see the Pacing section
  * above for why one utterance per beat cannot sound like storytelling.
  *
@@ -174,9 +188,10 @@ export interface SpeakHandle {
  * `START_GUARD_MS` catches that by deadline on `onstart` and reports it as an error, which is how
  * the controller learns to fall back to timed beats for the rest of the film.
  */
-/** The narration's volume, 0 to 1, for both voices: the player bar's slider. Module state rather
- *  than an argument, so a drag changes the voice that is talking without restarting its beat. The
- *  platform voice takes it at the next sentence (an utterance's volume is fixed once spoken); the
+/** The narration's volume, 0 to 1, for both voices: the player bar's slider, and 0 for mute. Module
+ *  state rather than an argument, so a drag changes the voice that is talking without restarting its
+ *  beat. The platform voice takes it at the next sentence (an utterance's volume is fixed once
+ *  spoken, which is why the controller mutes that voice by moving to `speakSilently` instead); the
  *  natural voice at once, through its gain. */
 let narrationVolume = 1;
 export function setNarrationVolume(volume: number): void {
@@ -184,10 +199,7 @@ export function setNarrationVolume(volume: number): void {
   setNaturalVolume(narrationVolume);
 }
 
-export function speak(
-  text: string,
-  handlers: { onEnd?: () => void; onError?: () => void } = {}
-): SpeakHandle {
+export function speak(text: string, handlers: SpeakHandlers = {}, from = 0): SpeakHandle {
   if (!speechAvailable()) {
     const timer = setTimeout(() => handlers.onError?.(), 0);
     return { cancel: () => clearTimeout(timer) };
@@ -200,8 +212,16 @@ export function speak(
     return { cancel: () => clearTimeout(timer) };
   }
 
+  // `from` picks the beat up at a sentence: a resume, an unmute, or the natural voice handing a
+  // sentence back. Pacing still reads the absolute index, so the closing sentence still lands slower.
+  const first = Math.max(0, Math.min(from, chunks.length));
+  if (first >= chunks.length) {
+    const timer = setTimeout(() => handlers.onEnd?.(), 0);
+    return { cancel: () => clearTimeout(timer) };
+  }
+
   let done = false;
-  let index = 0;
+  let index = first;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   let startGuard: ReturnType<typeof setTimeout> | undefined;
@@ -233,11 +253,16 @@ export function speak(
     utterance.pitch = 1;
     utterance.volume = narrationVolume;
 
-    // The start guard applies to the first chunk only. Once a voice has spoken once it is not
-    // going to turn out to be mute, and re-arming it per sentence would risk cancelling a live
+    // The start guard applies to the first chunk spoken only. Once a voice has spoken once it is
+    // not going to turn out to be mute, and re-arming it per sentence would risk cancelling a live
     // narration over a slow queue hand-off between utterances.
-    if (index === 0) {
-      utterance.onstart = () => clearTimeout(startGuard);
+    const at = index;
+    utterance.onstart = () => {
+      if (done) return;
+      clearTimeout(startGuard);
+      handlers.onSentence?.(at, performance.now());
+    };
+    if (index === first) {
       startGuard = setTimeout(() => {
         synth.cancel();
         settle("error");
@@ -273,6 +298,47 @@ export function speak(
       clearTimeout(watchdog);
       clearTimeout(startGuard);
       if (speechAvailable()) window.speechSynthesis.cancel();
+    },
+  };
+}
+
+/**
+ * A beat that says nothing, on the same estimate a spoken one is paced by: what a muted film and a
+ * voiceless platform are "spoken" with, so the subtitle follows the same sentence events either way
+ * (mobile's `silentSpeech` is the same idea). Same contract as `speak`: `onSentence` per sentence,
+ * one `onEnd` at the beat's estimated length, nothing after `cancel`.
+ *
+ * `intoMs` continues mid-sentence, for a mute: the voice stops, the words keep lighting from where
+ * they were, and no lead-in is spent. Without it a resume starts sentence `from` after `LEAD_IN_MS`,
+ * as the voice would.
+ */
+export function speakSilently(text: string, handlers: SpeakHandlers = {}, from = 0, intoMs = 0): SpeakHandle {
+  const { chunks, startMs, spokenMs, totalMs } = sentenceTimings(text);
+  const first = Math.max(0, Math.min(from, chunks.length));
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  let done = false;
+  // The point in the beat's own estimated timeline that "now" corresponds to.
+  const into = Math.max(0, Math.min(intoMs, spokenMs[first] ?? 0));
+  const origin = first >= chunks.length ? totalMs : into > 0 ? startMs[first] + into : startMs[first] - LEAD_IN_MS;
+  for (let i = first; i < chunks.length; i++) {
+    const at = i;
+    timers.push(
+      setTimeout(() => {
+        if (!done) handlers.onSentence?.(at, performance.now() - (at === first ? into : 0));
+      }, Math.max(0, startMs[i] - origin))
+    );
+  }
+  timers.push(
+    setTimeout(() => {
+      if (done) return;
+      done = true;
+      handlers.onEnd?.();
+    }, Math.max(0, totalMs - origin))
+  );
+  return {
+    cancel: () => {
+      done = true;
+      timers.forEach(clearTimeout);
     },
   };
 }
@@ -326,12 +392,8 @@ export type VoiceEngine = "browser" | "natural";
  * does not have to sequence the load against the film; it flips a preference and the narration
  * upgrades itself when the model arrives.
  */
-export function speakOn(
-  engine: VoiceEngine,
-  text: string,
-  handlers: { onEnd?: () => void; onError?: () => void } = {}
-): SpeakHandle {
-  if (engine !== "natural" || !naturalVoiceReady()) return speak(text, handlers);
+export function speakOn(engine: VoiceEngine, text: string, handlers: SpeakHandlers = {}, from = 0): SpeakHandle {
+  if (engine !== "natural" || !naturalVoiceReady()) return speak(text, handlers, from);
 
   /**
    * The natural voice, with the platform voice underneath it.
@@ -343,14 +405,19 @@ export function speakOn(
    * dispatcher exists rather than the controller branching on an engine.
    *
    * The handle tracks whichever provider is live, so a Next press during the handover cancels the
-   * right one.
+   * right one. The handover picks up at the sentence that failed (`at`), not the beat's top.
    */
   const live: { handle: SpeakHandle | null } = { handle: null };
-  live.handle = speakNatural(text, {
-    onEnd: handlers.onEnd,
-    onError: () => {
-      live.handle = speak(text, handlers);
+  live.handle = speakNatural(
+    text,
+    {
+      onEnd: handlers.onEnd,
+      onSentence: handlers.onSentence,
+      onError: (at) => {
+        live.handle = speak(text, handlers, at);
+      },
     },
-  });
+    from
+  );
   return { cancel: () => live.handle?.cancel() };
 }

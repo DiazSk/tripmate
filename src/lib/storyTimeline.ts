@@ -1,4 +1,4 @@
-import { estimateDurationMs, splitForSpeech } from "./storyPacing";
+import { estimateDurationMs, sentenceTimings } from "./storyPacing";
 
 /**
  * The story film as a timeline, for the player bar's scrubber: how long each beat runs, how far
@@ -26,8 +26,8 @@ export function elapsedMs(durations: readonly number[], beatIndex: number, withi
   return before + Math.max(0, Math.min(withinMs, durations[beatIndex] ?? 0));
 }
 
-/** The beat a point on the bar (0 to 1) falls in. A seek lands on a beat's start, because a beat
- *  is spoken from its beginning: there is no resuming a sentence halfway through. */
+/** The beat a point on the bar (0 to 1) falls in. A seek lands on a beat's start: a beat is entered
+ *  from its first sentence, and there is no resuming a sentence halfway through. */
 export function beatAt(durations: readonly number[], fraction: number): number {
   if (durations.length === 0) return 0;
   const total = durations.reduce((sum, d) => sum + d, 0);
@@ -59,23 +59,27 @@ export function clockLabel(ms: number): string {
 }
 
 /**
- * The subtitle at a point in a beat: the sentence being said, and how many of its words have been.
+ * The subtitle at a point in a beat: the sentence being said, how many of its words have been, and
+ * where that puts the beat (`withinMs`, for the scrubber).
  *
- * A beat is spoken as a queue of sentences (`splitForSpeech`), so a subtitle shows one at a time,
- * as a film's does, rather than the whole paragraph. Each sentence takes its share of the beat by
- * its own estimated length, the same estimate the bar runs on, and within it the words light in
- * order. Estimated like the bar: a voice slower than the estimate leaves the line fully lit until
- * the beat advances, which reads as the sentence finishing rather than as a fault.
+ * A beat is spoken as a queue of sentences (`splitForSpeech`), so a subtitle shows one at a time, as
+ * a film's does. **Which sentence is the voice's own report** (`onSentence`, see `storyMode`), not a
+ * share of the beat's estimated length, so the caption cannot run ahead of a voice that is late,
+ * still downloading, or picking a beat up mid-way. Only the lighting *within* the sentence is
+ * estimated: its words light across its estimated spoken length from when the voice started it, and
+ * a voice slower than that leaves the line fully lit until the next sentence begins.
  */
-export function subtitleAt(text: string, fraction: number): { sentence: string; words: string[]; said: number; index: number; count: number } {
-  const sentences = splitForSpeech(text);
-  if (sentences.length === 0) return { sentence: "", words: [], said: 0, index: 0, count: 0 };
-  const weights = sentences.map((s) => estimateDurationMs(s));
-  const total = weights.reduce((sum, w) => sum + w, 0);
-  let at = Math.max(0, Math.min(1, fraction)) * total;
-  let index = 0;
-  while (index < sentences.length - 1 && at >= weights[index]) at -= weights[index++];
-  const words = sentences[index].split(" ");
-  const local = weights[index] > 0 ? Math.min(1, at / weights[index]) : 1;
-  return { sentence: sentences[index], words, said: Math.round(local * words.length), index, count: sentences.length };
+export function subtitleAt(
+  text: string,
+  sentenceIndex: number,
+  intoMs: number
+): { sentence: string; words: string[]; said: number; index: number; count: number; withinMs: number } {
+  const { chunks, startMs, spokenMs, totalMs } = sentenceTimings(text);
+  if (chunks.length === 0) return { sentence: "", words: [], said: 0, index: 0, count: 0, withinMs: 0 };
+  const index = Math.max(0, Math.min(chunks.length - 1, sentenceIndex));
+  const into = Math.max(0, intoMs);
+  const words = chunks[index].split(" ");
+  const local = spokenMs[index] > 0 ? Math.min(1, into / spokenMs[index]) : 1;
+  const withinMs = Math.min(startMs[index + 1] ?? totalMs, startMs[index] + into);
+  return { sentence: chunks[index], words, said: Math.round(local * words.length), index, count: chunks.length, withinMs };
 }

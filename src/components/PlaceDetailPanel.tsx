@@ -485,7 +485,9 @@ function Overview({
       {error && !loading && <DetailFailure failure={error} name={stop.name} onRetry={onRetry} />}
 
       {detail && !loading && (
-        <>
+        // `value-in` is the fade this file already uses (Photo), reduced-motion gated in globals.css:
+        // the entry arrives over the skeleton's slot instead of snapping in.
+        <div className="value-in space-y-4">
           {detail.history && <p className="leading-relaxed text-foreground/90">{detail.history}</p>}
           {detail.bestTime && (
             <div>
@@ -511,7 +513,7 @@ function Overview({
               </ul>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Wikipedia's own paragraph, last: it is the encyclopaedic account, where everything above

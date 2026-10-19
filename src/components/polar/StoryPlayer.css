@@ -313,7 +313,9 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   z-index: 23;
   height: var(--story-bar-h);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  /* The right column never goes below its controls: just above the phone layout they are wider than
+     a third of the bar, and a squeezed column let them slide left over the scrubber's end time. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(max-content, 1fr);
   align-items: center;
   gap: 1.25rem;
   padding: 0 1.25rem;
@@ -369,7 +371,7 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sp-now-text span {
+.sp-now-text > span {
   font-size: max(0.6875rem, 0.72em);
   color: var(--wd-night-text-2);
   white-space: nowrap;
@@ -562,23 +564,25 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
 .sp-details {
   margin-left: 0.1rem;
 }
-.sp-voice {
-  display: inline-flex;
+/* The voice, as the now-playing block's third line: a caption, not a control, so the right cluster
+   holds only icons and Plan. Condensed and spaced like the bar's other small labels. */
+.sp-now-text .sp-voice {
+  display: flex;
   align-items: center;
-  gap: 0.4em;
-  margin-right: 0.4rem;
-  padding: 0.25em 0.65em 0.25em 0.45em;
+  gap: 0.35em;
+  min-width: 0;
+  overflow: visible;
+  font-family: var(--wd-font-condensed);
   font-size: max(0.6875rem, 0.68em);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  color: var(--wd-night-text-2);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
+  letter-spacing: 0.06em;
 }
-.sp-voice.is-ready {
+.sp-now-text .sp-voice.is-ready {
   color: var(--wd-signal);
-  border-color: rgba(255, 126, 21, 0.4);
+}
+.sp-voice-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Volume: the mute and a slider, as a player's are. */
 .sp-vol {
@@ -682,7 +686,9 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
     grid-column: 1 / -1;
     grid-row: 2;
   }
-  .sp-voice,
+  /* At phone width the now-playing column is too narrow for a third line ("Natural vo…" with the
+     percentage cut off), so the voice caption goes, as the chip did before it. */
+  .sp-now-text .sp-voice,
   .sp-vol input,
   .sp-details,
   .story-player .sp-keys {

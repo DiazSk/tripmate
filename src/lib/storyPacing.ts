@@ -155,14 +155,25 @@ export function rateFor(index: number, total: number): number {
  * (`flyTo` is a 2.5s flight) and for the eye to find the line that just lit up.
  */
 export function estimateDurationMs(text: string): number {
+  return sentenceTimings(text).totalMs;
+}
+
+/**
+ * The same estimate, per sentence: where each sentence starts in the beat (`startMs`, lead-in
+ * included), how long its words take to say (`spokenMs`, pauses excluded), and the beat's whole
+ * length (`totalMs`, which is `estimateDurationMs`). What a silent beat is timed by and what the
+ * subtitle lights a sentence's words across, so both run on one budget.
+ */
+export function sentenceTimings(text: string): { chunks: string[]; startMs: number[]; spokenMs: number[]; totalMs: number } {
   const chunks = splitForSpeech(text);
-  const spoken = chunks.reduce((total, chunk, index) => {
+  const startMs: number[] = [];
+  const spokenMs: number[] = [];
+  let at = LEAD_IN_MS;
+  chunks.forEach((chunk, index) => {
     const words = chunk.split(/\s+/).filter(Boolean).length;
-    return (
-      total +
-      (words / NARRATION_WPM) * 60_000 / rateFor(index, chunks.length) +
-      pauseAfter(chunk, index, chunks.length)
-    );
-  }, LEAD_IN_MS);
-  return Math.max(3200, Math.round(spoken) + 300);
+    startMs.push(at);
+    spokenMs.push(((words / NARRATION_WPM) * 60_000) / rateFor(index, chunks.length));
+    at += spokenMs[index] + pauseAfter(chunk, index, chunks.length);
+  });
+  return { chunks, startMs, spokenMs, totalMs: Math.max(3200, Math.round(at) + 300) };
 }

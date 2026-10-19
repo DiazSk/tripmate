@@ -35,7 +35,8 @@ import "@/components/polar/StoryPlayer.css";
  * **The scrubber is the day's film, estimated.** A beat lasts as long as its sentence takes to say
  * and only the voice knows when that is, so the bar runs on `estimateDurationMs` (the same estimate
  * the controller times a muted beat with, see `storyTimeline.ts`) and snaps to the real boundary
- * when a beat advances. A seek lands on a beat's start: a sentence is spoken from its beginning.
+ * when a beat advances, and to the real sentence whenever the voice starts one. A seek lands on a
+ * beat's start: a sentence is spoken from its beginning.
  *
  * Mounted once in `AppShell`, beside the map chrome, for the reason `StopMarkerLayer` is: the page
  * underneath is whatever route the traveller was on, and the film is not part of it. Renders nothing
@@ -143,21 +144,22 @@ function StoryPlayerBody({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Time into the current beat, ticked from the clock while playing and keyed by beat, so a pause
-  // holds where it stopped and a new beat starts from nothing. A resumed beat is re-spoken from its
-  // start (see `togglePlay` in the controller), which is why resuming restarts the count.
-  const [clock, setClock] = useState({ beat: -1, ms: 0 });
+  // The subtitle and the scrubber follow the voice, not a clock started with the beat: which
+  // sentence comes from the controller (`playback.sentence`, the voice's own `onSentence`), and only
+  // the time into that sentence is ticked here. The tick stops while paused, so the line holds; a
+  // sentence queued but not yet audible (`startedAt` null) shows unlit until the voice reaches it.
+  const [now, setNow] = useState(0);
   useEffect(() => {
     if (phase !== "playing") return;
-    const start = performance.now();
-    const id = window.setInterval(() => setClock({ beat: beatIndex, ms: performance.now() - start }), 250);
+    const id = window.setInterval(() => setNow(performance.now()), 250);
     return () => window.clearInterval(id);
-  }, [phase, beatIndex, script]);
-  const within = clock.beat === beatIndex ? clock.ms : 0;
-  const elapsed = script ? elapsedMs(durations, beatIndex, within, ended) : 0;
+  }, [phase]);
+  const current = beats[beatIndex];
+  const { sentence } = playback;
+  const sub = current ? subtitleAt(current.text, sentence.index, sentence.startedAt === null ? 0 : now - sentence.startedAt) : null;
+  const elapsed = script ? elapsedMs(durations, beatIndex, sub?.withinMs ?? 0, ended) : 0;
   const fraction = total > 0 ? elapsed / total : 0;
 
-  const current = beats[beatIndex];
   const currentStop = stopOf(current, day);
   const playLabel = phase === "playing" ? "Pause the story" : ended ? "Play the day again" : "Resume the story";
 
@@ -224,7 +226,6 @@ function StoryPlayerBody({
           : "Narrated by the natural voice.";
 
   const hasDayAfter = hasNextDay ? request.itinerary.days[dayIndex + 1] : undefined;
-  const sub = current ? subtitleAt(current.text, durations[beatIndex] ? within / durations[beatIndex] : 0) : null;
   const nextBeat = beats[beatIndex + 1];
   const nextStop = stopOf(nextBeat, day);
   const starts = durations.map((_, i) => durations.slice(0, i).reduce((a, b) => a + b, 0));
@@ -359,6 +360,12 @@ function StoryPlayerBody({
               {request.destination.split(",")[0]} · Day {dayIndex + 1}
               {day.title || day.theme ? ` · ${day.title || day.theme}` : ""}
             </span>
+            {/* The voice, as a caption under what is playing: who is narrating it, and the download
+                while the natural voice is on its way. Meri beside it, its motion the film's state. */}
+            <span className={`sp-voice${naturalStatus === "ready" ? " is-ready" : ""}`} title={voiceTitle}>
+              <Meridian size={12} state={meriForStory({ phase, voiceBroken, muted, silentPlatform })} />
+              <span className="sp-voice-label">{voiceLine}</span>
+            </span>
           </div>
           {/* Where a page can show a stop (the trip page's drawer), the place being narrated opens
               beside the film: the camera stays on the beat, the sheet stands above the bar. */}
@@ -373,10 +380,19 @@ function StoryPlayerBody({
 
         {/* Transport and the day's scrubber */}
         <div className="sp-center">
+          {/* Day, place, play, place, day: the day buttons mirror each other, and each leaves a gap
+              where there is no day that way, so play stays centred. */}
           <div className="sp-transport">
             <button type="button" className="sp-icon" aria-label="Play the day again" title="Again" onClick={() => playDay(dayIndex)} disabled={!script}>
               <ReplayIcon />
             </button>
+            {dayIndex > 0 ? (
+              <button type="button" className="sp-icon sp-nextday" aria-label={`Play day ${dayIndex}`} title={`Day ${dayIndex}`} onClick={() => playDay(dayIndex - 1)}>
+                D{dayIndex}
+              </button>
+            ) : (
+              <span className="sp-icon-gap" />
+            )}
             <button type="button" className="sp-icon" aria-label="Previous place" title="Previous place" onClick={prev} disabled={!script}>
               <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
                 <path d="M12.5 3.5L6 8l6.5 4.5zM3.5 3v10" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
@@ -456,13 +472,8 @@ function StoryPlayerBody({
           </div>
         </div>
 
-        {/* Voice, subtitles, chapters, volume, and back to the plan */}
+        {/* Subtitles, chapters, volume, and back to the plan */}
         <div className="sp-right">
-          {/* Meri, beside the voice it is speaking in: its motion is the film's state. */}
-          <span className={`sp-voice${naturalStatus === "ready" ? " is-ready" : ""}`} title={voiceTitle}>
-            <Meridian size={14} state={meriForStory({ phase, voiceBroken, muted, silentPlatform })} />
-            {voiceLine}
-          </span>
           <button type="button" className={`sp-icon${subs ? " is-on" : ""}`} aria-pressed={subs} aria-label="Subtitles" title="Subtitles (C)" onClick={() => setSubs(!subs)}>
             <svg viewBox="0 0 18 16" width="17" height="15" aria-hidden="true">
               <rect x="1.5" y="2.5" width="15" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />

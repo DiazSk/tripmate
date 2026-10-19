@@ -42,6 +42,7 @@ import {
   silence,
   setNarrationVolume,
   speakOn,
+  speakSilently,
   speechAvailable,
   warmVoices,
   type SpeakHandle,
@@ -132,6 +133,13 @@ export interface StoryPlayback {
   scriptFailure: Failure | null;
   /** Index into `script.beats`. Meaningless while `script` is null. */
   beatIndex: number;
+  /**
+   * The sentence of the beat being heard (an index into `splitForSpeech(beat.text)`) and the
+   * `performance.now()` its voice started it at, from the voice's own `onSentence` events. `startedAt`
+   * is null while a sentence is queued but not yet audible (the lead-in, a resume, the natural voice
+   * synthesising), so the subtitle waits with the voice rather than running ahead of it.
+   */
+  sentence: { index: number; startedAt: number | null };
   muted: boolean;
   /**
    * True when no voice is going to speak here — either the API is absent (some Linux desktops,
@@ -439,6 +447,23 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   const [scriptFailure, setScriptFailure] = useState<Failure | null>(null);
   const [phase, setPhase] = useState<StoryPhase>("loading");
   const [beatIndex, setBeatIndex] = useState(0);
+  /**
+   * Where in the beat the voice is, from its own sentence events (see `StoryPlayback.sentence`).
+   *
+   * The ref is what the voice effect reads to know where to pick a beat up; the state is what the
+   * stage draws. Every way to a *different* beat resets it to the top (`markSentence(0, null)`);
+   * pause/resume, mute/unmute and the natural voice arriving keep the index, which is what makes
+   * each of those continue at the sentence it was on instead of restarting the beat.
+   */
+  const sentenceRef = useRef<{ index: number; startedAt: number | null }>({ index: 0, startedAt: null });
+  const [sentence, setSentence] = useState<{ index: number; startedAt: number | null }>({ index: 0, startedAt: null });
+  const markSentence = useCallback((index: number, startedAt: number | null) => {
+    sentenceRef.current = { index, startedAt };
+    setSentence(sentenceRef.current);
+  }, []);
+  /** Earliest the beat may end, set by the camera effect for a travel beat whose walk outlasts its
+   *  words, read by the voice effect when the words are done. Zero for every other beat. */
+  const holdUntilRef = useRef(0);
   const [muted, setMuted] = useState(false);
   const [volume, setVolumeState] = useState(1);
   const [stopOpener, setStopOpenerState] = useState<((stop: Stop) => void) | null>(null);
@@ -453,9 +478,9 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   const [voiceCapable] = useState(speechAvailable);
   /**
    * Latched the first time a beat's voice fails to speak, which is a thing only playback can find
-   * out — see `START_GUARD_MS` in storyVoice.ts. Set from a callback rather than an effect, and a
-   * dependency of the beat effect, so the failed beat immediately replays as a timed one instead
-   * of stranding the film on the line that could not be said.
+   * out — see `START_GUARD_MS` in storyVoice.ts. Set from a callback rather than an effect, and it
+   * feeds `voiceMode`, so the voice effect immediately carries on silently from the sentence that
+   * could not be said instead of stranding the film on it.
    *
    * Per film, not per session: `openDay` clears it, so a transient failure does not permanently
    * mute a browser that can in fact talk.
@@ -469,9 +494,9 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    * The engine actually speaking right now.
    *
    * The natural voice with the model still downloading resolves to `browser`, so the film narrates
-   * through the whole load rather than sitting silent — and because this is a dependency of the
-   * beat effect, the moment the model lands the current beat is re-spoken in the new voice. That
-   * is the upgrade arriving mid-film, with no sequencing code anywhere.
+   * through the whole load rather than sitting silent — and because it feeds `voiceMode`, a
+   * dependency of the voice effect, the moment the model lands the sentence being heard is re-said
+   * in the new voice and the beat carries on from there. That is the upgrade arriving mid-film.
    *
    * This is the *only* remaining fork between the two engines. There used to be a stored
    * `voiceEngine` preference and a toggle in the stage as well, on the argument that a
@@ -480,6 +505,13 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    * so what the preference actually bought was a chance to be offered the worse narrator.
    */
   const engine: VoiceEngine = naturalStatus === "ready" ? "natural" : "browser";
+  /**
+   * What the voice effect speaks the beat with. A muted natural voice keeps speaking into a zero
+   * gain (its volume reaches a sentence already playing, so nothing restarts); a muted platform voice
+   * cannot be silenced mid-utterance, so a mute hands the beat to `speakSilently`, which keeps the
+   * sentence clock running from the very word it was on. A platform that cannot speak is silent too.
+   */
+  const voiceMode: VoiceEngine | "silent" = !speaks || (muted && engine === "browser") ? "silent" : engine;
   /**
    * Every script asked for this session, keyed by `storyCacheKey` — the **promise**, not the
    * script, so a request that arrives while an identical one is in flight joins it instead of
@@ -572,10 +604,13 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     }
     setNaturalStatus("loading");
     setNaturalProgress(0);
-    void loadNaturalVoice(setNaturalProgress).then((ok) =>
-      setNaturalStatus(ok ? "ready" : "unavailable")
-    );
-  }, []);
+    void loadNaturalVoice(setNaturalProgress).then((ok) => {
+      // The natural voice takes over at the sentence being heard, restarting that sentence in its
+      // own voice: its words wait, unlit, until that voice is actually saying them.
+      if (ok) markSentence(sentenceRef.current.index, null);
+      setNaturalStatus(ok ? "ready" : "unavailable");
+    });
+  }, [markSentence]);
 
   /** Every entry point into a day — the first press and the "next day" offer at the end — resets
    *  the same four pieces of state. It happens in these handlers rather than in the fetch effect
@@ -585,6 +620,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       setRequest(next);
       setScript(null);
       setBeatIndex(0);
+      markSentence(0, null);
       setPhase("loading");
       setVoiceBroken(false);
       // **Here rather than on mount, and that is the whole reason this is not just a module-level
@@ -597,7 +633,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       // on a second day costs nothing.
       ensureNaturalVoice();
     },
-    [ensureNaturalVoice]
+    [ensureNaturalVoice, markSentence]
   );
 
   const start = openDay;
@@ -612,9 +648,10 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     setRequest(null);
     setScript(null);
     setBeatIndex(0);
+    markSentence(0, null);
     setPhase("loading");
     setActiveIndex(null);
-  }, [setActiveIndex, setRouteConnectorsHidden]);
+  }, [setActiveIndex, setRouteConnectorsHidden, markSentence]);
 
   const playDay = useCallback(
     (nextDay: number) => {
@@ -706,13 +743,21 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Play one beat: aim the camera, say the words, and advance when the words are done.
+   * Play one beat's camera: aim it at the place the beat is about. The words are the next effect's.
    *
-   * The cleanup is what makes Next, Pause and Exit all work by the same mechanism — each of them
-   * only changes state, and the re-run tears down the sentence that was in progress. Nothing has
-   * to cancel anything by hand.
+   * **Two effects, because the voice changes for reasons the camera must not hear.** They were one,
+   * and that one listed `muted` and the voice `engine` among its dependencies, so pressing mute, or
+   * the natural voice finishing its download, re-ran the whole beat: the camera flew again, a travel
+   * walk restarted from its first street, and the voice began the beat from the top while the
+   * subtitle, on its own clock, carried on. Now the camera re-runs only for a beat, a phase or a map,
+   * and the voice re-runs for those or for a change of voice — and picks up at the sentence it was on.
+   *
+   * The cleanups are what make Next, Pause and Exit all work by the same mechanism — each of them
+   * only changes state, and the re-runs tear down what was in progress. Nothing has to cancel
+   * anything by hand.
    */
   useEffect(() => {
+    holdUntilRef.current = 0;
     if (!request || !script || !day || phase !== "playing") return;
     const beat = script.beats[beatIndex];
     if (!beat) return;
@@ -720,9 +765,6 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     /** The fly-along, when this beat has one. Cancelled by the same cleanup that cancels the
      *  sentence, which is what makes Next, Pause and Exit all work without touching it. */
     let follow: { cancel: () => void } | undefined;
-    /** Earliest this beat may end, for a beat whose camera outlasts its words. Zero everywhere
-     *  else, which is every beat but a travel one. */
-    let holdUntilMs = 0;
     // Read once and cleared immediately, so it can only ever excuse the single beat that follows
     // the arrival — a replay of the same day starts with nothing owed.
     const arrivedAt = arrivedStopRef.current;
@@ -806,7 +848,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
         const walkS = travelFollowSeconds(pathLengthM(points), estimateDurationMs(beat.text));
         // The camera is the clock here — see `travelFollowSeconds`. Holding the beat open for the
         // walk plus its settle is what stops a short line cutting a long movement in half.
-        holdUntilMs = performance.now() + (walkS + ARRIVAL_SETTLE_S) * 1000;
+        holdUntilRef.current = performance.now() + (walkS + ARRIVAL_SETTLE_S) * 1000;
         follow = followPath(rendererRef, points, walkS, {
           arrivalHeadingRad,
           // The other half. The walk ends on `restoreCamera`, which clears padding and applies no
@@ -848,36 +890,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     // of a film, with nothing to attribute it to. Holding is the honest no-op: an unknown beat
     // still gets narrated, and the camera says nothing rather than saying the wrong thing.
 
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const advance = () => {
-      // Re-entrant by design: the narration finishing is permission to leave, not the instruction.
-      // A travel beat's sentence is one line and its movement is ten to twenty seconds, so the
-      // beat waits out the difference in silence rather than cutting the camera mid-street.
-      const remaining = holdUntilMs - performance.now();
-      if (remaining > 0) {
-        timer = setTimeout(advance, remaining);
-        return;
-      }
-      if (beatIndex + 1 >= script.beats.length) setPhase("ended");
-      else setBeatIndex(beatIndex + 1);
-    };
-
-    if (muted || !speaks) {
-      timer = setTimeout(advance, estimateDurationMs(beat.text));
-    } else {
-      speakRef.current = speakOn(engine, beat.text, {
-        onEnd: advance,
-        // A voice that never started, or that died mid-beat, must not strand the film. Latching
-        // `voiceBroken` re-runs this effect for the same beat down the timed path, so the line the
-        // voice failed on is the one that gets played rather than skipped.
-        onError: () => setVoiceBroken(true),
-      });
-    }
-
     return () => {
-      clearTimeout(timer);
-      speakRef.current?.cancel();
-      speakRef.current = null;
       // Skip, Pause and Exit all reach here, because all three work by changing state and letting
       // this effect re-run. One line covers a camera mid-flight in all of them.
       follow?.cancel();
@@ -894,9 +907,6 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     mapEngine,
     phase,
     beatIndex,
-    muted,
-    speaks,
-    engine,
     dayOffset,
     routeDays,
     flyToStoryStop,
@@ -906,63 +916,142 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     setRouteConnectorsHidden,
   ]);
 
+  /**
+   * Say one beat, from the sentence the beat is on, and advance when the words are done.
+   *
+   * `sentenceRef` is the resume point: zero for a beat just arrived at, the sentence being heard for
+   * everything that re-runs this without moving beat — a resume, a mute on the platform voice, the
+   * natural voice arriving, a voice found to be mute. `onEnd` still fires once per beat: every run's
+   * handle is cancelled by its cleanup before the next run's begins, and a cancelled handle never
+   * calls back.
+   */
+  useEffect(() => {
+    if (!request || !script || phase !== "playing") return;
+    const beat = script.beats[beatIndex];
+    if (!beat) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const advance = () => {
+      // Re-entrant by design: the narration finishing is permission to leave, not the instruction.
+      // A travel beat's sentence is one line and its movement is ten to twenty seconds, so the
+      // beat waits out the difference in silence rather than cutting the camera mid-street.
+      const remaining = holdUntilRef.current - performance.now();
+      if (remaining > 0) {
+        timer = setTimeout(advance, remaining);
+        return;
+      }
+      markSentence(0, null);
+      if (beatIndex + 1 >= script.beats.length) setPhase("ended");
+      else setBeatIndex(beatIndex + 1);
+    };
+
+    const { index: from, startedAt } = sentenceRef.current;
+    const handlers = {
+      onEnd: advance,
+      onSentence: markSentence,
+      // A voice that never started, or that died mid-beat, must not strand the film. Latching
+      // `voiceBroken` re-runs this effect down the silent path, at the sentence the voice failed
+      // on, so that line is the one that gets played rather than skipped.
+      onError: () => {
+        markSentence(sentenceRef.current.index, null);
+        setVoiceBroken(true);
+      },
+    };
+    const handle =
+      voiceMode === "silent"
+        ? // A mute continues mid-sentence; a resume (startedAt cleared) starts the sentence over.
+          speakSilently(beat.text, handlers, from, startedAt === null ? 0 : performance.now() - startedAt)
+        : speakOn(voiceMode, beat.text, handlers, from);
+    speakRef.current = handle;
+
+    return () => {
+      clearTimeout(timer);
+      handle.cancel();
+      if (speakRef.current === handle) speakRef.current = null;
+    };
+  }, [request, script, phase, beatIndex, voiceMode, markSentence]);
+
+  /**
+   * Move to a beat and play it from its top — Next, Previous and the scrubber's seek alike. Moving
+   * while paused resumes: the traveller asked to hear that place, not for a paused view of it.
+   * Asking for the beat already playing changes nothing, as it never did.
+   */
+  const goToBeat = useCallback(
+    (target: number) => {
+      if (target === beatIndex && phase === "playing") return;
+      markSentence(0, null);
+      setBeatIndex(target);
+      setPhase("playing");
+    },
+    [beatIndex, phase, markSentence]
+  );
+
   const next = useCallback(() => {
     if (!script) return;
     if (beatIndex + 1 >= script.beats.length) {
       setPhase("ended");
       return;
     }
-    setBeatIndex(beatIndex + 1);
-    // Next while paused resumes: the traveller asked for the following place, not for a paused
-    // view of it.
-    setPhase("playing");
-  }, [script, beatIndex]);
+    goToBeat(beatIndex + 1);
+  }, [script, beatIndex, goToBeat]);
 
   const prev = useCallback(() => {
     if (!script) return;
-    setBeatIndex(phase === "ended" ? script.beats.length - 1 : Math.max(0, beatIndex - 1));
-    setPhase("playing");
-  }, [script, beatIndex, phase]);
+    goToBeat(phase === "ended" ? script.beats.length - 1 : Math.max(0, beatIndex - 1));
+  }, [script, beatIndex, phase, goToBeat]);
 
-  /**
-   * Jump to a beat. Same move as Next and Previous, from anywhere: the effect above re-runs for the
-   * new index, which cancels the sentence in progress and flies the camera, and a seek plays — like
-   * Next while paused, it is a request to hear that place, not a paused view of it.
-   */
+  /** Jump to a beat — the scrubber and the chapters. See `goToBeat`. */
   const seek = useCallback(
     (target: number) => {
       if (!script) return;
-      setBeatIndex(Math.max(0, Math.min(script.beats.length - 1, target)));
-      setPhase("playing");
+      goToBeat(Math.max(0, Math.min(script.beats.length - 1, target)));
     },
-    [script]
+    [script, goToBeat]
   );
 
   /**
    * Pause, resume, or replay from the top once the film has ended.
    *
-   * Resuming **re-speaks the current beat from its beginning** rather than picking up mid-sentence.
-   * `speechSynthesis.pause()`/`resume()` exist, and are the obvious thing to reach for, but they
-   * are unreliable across engines in exactly the way that matters here — a pause that does not take
-   * leaves the voice talking over a stopped camera. Cancelling and re-reading a two-sentence beat
-   * is three seconds of repetition and is the same on every platform.
+   * Resuming **re-speaks the current sentence from its beginning** rather than picking up
+   * mid-word, and rather than the whole beat as it once did. `speechSynthesis.pause()`/`resume()`
+   * exist, and are the obvious thing to reach for, but they are unreliable across engines in exactly
+   * the way that matters here — a pause that does not take leaves the voice talking over a stopped
+   * camera. Cancelling and re-reading one sentence is a second or two of repetition, the same on
+   * every platform, and the subtitle re-lights that sentence with it.
    */
   const togglePlay = useCallback(() => {
     if (phase === "ended") {
+      markSentence(0, null);
       setBeatIndex(0);
       setPhase("playing");
     } else if (phase === "playing") setPhase("paused");
-    else if (phase === "paused") setPhase("playing");
-  }, [phase]);
+    else if (phase === "paused") {
+      markSentence(sentenceRef.current.index, null);
+      setPhase("playing");
+    }
+  }, [phase, markSentence]);
 
-  const toggleMute = useCallback(() => setMuted((m) => !m), []);
+  /**
+   * Mute is a volume, never a restart. The natural voice is silenced through its gain, mid-sentence,
+   * and nothing re-runs. The platform voice's volume is fixed once an utterance is spoken, so muting
+   * it moves the beat to `speakSilently` at the very word it was on, and unmuting re-says the current
+   * sentence aloud (marked unheard here, so its words wait for the voice).
+   */
+  const applyMute = useCallback(
+    (nextMuted: boolean, level: number) => {
+      setNarrationVolume(nextMuted ? 0 : level);
+      if (!nextMuted && muted && engine === "browser" && speaks) markSentence(sentenceRef.current.index, null);
+      setMuted(nextMuted);
+    },
+    [muted, engine, speaks, markSentence]
+  );
+  const toggleMute = useCallback(() => applyMute(!muted, volume), [applyMute, muted, volume]);
   const setVolume = useCallback(
     (next: number) => {
-      setNarrationVolume(next);
       setVolumeState(next);
-      if (next > 0 && muted) setMuted(false);
+      applyMute(muted && next === 0, next);
     },
-    [muted]
+    [applyMute, muted]
   );
   // A function in state has to be set through the updater form, or React calls it.
   const setStopOpener = useCallback((open: ((stop: Stop) => void) | null) => setStopOpenerState(() => open), []);
@@ -1032,6 +1121,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       script,
       scriptFailure,
       beatIndex,
+      sentence,
       muted,
       silentPlatform: !speaks,
       voiceBroken,
@@ -1054,6 +1144,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       script,
       scriptFailure,
       beatIndex,
+      sentence,
       muted,
       speaks,
       voiceBroken,

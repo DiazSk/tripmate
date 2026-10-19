@@ -278,13 +278,21 @@ cancelled utterance still fires `onend` in WebKit (hence the `done` latch, or Ne
 twice); `onend` sometimes never arrives (hence the 2.5x watchdog); a platform can present a complete
 API that **never speaks** — a headless browser, a desktop with no speech-dispatcher — so
 `START_GUARD_MS` puts a 2s deadline on `onstart` and the controller latches `voiceBroken` and
-replays that beat as a timed one; and macOS ships ~25 *novelty* voices that Chrome exposes as
+plays on silently (`speakSilently`) from the sentence the voice failed on; and macOS ships ~25 *novelty* voices that Chrome exposes as
 ordinary English ones (`Bad News` sings the text to a funeral march), so `pickVoice` carries a deny
 list — nothing in a voice's `lang`, `localService` or `default` distinguishes them.
 
-Pause/resume **re-speaks the current beat from its start** rather than picking up mid-sentence.
-`speechSynthesis.pause()`/`resume()` exist and are unreliable across engines in the way that matters
-here — a pause that does not take leaves the voice talking over a stopped camera.
+Pause/resume **re-speaks the current sentence from its start** — not the whole beat, and not
+mid-word. `speechSynthesis.pause()`/`resume()` exist and are unreliable across engines in the way
+that matters here — a pause that does not take leaves the voice talking over a stopped camera. Every
+narrator takes a `from` sentence index and reports `onSentence(index, startedAt)` when a sentence is
+actually heard; the controller keeps that index in `sentenceRef`, and the subtitle and scrubber are
+drawn from it rather than from a clock started with the beat. So the camera and the voice are two
+effects in `storyMode.tsx`: a resume, the natural voice arriving mid-download, a voice found mute and a
+mute or unmute all re-run only the voice, at the sentence it was on. **Mute is a volume, never a
+restart**: the natural voice goes to zero gain mid-sentence; the platform voice cannot change volume
+mid-utterance, so a mute moves the beat to `speakSilently` (the same estimate, same sentence events,
+continuing from the word it was on) and an unmute re-says the current sentence aloud.
 
 **Kokoro is loaded from a CDN at runtime and synthesises in a Blob worker, and both are structural.**
 `kokoro-js` pulls in `onnxruntime-web`, which embeds a WASM runtime as bytes — the exact class of

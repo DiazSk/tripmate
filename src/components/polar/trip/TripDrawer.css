@@ -165,6 +165,14 @@ html[data-story-mode="true"] .tm.trip-drawer {
 /* ── Detail ── */
 .td-detail {
   display: grid;
+  /* Every row its content's height, and the sheet its content's height: `.trip-drawer-body > *`
+     above gives a child `flex: 1; min-height: 0`, which clamped this grid to the drawer. A grid
+     that cannot grow shrinks any row whose item may be 0 tall, and the tab bar (an
+     `overflow-x: auto` scroller) is one: it collapsed to its 1px hairline, its labels peeking
+     out clipped, while the rest ran past the drawer's edge and the body, whose own scroll never
+     engaged, cut it off. Growing lets `.trip-drawer-body` do the scrolling it was built for. */
+  grid-auto-rows: max-content;
+  flex: none;
   align-content: start;
   gap: 0.6em;
   animation: tp-in 0.4s var(--wd-ease-reveal) both;
@@ -212,7 +220,8 @@ html[data-story-mode="true"] .tm.trip-drawer {
 }
 .td-tabs {
   position: sticky;
-  top: calc(-1 * var(--wd-pad));
+  /* The scrollport is `.trip-drawer-body`, which sits inside the drawer's padding: 0 is its edge. */
+  top: 0;
   z-index: 2;
   display: flex;
   gap: 1.2em;
