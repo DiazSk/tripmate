@@ -403,6 +403,7 @@
   position: relative;
   z-index: 1;
   margin: 0;
+  pointer-events: none;
   font-family: var(--wd-font-condensed);
   font-weight: 400;
   text-transform: uppercase;
@@ -418,10 +419,14 @@
   letter-spacing: -0.005em;
   animation: tm-reveal-opacity 1.4s both, tm-reveal-rise 1.4s var(--wd-ease-reveal) both;
 }
+/* A monument is a picture of a word (aria-hidden on every page), and both it and its wrap sit at
+   z-index 1 over their heroes: on /profile the name covered the masthead's Sign in/Sign out, so
+   `elementFromPoint` returned the word and the click never arrived. Never pressable, on any page. */
 .tm-monument-wrap {
   position: relative;
   z-index: 1;
   will-change: transform;
+  pointer-events: none;
 }
 @keyframes tm-reveal-opacity {
   from {

@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import Avatar from "@/components/Avatar";
+import InlineNote from "@/components/InlineNote";
 import LogoMark from "@/components/LogoMark";
+import { AVATAR_EVENT } from "@/lib/avatar";
+import { useSignOut } from "@/lib/useSignOut";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 import { requestPlan } from "@/lib/planIntent";
@@ -151,6 +156,234 @@ function useActiveSection(ids: string[], enabled: boolean): string | null {
 const SECTION_IDS = SECTION_LINKS.map((l) => l.id);
 
 /**
+ * Whether accounts exist on the client: the publishable key, read as the literal the bundler inlines
+ * (the same key the root layout mounts `<ClerkProvider>` on). Every Clerk hook in this file lives in
+ * a component rendered only when this is true, so a build without keys never calls one — they throw
+ * outside the provider — and its bar is exactly the one it had before accounts.
+ */
+const ACCOUNTS = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+/** Where Sign in would send someone to the page they are already on. */
+const isAuthPage = (pathname: string) => pathname.startsWith("/signin") || pathname.startsWith("/sso-callback");
+
+const signInHref = (pathname: string) => `/signin?next=${encodeURIComponent(pathname)}`;
+
+/**
+ * The face `/profile` shows, so the bar and the masthead never disagree: TripMate's own photo (stored
+ * here, not with Clerk) and the owner id its initials' tint is keyed on. Fetched once per signed-in
+ * user and refreshed by `Avatar`'s change event; until it lands the disc shows the no-face glyph, and
+ * a failed read falls back to initials on Clerk's id rather than leaving the glyph up.
+ */
+function useAccountFace(userId: string) {
+  const [face, setFace] = useState<{ user: string; id: string; image: string | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/account")
+      .then((res) => (res.ok ? (res.json() as Promise<{ id: string; image: string | null }>) : Promise.reject()))
+      .then((a) => live && setFace({ user: userId, id: a.id, image: a.image }))
+      .catch(() => live && setFace({ user: userId, id: userId, image: null }));
+    const onChange = (e: Event) => setFace((f) => f && { ...f, image: (e as CustomEvent<string | null>).detail });
+    window.addEventListener(AVATAR_EVENT, onChange);
+    return () => {
+      live = false;
+      window.removeEventListener(AVATAR_EVENT, onChange);
+    };
+  }, [userId]);
+  return face?.user === userId ? face : null;
+}
+
+/**
+ * The bar's account control, mounted only when `ACCOUNTS`. Signed out (and while Clerk loads) it is
+ * the Profile chip the bar always had — profile works signed out — plus an outlined Sign in beside
+ * it. Signed in, the avatar takes Profile's place and opens the account menu.
+ *
+ * Sign in appears only where the trailing cell has room for one more chip without pushing the
+ * wordmark off centre: at every width off `/` (below `sm` it takes the phone bar's one free slot
+ * from Profile, which signed-out profile visitors reach again from `sm`); from `md` on `/`'s planner and plan view (My memories rides beside it); from `lg` on the landing,
+ * whose cell also carries Plan a trip. The landing's phone menu carries its own Sign in row.
+ */
+function NavAccount({ pathname, onLanding, profileLink, navHidden }: { pathname: string; onLanding: boolean; profileLink: React.ReactNode; navHidden: boolean }) {
+  const { isLoaded, isSignedIn, user } = useUser();
+  if (isLoaded && isSignedIn) return <AccountMenu user={user} pathname={pathname} navHidden={navHidden} />;
+  return (
+    <>
+      {/* Off `/` a phone bar has one free slot: signed out, Sign in takes it and Profile waits for `sm`. */}
+      {pathname !== "/" && isLoaded && !isAuthPage(pathname) ? <span className="hidden sm:contents">{profileLink}</span> : profileLink}
+      {isLoaded && !isAuthPage(pathname) && (
+        <span className={`nav-account ${pathname !== "/" ? "inline-flex" : onLanding ? "hidden lg:inline-flex" : "hidden md:inline-flex"}`}>
+          <Link href={signInHref(pathname)} className={`${navLinkBase} polar-nav-signin`}>
+            Sign in
+          </Link>
+        </span>
+      )}
+    </>
+  );
+}
+
+type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
+
+/**
+ * The avatar and its menu: the WAI-ARIA menu-button pattern. The name and email head the popover
+ * outside the `role="menu"`, since a menu may hold only items. Escape, an outside press, focus
+ * leaving, a route change and the bar hiding on scroll all close it; Escape also hands focus back to
+ * the button. Opening focuses the first item, and the arrows, Home and End move between items.
+ *
+ * Sign out is `aria-disabled` while it runs rather than `disabled`: a focused button that becomes
+ * disabled can drop focus to the body, which would read as focus leaving and shut the menu over the
+ * note a failure writes into it.
+ */
+function AccountMenu({ user, pathname, navHidden }: { user: ClerkUser; pathname: string; navHidden: boolean }) {
+  const face = useAccountFace(user.id);
+  const fullName = user.fullName ?? user.firstName ?? null;
+  const email = user.primaryEmailAddress?.emailAddress ?? null;
+  const menuId = useId();
+  const root = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const { signOut, busy, note, noteId } = useSignOut(() => setOpen(false));
+
+  // Closed by a route change or the bar sliding away, reset during render as the phone menu is.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
+    setOpen(false);
+  }
+  if (open && navHidden) setOpen(false);
+
+  useEffect(() => {
+    if (!open) return;
+    root.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open]);
+
+  function moveFocus(e: React.KeyboardEvent<HTMLDivElement>) {
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const to =
+      e.key === "ArrowDown" ? (at + 1) % items.length
+      : e.key === "ArrowUp" ? (at - 1 + items.length) % items.length
+      : e.key === "Home" ? 0
+      : e.key === "End" ? items.length - 1
+      : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    items[to].focus();
+  }
+
+  return (
+    <span
+      ref={root}
+      // Off the landing's screens the avatar is the bar's way to the profile at every width; on `/`
+      // it follows Profile's rule there (the phone menu carries the account rows instead).
+      className={`nav-account relative ${pathname === "/" ? "hidden sm:inline-flex" : "inline-flex"}`}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-label={fullName ? `Account: ${fullName}` : "Account"}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        // 32px drawn, 40px pressable (the chips' height), 44px under a coarse pointer.
+        className="inline-flex size-10 items-center justify-center rounded-full transition-colors duration-150 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent pointer-coarse:size-11"
+      >
+        <Avatar userId={face?.id ?? null} name={user.firstName ?? user.fullName ?? null} image={face?.image ?? null} size={32} />
+      </button>
+      {open && (
+        // tabIndex -1: a press on the name keeps focus inside, so it does not read as leaving.
+        <div className="nav-account-menu" tabIndex={-1}>
+          <div className="nav-account-who">
+            <p className="nav-account-name">{fullName ?? "Signed in"}</p>
+            {email && <p className="nav-account-email">{email}</p>}
+          </div>
+          <div role="menu" id={menuId} aria-label="Account" onKeyDown={moveFocus}>
+            <Link role="menuitem" href="/profile" onClick={() => setOpen(false)} className="nav-account-item">
+              Profile
+            </Link>
+            <button
+              role="menuitem"
+              type="button"
+              aria-disabled={busy || undefined}
+              aria-describedby={noteId}
+              onClick={() => !busy && signOut()}
+              className="nav-account-item"
+            >
+              {busy ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+          {/* Copy rows F-15, F-16, mounted with the menu so a failure is read when it lands. */}
+          <InlineNote id={noteId} size="item" tone="error">
+            {note}
+          </InlineNote>
+        </div>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The landing phone menu's account row, after Profile: Sign in, or Sign out with its failure note.
+ * Nothing while Clerk loads, so the row never flips from one to the other under a finger.
+ */
+function MenuAccountRow({ pathname, rowClassName, style, onDone }: { pathname: string; rowClassName: string; style: React.CSSProperties; onDone: () => void }) {
+  const { isLoaded, isSignedIn } = useUser();
+  const { signOut, busy, note, noteId } = useSignOut(onDone);
+  if (!isLoaded) return null;
+  const plus = <span aria-hidden className="text-white/45 transition-colors duration-150 group-hover:text-accent/60">+</span>;
+  if (!isSignedIn) {
+    return (
+      <li>
+        <Link href={signInHref(pathname)} onClick={onDone} style={style} className={rowClassName}>
+          {plus}
+          Sign in
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li className="grid justify-items-start gap-2">
+      <button
+        type="button"
+        aria-disabled={busy || undefined}
+        aria-describedby={noteId}
+        onClick={() => !busy && signOut()}
+        style={style}
+        className={rowClassName}
+      >
+        {plus}
+        {busy ? "Signing out…" : "Sign out"}
+      </button>
+      <InlineNote id={noteId} size="item" tone="error">
+        {note}
+      </InlineNote>
+    </li>
+  );
+}
+
+/**
  * Hide on the way down, return on the way up, after the first 10px — white-desert.com's nav
  * (`yPercent: -100` over 0.3s on sine), read off AppShell's content overlay (the window never
  * scrolls here). Reduced motion keeps the behaviour and drops the slide.
@@ -287,6 +520,23 @@ export default function Navbar() {
     requestPlan();
   }
 
+  const profileLink = showProfile && (
+    <span className={isHome ? "hidden sm:inline-flex" : "inline-flex"}>
+      <Link href="/profile" aria-current={isProfile ? "page" : undefined} className={navLink(isProfile)}>
+        Profile
+      </Link>
+    </span>
+  );
+
+  // Each phone-menu row settles in 60ms after the one above it; the account row is one more.
+  const menuRows = MENU_ITEMS.length + (ACCOUNTS ? 1 : 0);
+  const rowStyle = (index: number): React.CSSProperties => ({
+    opacity: menuOpen ? 1 : 0,
+    transform: menuOpen ? "translateY(0)" : "translateY(-6px)",
+    transitionDelay: `${index * 60}ms`,
+  });
+  const menuRow = `${menuItem()} transition-[opacity,transform,color] duration-300`;
+
   function scrollToSection(e: React.MouseEvent, id: string) {
     e.preventDefault();
     setMenuOpen(false);
@@ -356,14 +606,10 @@ export default function Navbar() {
           </span>
         )}
         {/* On a phone the landing moves Profile into the menu panel, where MENU_ITEMS carries it, and a
-            plan on the map keeps the bar to My memories so the two chips do not crowd the wordmark. */}
-        {showProfile && (
-          <span className={isHome ? "hidden sm:inline-flex" : "inline-flex"}>
-            <Link href="/profile" aria-current={isProfile ? "page" : undefined} className={navLink(isProfile)}>
-              Profile
-            </Link>
-          </span>
-        )}
+            plan on the map keeps the bar to My memories so the two chips do not crowd the wordmark.
+            With accounts, NavAccount decides: this chip signed out, the avatar signed in — and on
+            the planner too, from `sm`, where the bar has the room. */}
+        {ACCOUNTS ? <NavAccount pathname={pathname} onLanding={onLanding} profileLink={profileLink} navHidden={hidden && !menuOpen} /> : profileLink}
         {/* The landing's one "Plan a trip" above the fold; the hero carries none. Visible on every width
             (owner ruling 2026-10-16, as the MagicPath design shows): a phone's first screen needs its
             call to action, so it sits beside the menu button rather than behind it. `.polar-nav-cta`
@@ -449,11 +695,6 @@ export default function Navbar() {
               the element this sits inside is already one. */}
           <ul className="flex flex-col items-start gap-1">
             {MENU_ITEMS.map((item, index) => {
-              const rowStyle: React.CSSProperties = {
-                opacity: menuOpen ? 1 : 0,
-                transform: menuOpen ? "translateY(0)" : "translateY(-6px)",
-                transitionDelay: `${index * 60}ms`,
-              };
               /* The `+` is the reference's and the footer's, at white/45 so it reads as a mark
                  rather than as part of the word, and `aria-hidden` so the accessible name stays
                  "Profile" and not "+Profile". */
@@ -472,7 +713,7 @@ export default function Navbar() {
                       href={`#${item.id}`}
                       onClick={(e) => scrollToSection(e, item.id)}
                       aria-current={activeSection === item.id ? "location" : undefined}
-                      style={rowStyle}
+                      style={rowStyle(index)}
                       className={`${menuItem(activeSection === item.id)} transition-[opacity,transform,color] duration-300`}
                     >
                       {plus}
@@ -482,8 +723,8 @@ export default function Navbar() {
                     <Link
                       href={item.href}
                       onClick={() => setMenuOpen(false)}
-                      style={rowStyle}
-                      className={`${menuItem()} transition-[opacity,transform,color] duration-300`}
+                      style={rowStyle(index)}
+                      className={menuRow}
                     >
                       {plus}
                       {item.label}
@@ -492,6 +733,9 @@ export default function Navbar() {
                 </li>
               );
             })}
+            {ACCOUNTS && (
+              <MenuAccountRow pathname={pathname} rowClassName={menuRow} style={rowStyle(MENU_ITEMS.length)} onDone={() => setMenuOpen(false)} />
+            )}
           </ul>
 
           {/* The floor. `mt-auto` rather than a bottom offset, so the button is pinned by the
@@ -505,7 +749,7 @@ export default function Navbar() {
             onClick={planFromMenu}
             style={{
               opacity: menuOpen ? 1 : 0,
-              transitionDelay: `${MENU_ITEMS.length * 60}ms`,
+              transitionDelay: `${menuRows * 60}ms`,
             }}
             className="polar-nav-cta mt-auto w-full justify-center py-5 transition-[opacity,background-color] duration-300"
           >

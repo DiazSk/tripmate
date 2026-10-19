@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { closestCenter, pointerWithin, type CollisionDetection } from "@dnd-kit/core";
+import {
+  closestCenter,
+  closestCorners,
+  pointerWithin,
+  type Announcements,
+  type CollisionDetection,
+} from "@dnd-kit/core";
+import type { DayPlan } from "./types";
 
 /**
  * Shared plumbing for the two drag surfaces (the itinerary card's stop list and Focus Mode's day
@@ -42,13 +49,64 @@ export function parseDragId(raw: string | number | null | undefined): DragId {
  * `closestCenter` alone made the day tabs and stepper arrows nearly impossible to hit: they are
  * small, they sit outside the list, and the centre of a tall stop row is almost always nearer to
  * the dragged row's centre than the centre of a 32px arrow. Whatever the pointer is actually over
- * wins now, and `closestCenter` only arbitrates when the pointer is over nothing (which is what
- * keyboard dragging needs, since it has no pointer at all).
+ * wins now, and `closestCenter` only arbitrates when the pointer is over nothing.
+ *
+ * **A keyboard drag has no pointer, and gets `closestCorners`.** That is the pairing dnd-kit's
+ * `sortableKeyboardCoordinates` is written against: it picks the next row by closest corners and
+ * moves the dragged rect onto that row's edge, so judging the landing by centres can disagree with
+ * the step it just took. In the editor the day's whole list is a drop target too (`day:N`), and
+ * when a short row steps onto a tall one the list's centre can sit nearer than the row's, so
+ * Space-Arrow-Space dropped on the day it started in and moved nothing. Corners cannot confuse a
+ * row-sized rect with a list-sized one.
  */
 export const dropCollision: CollisionDetection = (args) => {
+  if (!args.pointerCoordinates) return closestCorners(args);
   const underPointer = pointerWithin(args);
   return underPointer.length > 0 ? underPointer : closestCenter(args);
 };
+
+/**
+ * What the drag surfaces' live region says, in words rather than ids.
+ *
+ * dnd-kit's default reads the ids out ("Draggable item stop:0:0 was dropped over droppable area
+ * stop:0:1"). Positions are 1-based and counted the way `moveStop` places the stop: the slot it
+ * takes in the day it lands in. The drop line names no stop on purpose: it is read after the drop
+ * has been committed, when `stop:d:i` already names whichever stop now sits in that slot.
+ */
+export function stopAnnouncements(days: DayPlan[]): Announcements {
+  const nameOf = (id: string | number) => {
+    const ref = parseDragId(id);
+    return ref?.kind === "stop" ? days[ref.dayIndex]?.stops[ref.stopIndex]?.name ?? "the stop" : "the stop";
+  };
+  const fromDay = (id: string | number) => {
+    const ref = parseDragId(id);
+    return ref?.kind === "stop" ? ref.dayIndex : null;
+  };
+  return {
+    onDragStart: ({ active }) => `Picked up “${nameOf(active.id)}”.`,
+    onDragOver: ({ active, over }) => {
+      const target = parseDragId(over?.id);
+      if (!target) return `${nameOf(active.id)} is not over a place it can go.`;
+      if (target.kind === "day") return `Over day ${target.dayIndex + 1}. Drop to move it there.`;
+      const sameDay = target.dayIndex === fromDay(active.id);
+      const count = (days[target.dayIndex]?.stops.length ?? 0) + (sameDay ? 0 : 1);
+      return `Moved to position ${target.stopIndex + 1} of ${count}${sameDay ? "" : ` on day ${target.dayIndex + 1}`}.`;
+    },
+    onDragEnd: ({ active, over }) => {
+      const target = parseDragId(over?.id);
+      if (target?.kind === "stop") {
+        return target.dayIndex === fromDay(active.id)
+          ? `Dropped at position ${target.stopIndex + 1}.`
+          : `Dropped on day ${target.dayIndex + 1} at position ${target.stopIndex + 1}.`;
+      }
+      if (target?.kind === "day" && target.dayIndex !== fromDay(active.id)) {
+        return `Moved to day ${target.dayIndex + 1}.`;
+      }
+      return "Dropped. Nothing moved.";
+    },
+    onDragCancel: ({ active }) => `Cancelled. ${nameOf(active.id)} is back where it was.`,
+  };
+}
 
 /** What to do with a dwell request. Pure, because the rule is what keeps breaking, not the timer. */
 export type DwellVerdict = "clear" | "ignore" | "start";

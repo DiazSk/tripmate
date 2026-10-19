@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -24,10 +24,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, MapPin, Plus, Search, Trash2, X } from "lucide-react";
 
 import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
-import { dayDropId, dropCollision, parseDragId, stopDragId } from "@/lib/dragDrop";
+import { dayDropId, dropCollision, parseDragId, stopAnnouncements, stopDragId } from "@/lib/dragDrop";
 import { evaluateItinerary } from "@/lib/guardrails";
 import { insertionIndexByTime, moveStop } from "@/lib/schedule";
-import { formatItineraryDate } from "@/lib/itinerary";
+import { formatClock, formatItineraryDate, parseClock } from "@/lib/itinerary";
 import { useHoverPeekSuspended, useMapCamera } from "@/lib/mapCamera";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { addDay, deleteStop, insertStop, updateStop } from "@/lib/itineraryEdits";
@@ -194,7 +194,7 @@ export default function SplitEditor({
   const targetDay = activeDay ?? 0;
 
   const commitNewStop = (name: string, lat: number, lng: number) => {
-    onItineraryChange(insertStop(itinerary, targetDay, { name, lat, lng }), `${name} on day ${targetDay + 1}`);
+    onItineraryChange(insertStop(itinerary, targetDay, { name, lat, lng }), `${name.trim()} on day ${targetDay + 1}`);
     setNearby(null);
     setPickingOnMap(false);
     setSearch("");
@@ -248,9 +248,28 @@ export default function SplitEditor({
     onItineraryChange(moveStop(itinerary, from, { dayIndex: target.dayIndex, stopIndex: at }), "Your new stop order");
   };
 
+  // A day just added (or picked) can sit past the strip's scrolled edge; "All Days" leads the row,
+  // so day N is child N + 1.
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabsRef.current?.children[(activeDay ?? -1) + 1]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeDay, itinerary.days.length]);
+
+  if (typeof document === "undefined") return null;
+
   const visibleDays = activeDay === null ? itinerary.days.map((_, i) => i) : [activeDay];
   /** The trip page draws the editor in Polar (canvas "Trip page · B"); light is only ever that. */
   const polar = appearance === "light";
+
+  const dragOverlay = (
+    <DragOverlay dropAnimation={null}>
+      {dragging && (
+        <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
+          {dragging.stop.name}
+        </div>
+      )}
+    </DragOverlay>
+  );
 
   const panel = (
     <div
@@ -334,7 +353,7 @@ export default function SplitEditor({
           the state the map opens in and the only one in which a cross-day drag has both ends on
           screen. */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-card-border px-5 py-2.5 sm:px-6">
-        <div className="scrollbar-none flex flex-1 gap-1.5 overflow-x-auto">
+        <div ref={tabsRef} className="scrollbar-none flex flex-1 gap-1.5 overflow-x-auto">
           <DayTab active={activeDay === null} onClick={() => setActiveDay(null)} first polar={polar}>
             All Days
           </DayTab>
@@ -387,6 +406,7 @@ export default function SplitEditor({
         sensors={sensors}
         collisionDetection={dropCollision}
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        accessibility={{ announcements: stopAnnouncements(itinerary.days) }}
         onDragStart={(e: DragStartEvent) => {
           const from = parseDragId(e.active.id);
           if (from?.kind !== "stop") return;
@@ -434,13 +454,12 @@ export default function SplitEditor({
           ))}
         </div>
 
-        <DragOverlay dropAnimation={null}>
-          {dragging && (
-            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
-              {dragging.stop.name}
-            </div>
-          )}
-        </DragOverlay>
+        {/* The glass panel's `backdrop-filter` makes it the containing block for this
+            `position: fixed` chip, which then draws offset by the panel's corner, and dnd-kit
+            measures collisions from the chip, so keyboard moves land wrong too. So on glass it is
+            portalled out. The Polar panel has no filter (and its entrance animation fills
+            `backwards` for the same reason), and keeps the chip inside for its `.tm` type. */}
+        {polar ? dragOverlay : createPortal(dragOverlay, document.body)}
       </DndContext>
 
       {findings.some((f) => f.dayIndex === null) && (
@@ -458,7 +477,7 @@ export default function SplitEditor({
     </div>
   );
 
-  return typeof document === "undefined" ? null : createPortal(panel, document.body);
+  return createPortal(panel, document.body);
 }
 
 /**
@@ -754,10 +773,13 @@ function EditableStopCard({
   onDelete: () => void;
   onMoveToDay: (toDay: number) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-  });
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+  const noteId = useId();
+  /** The field whose last commit was refused, for the note under the card (copy rows T-73a/b). */
+  const [refused, setRefused] = useState<"name" | "time" | null>(null);
+  const report = (field: "name" | "time") => (bad: boolean) =>
+    setRefused((r) => (bad ? field : r === field ? null : r));
 
   return (
     <div
@@ -777,7 +799,7 @@ function EditableStopCard({
             one — these cards carry text inputs, and a card-wide handle would swallow the caret. */}
         <button
           type="button"
-          ref={setNodeRef as unknown as React.Ref<HTMLButtonElement>}
+          ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
           aria-label={`Reorder ${stop.name}`}
@@ -787,31 +809,46 @@ function EditableStopCard({
           <GripVertical className="h-4 w-4" />
         </button>
 
-        <div className="min-w-0 flex-1 space-y-1">
-          <input
-            ref={inputRef}
+        <div className="min-w-0 flex-1">
+          <DraftInput
             value={stop.name}
-            onChange={(e) => onEdit({ name: e.target.value })}
-            onClick={(e) => e.stopPropagation()}
+            normalize={(v) => v.trim() || null}
+            onCommit={(name) => onEdit({ name })}
+            onRefused={report("name")}
             aria-label="Stop name"
+            aria-invalid={refused === "name" || undefined}
+            aria-describedby={noteId}
             className="w-full truncate rounded bg-transparent text-sm font-medium text-foreground focus:bg-white/10 focus:outline-none"
           />
-          <div className="flex items-center gap-1.5">
-            <input
+          <div className="mt-1 flex items-center gap-1.5">
+            <DraftInput
               value={stop.time}
-              onChange={(e) => onEdit({ time: e.target.value })}
-              onClick={(e) => e.stopPropagation()}
+              // The itinerary's own clock ("9:30 AM"), whatever was typed ("14:00", "9am").
+              normalize={(v) => {
+                const minutes = parseClock(v);
+                return minutes === null ? null : formatClock(minutes);
+              }}
+              onCommit={(time) => onEdit({ time })}
+              onRefused={report("time")}
               aria-label="Time"
-              className="w-16 shrink-0 rounded bg-transparent text-xs text-muted focus:bg-white/10 focus:outline-none"
+              aria-invalid={refused === "time" || undefined}
+              aria-describedby={noteId}
+              placeholder="9:30 AM"
+              className="w-16 shrink-0 rounded bg-transparent text-xs text-muted placeholder:text-muted/60 focus:bg-white/10 focus:outline-none"
             />
-            <input
+            <DraftInput
               value={stop.note}
-              onChange={(e) => onEdit({ note: e.target.value })}
-              onClick={(e) => e.stopPropagation()}
+              onCommit={(note) => onEdit({ note })}
               aria-label="Note"
               placeholder="Note…"
               className="min-w-0 flex-1 truncate rounded bg-transparent text-xs text-muted placeholder:text-muted/60 focus:bg-white/10 focus:outline-none"
             />
+          </div>
+          {/* Mounted empty so it is announced, as the add-stop note is. */}
+          <div className={refused ? "mt-1" : ""}>
+            <InlineNote size="field" tone="error" id={noteId}>
+              {refused === "name" ? "A stop needs a name." : refused === "time" ? "Times look like 9:30 AM." : ""}
+            </InlineNote>
           </div>
         </div>
 
@@ -846,5 +883,62 @@ function EditableStopCard({
       </div>
       <span className="sr-only">{`Stop ${stopIndex + 1}`}</span>
     </div>
+  );
+}
+
+/**
+ * A card field that keeps its keystrokes to itself and commits once, on blur or Enter.
+ *
+ * Each `onChange` used to be an edit, and every edit on the trip page is a full-plan PATCH: typing
+ * "Siena" sent five writes, each a chance to fail and each racing the last. `normalize` turns
+ * the draft into the value to save, or refuses it (`null`), in which case the last good value comes
+ * back and `onRefused` says so. A field still holding a draft when the editor unmounts (closed from
+ * the keyboard, where no blur arrives) commits it then, so nothing typed is lost.
+ */
+function DraftInput({
+  value,
+  onCommit,
+  normalize = (v) => v,
+  onRefused,
+  ...rest
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  normalize?: (draft: string) => string | null;
+  onRefused?: (refused: boolean) => void;
+} & Omit<React.ComponentProps<"input">, "value" | "onChange" | "onBlur">) {
+  const [draft, setDraft] = useState<string | null>(null);
+  // Mirrors `draft` for the unmount flush, which runs after the last render's state is gone.
+  const pending = useRef<string | null>(null);
+
+  const commit = () => {
+    const raw = pending.current;
+    pending.current = null;
+    setDraft(null);
+    if (raw === null) return;
+    const next = raw === value ? value : normalize(raw);
+    onRefused?.(next === null);
+    if (next !== null && next !== value) onCommit(next);
+  };
+  const flush = useRef(commit);
+  useEffect(() => {
+    flush.current = commit;
+  });
+  useEffect(() => () => flush.current(), []);
+
+  return (
+    <input
+      {...rest}
+      value={draft ?? value}
+      onChange={(e) => {
+        pending.current = e.target.value;
+        setDraft(e.target.value);
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+      onClick={(e) => e.stopPropagation()}
+    />
   );
 }

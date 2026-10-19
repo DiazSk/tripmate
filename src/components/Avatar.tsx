@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import InlineNote from "@/components/InlineNote";
-import { avatarTint, initialsFor } from "@/lib/avatar";
+import { AVATAR_EVENT, avatarTint, initialsFor } from "@/lib/avatar";
 import { squareJpeg } from "@/lib/avatarImage";
 import { failureFromResponse, failureFromThrown, type Failure } from "@/lib/failure";
 
@@ -51,6 +51,11 @@ export default function Avatar({
   const router = useRouter();
   const noteId = useId();
 
+  function changed(next: string | null) {
+    onChange?.(next);
+    window.dispatchEvent(new CustomEvent(AVATAR_EVENT, { detail: next }));
+  }
+
   async function upload(file: File) {
     setBusy(true);
     setError(null);
@@ -71,7 +76,7 @@ export default function Avatar({
       }
       const json = (await res.json().catch(() => ({}))) as { image?: string };
       if (!json.image) setError(uploadNote({ kind: "server" }));
-      else onChange?.(json.image);
+      else changed(json.image);
     } catch (e) {
       setError(uploadNote(failureFromThrown(e)));
     } finally {
@@ -86,7 +91,7 @@ export default function Avatar({
     try {
       const res = await fetch("/api/avatar", { method: "DELETE" });
       if (!res.ok) setError(removeNote(await failureFromResponse(res, "edit")));
-      else onChange?.(null);
+      else changed(null);
     } catch (e) {
       setError(removeNote(failureFromThrown(e)));
     } finally {

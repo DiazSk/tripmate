@@ -678,6 +678,11 @@ adds a Plan a trip CTA in signal. The bar hides on scroll down and returns on sc
 the links collapse into a full-screen menu (not a dropdown). The landing's CTA stays visible on phones
 (2026-10-16 ruling, as the design shows): beside the menu button, 44px tall with tighter padding
 below `sm`, back to the chips' 2.5rem from `sm`.
+With accounts configured, the trailing cell carries the account control: signed out, an outlined
+Sign in chip (a 1px frost hairline inset) beside Profile, from the width where the cell has room for it; signed in, a 32px avatar (44px
+under a coarse pointer) in Profile's place that opens a small menu in the nav's slate at 0.96 (name
+and email, then Profile and Sign out, 44px rows). Hidden during a film. Monuments are
+`pointer-events: none`, so none can sit over a control again.
 
 ### The Monument (signature)
 A place's name set in Oswald across the full width of its photograph — PETRA on the landing hero,

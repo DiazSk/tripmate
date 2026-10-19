@@ -18,7 +18,7 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { monumentEms } from "@/lib/monumentFit";
 import { city } from "@/lib/memories";
 import { profileSentence } from "@/lib/profileSentence";
-import { useClerk } from "@clerk/nextjs";
+import { useSignOut } from "@/lib/useSignOut";
 import InlineNote from "@/components/InlineNote";
 import { failureFromResponse, failureFromThrown, type Failure } from "@/lib/failure";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
@@ -194,50 +194,21 @@ function Masthead({
 }
 
 /**
- * Its own component so `useClerk()` only runs where an account exists: the hook throws without a
- * `ClerkProvider`, and the layout mounts one only when Clerk is configured. A signed-in traveller
- * implies it is; the signed-out branch never renders this.
+ * Its own component so `useClerk()` (inside `useSignOut`) only runs where an account exists: the hook
+ * throws without a `ClerkProvider`, and the layout mounts one only when Clerk is configured. A
+ * signed-in traveller implies it is; the signed-out branch never renders this.
  */
 function SignOutButton() {
-  const { signOut } = useClerk();
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  // Copy rows F-15, F-16. Kept mounted, empty, so the note is read when its words arrive.
-  const [note, setNote] = useState("");
+  const { signOut, busy, note, noteId } = useSignOut();
   return (
     <>
-    <button
-      type="button"
-      disabled={busy}
-      className="pb-out"
-      aria-describedby="signout-note"
-      onClick={async () => {
-        setBusy(true);
-        setNote("");
-        try {
-          await signOut();
-        } catch {
-          // A failed sign-out leaves the traveller signed in: say so, and put the button back so they can retry.
-          setBusy(false);
-          setNote(
-            navigator.onLine
-              ? "You’re still signed in: the sign-in service didn’t answer. Press Sign out to try again."
-              : "You’re offline, so you’re still signed in. Press Sign out again once you’re back online.",
-          );
-          return;
-        }
-        // `refresh()` rather than a reload: every owner-scoped server component on this route and
-        // the next one has to re-read, and a router cache holding the signed-in render would show
-        // this traveller their trips after they asked to be signed out.
-        router.refresh();
-        router.push("/");
-      }}
-    >
-      {busy ? "Signing out…" : "Sign out"}
-    </button>
-    <InlineNote id="signout-note" size="item" tone="error">
-      {note}
-    </InlineNote>
+      <button type="button" disabled={busy} className="pb-out" aria-describedby={noteId} onClick={signOut}>
+        {busy ? "Signing out…" : "Sign out"}
+      </button>
+      {/* Copy rows F-15, F-16. Kept mounted, empty, so the note is read when its words arrive. */}
+      <InlineNote id={noteId} size="item" tone="error">
+        {note}
+      </InlineNote>
     </>
   );
 }

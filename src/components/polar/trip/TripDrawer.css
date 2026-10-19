@@ -607,7 +607,8 @@ html[data-story-mode="true"] .tm.trip-drawer {
   border: 0;
   border-radius: var(--wd-radius-card);
   box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.7);
-  animation: trip-drawer-in 0.4s var(--wd-ease-reveal) both;
+  /* `backwards`: it holds the DragOverlay. See `.trip-drawer` in TripBoard.css. */
+  animation: trip-drawer-in 0.4s var(--wd-ease-reveal) backwards;
 }
 .td-edit-head {
   display: flex;

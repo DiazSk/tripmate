@@ -797,7 +797,12 @@
   border-radius: 0.375rem;
   box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.7);
   overflow: hidden;
-  animation: trip-drawer-in 0.4s var(--wd-ease-reveal) both;
+  /* `backwards`, never `both`: a transform animation still filling after it ends makes the drawer
+     the containing block for `position: fixed` children, and dnd-kit's DragOverlay is one. With
+     `both` the dragged chip drew offset by the drawer's own corner (off-screen on a laptop), and
+     because dnd-kit measures collisions from that chip, keyboard moves skipped a row. Same on
+     `.split-editor.is-polar` in TripDrawer.css. */
+  animation: trip-drawer-in 0.4s var(--wd-ease-reveal) backwards;
 }
 .trip-drawer-body {
   flex: 1;

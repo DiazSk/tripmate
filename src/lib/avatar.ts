@@ -6,6 +6,9 @@
  * Hermes has no Node globals; `atob` and `Uint8Array` exist in both runtimes.
  */
 
+/** Web: fired on `window` with the new image url (or null) when the traveller changes their photo, so the navbar's avatar follows. */
+export const AVATAR_EVENT = "tripmate:avatar";
+
 export const AVATAR_MIMES = ["image/jpeg", "image/png", "image/webp"] as const;
 export type AvatarMime = (typeof AVATAR_MIMES)[number];
 

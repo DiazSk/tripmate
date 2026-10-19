@@ -3,6 +3,7 @@
 // unloadable from a `.test.mjs` with "does not provide an export named 'DayPlan'". See the
 // note in CLAUDE.md; this is the same trap that keeps `generationRunner.ts` script-unreachable.
 import type { DayPlan, Itinerary, Stop } from "./types";
+import { appendedStartTime } from "./schedule";
 
 /**
  * The whole-itinerary edits the split editor performs, as pure functions.
@@ -75,9 +76,10 @@ export function addDay(itinerary: Itinerary, todayIso?: string): Itinerary {
   return { ...itinerary, days: [...itinerary.days, day] };
 }
 
-/** Insert a stop into a day, positioned by clock time when it has one and appended when it does
- *  not — a hand-added stop starts with no time, and guessing a slot for it would move the day's
- *  existing stops around for no reason the traveler asked for. */
+/** Append a stop to a day, timed where the day's own arithmetic puts the next stop
+ *  (`appendedStartTime`). Appended rather than slotted: guessing a slot for it would move the day's
+ *  existing stops around for no reason the traveler asked for. The name is trimmed, since a lookup
+ *  can hand one back with a leading space. */
 export function insertStop(
   itinerary: Itinerary,
   dayIndex: number,
@@ -85,7 +87,8 @@ export function insertStop(
 ): Itinerary {
   const day = itinerary.days[dayIndex];
   if (!day) return itinerary;
-  const next = newStop(stop.name, stop.lat, stop.lng);
+  const next = newStop(stop.name.trim(), stop.lat, stop.lng);
+  next.time = appendedStartTime(day, next);
   const days = itinerary.days.map((d, i) =>
     i === dayIndex ? { ...d, stops: [...d.stops, next] } : d
   );

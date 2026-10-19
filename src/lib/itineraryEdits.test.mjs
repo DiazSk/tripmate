@@ -108,3 +108,20 @@ test("a malformed date is returned as-is rather than becoming Invalid Date", () 
   const next = addDay(trip([{ date: "not-a-date", weather: "", stops: [] }]));
   assert.equal(next.days[1].date, "not-a-date");
 });
+
+test("a stop added to a day is trimmed and timed after the day's last stop", () => {
+  const timed = { ...stop("A", "9:00 AM"), durationLabel: "2 hours" };
+  const after = insertStop(trip([{ date: "2026-09-19", weather: "", stops: [timed] }]), 0, {
+    name: " Montalcino",
+    lat: 1,
+    lng: 2,
+  });
+  const added = after.days[0].stops[1];
+  assert.equal(added.name, "Montalcino");
+  // 9:00, the two-hour visit, a one-minute leg (the floor, same place), rounded up to the slot.
+  assert.equal(added.time, "11:05 AM");
+
+  // An empty day starts at the day's default; an untimed last stop gives nothing to count from.
+  assert.equal(insertStop(trip([{ date: "2026-09-19", weather: "", stops: [] }]), 0, { name: "X", lat: 0, lng: 0 }).days[0].stops[0].time, "9:00 AM");
+  assert.equal(insertStop(trip([{ date: "2026-09-19", weather: "", stops: [stop("A")] }]), 0, { name: "X", lat: 0, lng: 0 }).days[0].stops[1].time, "");
+});

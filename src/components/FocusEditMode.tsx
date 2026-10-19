@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   DndContext,
@@ -22,7 +22,7 @@ import DayTimeline, { ChangedStops } from "./DayTimeline";
 import { Itinerary, Stop, TripSummary, UserAnswers } from "@/lib/types";
 import { evaluateItinerary } from "@/lib/guardrails";
 import { insertionIndexByTime, moveStop } from "@/lib/schedule";
-import { dayDropId, dropCollision, parseDragId, useDayDwellSwitch } from "@/lib/dragDrop";
+import { dayDropId, dropCollision, parseDragId, stopAnnouncements, useDayDwellSwitch } from "@/lib/dragDrop";
 import { devLabel } from "@/lib/devInspector";
 import { formatItineraryDate } from "@/lib/itinerary";
 
@@ -231,6 +231,15 @@ export default function FocusEditMode({
 
   const dwell = useDayDwellSwitch((next) => setPreviewDayIndex(next));
 
+  // The day on screen, scrolled into the chip strip on open, after each switch, and when a phone
+  // shows the preview pane (hidden, it has nothing to scroll). Never mid-drag: scrolling the strip
+  // would move the drop targets out from under the pointer.
+  const chipsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (dragging) return;
+    chipsRef.current?.children[previewIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [previewIndex, dragging, mobilePane]);
+
   if (!day) return null;
 
   /** The glass card's classes, or the Polar drawer's. Same elements, same behaviour. */
@@ -407,6 +416,7 @@ export default function FocusEditMode({
         collisionDetection={dropCollision}
         // The previewed day can change mid-drag, which replaces every row in the pane.
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        accessibility={{ announcements: stopAnnouncements(draft.days) }}
         onDragStart={(e: DragStartEvent) => {
           const from = parseDragId(e.active.id);
           if (from?.kind !== "stop") return;
@@ -462,8 +472,10 @@ export default function FocusEditMode({
                 {/* Every day is one hover away, and every chip's id is the day it names — so the
                     target under the pointer still means the same day after a switch. Scrollable
                     rather than wrapping, so the strip's height can't change mid-drag and move the
-                    targets out from under the pointer. */}
-                <div className="scrollbar-none flex flex-1 items-center justify-center gap-1 overflow-x-auto">
+                    targets out from under the pointer. `safe` centring: plain centring on a
+                    row wider than its box pushes the first chips past the left edge, where no
+                    scroll can reach them. */}
+                <div ref={chipsRef} className="scrollbar-none flex flex-1 items-center justify-center-safe gap-1 overflow-x-auto">
                   {draft.days.map((d, i) => (
                     <DayDropChip
                       key={i}
@@ -530,7 +542,9 @@ export default function FocusEditMode({
         </div>
       </div>
 
-      {/* Portalled so the dragged row isn't clipped by the preview pane's own scroll box. */}
+      {/* Fixed-position, so the preview pane's scroll box can't clip it — which holds only while no
+          ancestor has a transform or filter. The drawer's entrance animation fills `backwards`
+          for exactly that reason (TripBoard.css). */}
       <DragOverlay dropAnimation={null}>
         {dragging && (
           <div className={k("pointer-events-none rounded-lg border border-accent/40 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-1.5 text-sm font-medium text-foreground shadow-2xl", "td-drag")}>

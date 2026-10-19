@@ -5,7 +5,7 @@
  * possible failure for a gesture nobody asked to be undoable. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dayDropId, dwellVerdict, parseDragId, stopDragId } from "./dragDrop.ts";
+import { dayDropId, dropCollision, dwellVerdict, parseDragId, stopAnnouncements, stopDragId } from "./dragDrop.ts";
 
 test("stop and day ids round-trip through parseDragId", () => {
   assert.deepEqual(parseDragId(stopDragId(2, 5)), { kind: "stop", dayIndex: 2, stopIndex: 5 });
@@ -61,4 +61,72 @@ test("dwellVerdict refuses to switch again inside the cooldown", () => {
     dwellVerdict({ requested: null, pending: 1, msSinceLastSwitch: 0, cooldownMs: 900 }),
     "clear"
   );
+});
+
+const rect = (top, height, left = 0, width = 300) => ({
+  top, left, width, height, bottom: top + height, right: left + width,
+});
+
+/** Day 0's list as the editor lays it out: three rows (a short one stepping onto a tall one) inside
+ *  the day's own drop target, which is the whole list. */
+function editorList() {
+  const rows = [rect(0, 40), rect(48, 100), rect(156, 80)];
+  const ids = [stopDragId(0, 0), stopDragId(0, 1), stopDragId(0, 2), dayDropId(0)];
+  const droppableRects = new Map([...rows.map((r, i) => [ids[i], r]), [dayDropId(0), rect(0, 236)]]);
+  // The list registered first: what happens after any stop is added, since its id is newer.
+  const droppableContainers = [dayDropId(0), ...ids.slice(0, 3)].map((id) => ({ id }));
+  return { droppableRects, droppableContainers };
+}
+
+test("a keyboard step lands on the row it stepped to, not on the day's list", () => {
+  // sortableKeyboardCoordinates moves row 0 (40px) onto row 1's bottom edge. By centres the list
+  // (centre 118) is nearer than row 1 (centre 98) to the moved rect (centre 128), so the drop
+  // resolved to the day it started in and nothing moved.
+  const [hit] = dropCollision({
+    active: { id: stopDragId(0, 0) },
+    collisionRect: rect(108, 40),
+    pointerCoordinates: null,
+    ...editorList(),
+  });
+  assert.equal(hit.id, stopDragId(0, 1));
+});
+
+test("with a pointer, whatever is under it still wins", () => {
+  const [hit] = dropCollision({
+    active: { id: stopDragId(0, 0) },
+    collisionRect: rect(108, 40),
+    pointerCoordinates: { x: 10, y: 200 },
+    ...editorList(),
+  });
+  // Row 2 and the list both contain the point; the smaller target is the one meant.
+  assert.equal(hit.id, stopDragId(0, 2));
+});
+
+test("the live region speaks names and positions, never ids", () => {
+  const days = [
+    { date: "2026-09-19", weather: "", stops: [{ name: "Duomo" }, { name: "Uffizi" }, { name: "Ponte Vecchio" }] },
+    { date: "2026-09-20", weather: "", stops: [{ name: "Siena" }] },
+  ];
+  const say = stopAnnouncements(days);
+  const active = { id: stopDragId(0, 0) };
+  const over = (id) => ({ id });
+  const all = [
+    say.onDragStart({ active }),
+    say.onDragOver({ active, over: over(stopDragId(0, 2)) }),
+    say.onDragOver({ active, over: over(stopDragId(1, 0)) }),
+    say.onDragOver({ active, over: over(dayDropId(1)) }),
+    say.onDragEnd({ active, over: over(stopDragId(0, 2)) }),
+    say.onDragEnd({ active, over: over(dayDropId(0)) }),
+    say.onDragCancel({ active, over: null }),
+  ];
+  assert.deepEqual(all, [
+    "Picked up “Duomo”.",
+    "Moved to position 3 of 3.",
+    "Moved to position 1 of 2 on day 2.",
+    "Over day 2. Drop to move it there.",
+    "Dropped at position 3.",
+    "Dropped. Nothing moved.",
+    "Cancelled. Duomo is back where it was.",
+  ]);
+  for (const line of all) assert.doesNotMatch(line, /stop:|day:/);
 });

@@ -1758,6 +1758,84 @@ html[data-story-mode="true"] .marker-day-label {
   background: var(--accent-hover);
 }
 
+/* The account control (Navbar.tsx's NavAccount). Sign in is a chip with a frost hairline round it:
+   clearly a button beside the plain chips, and still quiet next to the signal CTA — the signal is
+   the landing's one call to action, and signing in is not it. */
+.polar-nav-signin {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+.polar-nav-signin:hover {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+/* The avatar's menu. The nav's slate in look, but near-opaque in fact: the bar's own backdrop-filter
+   makes it the backdrop root for everything inside it, so a blur here would sample only the bar and
+   the page would show through unblurred. More alpha within the one slate, as `.glass-nav-menu`. */
+.nav-account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: max-content;
+  min-width: 15rem;
+  max-width: min(20rem, calc(100vw - 2rem));
+  padding: 0.375rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.375rem;
+  background: rgb(var(--surface-deep-rgb) / 0.96);
+  box-shadow: 0 1rem 2rem -0.75rem rgba(0, 0, 0, 0.55);
+  color: var(--foreground);
+  outline: none;
+}
+.nav-account-who {
+  margin-bottom: 0.25rem;
+  padding: 0.5rem 0.625rem 0.625rem;
+  border-bottom: 1px solid var(--card-border);
+}
+.nav-account-who p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-account-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.nav-account-email {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.nav-account-item {
+  display: flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0 0.625rem;
+  border-radius: 2px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  color: inherit;
+  transition: background-color 0.15s;
+}
+.nav-account-item:hover,
+.nav-account-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+.nav-account-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.nav-account-item[aria-disabled="true"] {
+  opacity: 0.6;
+}
+.nav-account-menu .inline-note:not(:empty) {
+  padding: 0.375rem 0.625rem 0.25rem;
+}
+/* A film keeps the bar (its way out) but not the account control. */
+html[data-story-mode="true"] .nav-account {
+  display: none;
+}
+
 
 /* The mobile menu panel, not the bar itself. It used to be a dropdown at 0.85 of the one
    slate — the more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` take over

@@ -171,6 +171,19 @@ export function travellerTimes(itinerary: Pick<Itinerary, "origin">): ScheduleOp
   return (stop) => !stop.estimated?.includes("time");
 }
 
+/**
+ * When a stop appended to a day starts: `rescheduleDay`'s own cursor for the last slot (the last
+ * stop's start, its visit, the leg over, rounded up to a slot), without re-timing anything already
+ * there. 9:00 on an empty day; "" when the last stop has no readable time to count from.
+ */
+export function appendedStartTime(day: DayPlan, stop: Stop, modes?: TransportMode[]): string {
+  const last = day.stops[day.stops.length - 1];
+  if (!last) return formatClock(DEFAULT_DAY_START_MIN);
+  const start = parseClock(last.time ?? "");
+  if (start === null) return "";
+  return formatClock(roundUpToSlot(start + parseDuration(last.durationLabel ?? "") + legMinutes(last, stop, modes)));
+}
+
 /** Where a stop dropped on another day should land: after the last stop it would still follow in
  *  clock terms, so a morning stop dropped on a new day doesn't append itself after dinner. */
 export function insertionIndexByTime(day: DayPlan, stop: Stop): number {
