@@ -181,9 +181,15 @@ directly beneath, its geometry copied from
 capsule's `h-14` plus a gap) so the two read as one stack in the column the plan already owned. An
 earlier revision hid the whole panel and floated the narration bottom-centre over the map; that put
 the film's controls nowhere near the control that started it and covered the ground the camera had
-just flown to. What *is* hidden is chrome — the navbar, the map search box, the zoom/2D/tilt/compass
+just flown to. What *is* hidden is chrome — the map search box, the zoom/2D/tilt/compass
 stack and the install prompt, by `display: none` on a wrapper so each keeps its own state. The
-Map/Satellite toggle stays: it chooses the world being filmed rather than acting on the page.
+Map/Satellite toggle stays: it chooses the world being filmed rather than acting on the page. **The
+navbar stays too, and stays usable** — hiding it left a playing film with no visible way out — so
+**leaving the page ends the film**: the provider watches `usePathname()` and any change of path is
+the same `exit()` Esc and Plan take, run as the outgoing path's effect cleanup. Before that, a navbar
+click mid-film left the subtitle, the "Next ·" line and the bar drawn over the next page (the Polar
+landing with Seattle's player on it), still narrating, because the provider and the stage live in
+`AppShell` above every route and nothing about a navigation reaches them on its own.
 `LlmTraceFab` mounts as a sibling of `.app-shell`, above the provider, so no context reaches it —
 `data-story-mode` on `<html>` plus one rule in globals.css is its lever.
 
@@ -207,6 +213,29 @@ read as a slideshow. `tourFlightSeconds` puts the distance in the *flight* rathe
 `tourPacing.ts`, written for the Play tour this replaced; `TOUR_HOLD_MS` is the only part that does
 not transfer, because a film already has a hold — the sentence.
 
+**Every camera move in the film is one flight, `flyToStoryStop` — travel beats included.** A travel
+beat ("Next · On to …") used to walk the camera along the leg's street geometry: a per-frame
+`restoreCamera` loop at no more than 150 m/s that held the beat open until it finished. On a Val
+d'Orcia drive that was one beat of **123 seconds** of street-level panning under a one-line
+sentence, with `landOn` re-seating the camera on the terrain under every sample. It now glides
+straight to the stop it is about — the engine's own eased flight along the line between them, facing
+`legBearingRad` so the next place is ahead — for `travelGlideSeconds` (the stop flight's length,
+stretched toward the line's length, never past 6s), and the stop beat after it has already arrived
+(`arrivedStopRef`). Measured on the same day, MapLibre, platform voice: the film went from 160s to
+132s and from 7,964 to 5,365 WebGL draw calls a second, at 1 frame over 32ms either way (on a quiet
+machine; see the Cesium note below on noise). `pathFollow.ts`,
+`travelFollowSeconds` and `blendHeadingRad` went with the walk; nothing else used them.
+
+**The natural voice shares the GPU with the map, so it synthesises in the holds.** Kokoro runs on
+WebGPU. With it, the same MapLibre film dropped **45 frames over 32ms against 1** on the platform
+voice, 32 of them inside the three longest travel glides, with one main-thread long task in the
+whole film — the GPU, not the page. A beat synthesised its first sentence the moment it began, which
+is exactly when its flight begins. Now the controller asks `warmOn` for the *next* beat's audio from
+the current beat's last sentence, deferred until `storyFlightLeftMs()` says the flight is over
+(warming at the last sentence of a one-line travel beat still landed on its glide: 51 frames), and
+`kokoroVoice` keeps the last twelve sentences' audio (`recent`). Result: **7 frames over 32ms**, worst
+travel glide 2. WASM-while-moving was not needed.
+
 **On Cesium the film's own camera is the cost, and it is not the panel.** Measured: a whole film on
 MapLibre drops **0 frames over 32ms**; the same film on Cesium drops 20-34 per window with 100-280ms
 main-thread stalls, and `display: none` on the entire narration panel while the camera keeps flying
@@ -226,7 +255,14 @@ does, so a deadline set to the full length would come due on a frame that never 
 you came to look at would never sharpen. Second and later passes over the same ground are free on
 both sides — only the first costs anything, which is why any measurement here has to reload first.
 What the chrome can do on top — and now does — is animate on the compositor so it rides through the
-remaining stalls instead of freezing with them.
+remaining stalls instead of freezing with them. **The closing pull-back is a story flight too**
+(`markStoryFlight(2.0)` before `reframeRoute()`): it crosses the most new ground of any move in the
+film, and A/B, two runs each, that beat dropped 1 and 2 frames over 32ms against 14 and 3. The direct
+glide changed little on Cesium — its travel beats were always one flight there (the street walk was
+MapLibre-only); they now carry the leg's heading and a duration, so `inStoryFlight` covers the whole
+glide. **Measure Cesium in repeats, not once:** the same build measured 17, 26, 47 and 65 frames over
+32ms for one Val d'Orcia day on an M4 as background system load rose (a MapLibre control run went from
+1 to 13 over the same hour), so a single before/after pair says nothing.
 
 **The film's camera is `flyToStoryStop`, not `flyToPlace`.** `flyToPlace` pulls back to
 `STOP_CONTEXT_RADIUS_M` and refuses to come nearer than `STOP_MIN_RANGE_M` (3.5km, ~zoom 14.5),
@@ -282,17 +318,28 @@ plays on silently (`speakSilently`) from the sentence the voice failed on; and m
 ordinary English ones (`Bad News` sings the text to a funeral march), so `pickVoice` carries a deny
 list — nothing in a voice's `lang`, `localService` or `default` distinguishes them.
 
-Pause/resume **re-speaks the current sentence from its start** — not the whole beat, and not
-mid-word. `speechSynthesis.pause()`/`resume()` exist and are unreliable across engines in the way
-that matters here — a pause that does not take leaves the voice talking over a stopped camera. Every
-narrator takes a `from` sentence index and reports `onSentence(index, startedAt)` when a sentence is
-actually heard; the controller keeps that index in `sentenceRef`, and the subtitle and scrubber are
-drawn from it rather than from a clock started with the beat. So the camera and the voice are two
-effects in `storyMode.tsx`: a resume, the natural voice arriving mid-download, a voice found mute and a
-mute or unmute all re-run only the voice, at the sentence it was on. **Mute is a volume, never a
+Pause/resume **picks the sentence up at the word it was paused on.** It used to re-speak the current
+sentence from its start, and since most beats are one or two long sentences that was, to the ear,
+the beat starting over: measured on Val d'Orcia's opening, pauses 15-20 words in resumed at word
+0-5 of the same sentence, three times out of three, with the natural voice re-synthesising it. And
+the camera effect re-ran on `phase`, so every resume re-shot the beat too — a travel walk restarted
+from its first street, the opening re-framed the day. `speechSynthesis.pause()`/`resume()` are still
+not used: they are unreliable across engines in the way that matters here — a pause that does not take
+leaves the voice talking over a stopped camera. Every narrator takes a `from` sentence index *and an
+`intoMs`*, and reports `onSentence(index, startedAt)` when a sentence is actually heard; the
+controller keeps `{ index, startedAt, intoMs }` in `sentenceRef`, and `holdSentence()` freezes it at
+the word reached (a pause, an unmute, the natural voice arriving, a voice found mute). The platform
+voice resumes by dropping the words already lit (`resumePoint` in `storyPacing.ts`, the subtitle's
+own estimate, one word back); the natural voice starts the same audio buffer 0.3s before where it
+stopped, and keeps the last six sentences' audio (`recent` in `kokoroVoice.ts`) so a resume is
+neither a second of silence nor another GPU inference; the silent path continues on its estimate. The
+camera plays once per beat (`shotRef`), cleared only by what means "from the top" — a new day, a
+seek, a replay. So the camera and the voice are two effects in `storyMode.tsx`, and everything that
+is not a change of beat re-runs only the voice, at the word it was on. **Mute is a volume, never a
 restart**: the natural voice goes to zero gain mid-sentence; the platform voice cannot change volume
 mid-utterance, so a mute moves the beat to `speakSilently` (the same estimate, same sentence events,
-continuing from the word it was on) and an unmute re-says the current sentence aloud.
+continuing from the word it was on) and an unmute hands it back to the voice at the word the silence
+had reached.
 
 **Kokoro is loaded from a CDN at runtime and synthesises in a Blob worker, and both are structural.**
 `kokoro-js` pulls in `onnxruntime-web`, which embeds a WASM runtime as bytes — the exact class of

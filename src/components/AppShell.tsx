@@ -95,10 +95,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
 /**
  * The shell's own layout, split out only so it can read `useStoryControls()`.
  *
- * Story mode takes the app's chrome off screen — the navbar and the map's search box are the
- * page's furniture, and a film has none. What stays is the Map/Satellite toggle and the camera
- * controls, because those belong to the world being filmed and the traveller asked for them
- * explicitly: the engine they chose keeps drawing.
+ * Story mode takes the map's chrome off screen — the search box, the camera controls and the
+ * install prompt act on the map the film is driving. What stays is the Map/Satellite toggle, which
+ * chooses the world being filmed, and the navbar, which is the visible way out; following one of its
+ * links ends the film (`storyMode.tsx` exits on any change of path).
  */
 function ShellBody({
   mapEngine,
@@ -197,7 +197,8 @@ function ShellBody({
               takes. Above z-10 so the right-docked panels can't cover it. */}
           {/* The navbar stays up during a film. It used to go with the rest of the chrome, and the
               way out of a playing film was Esc or the film's own ✕ — which is fine once you know
-              it and a dead end before you do, since the whole page had no visible exit. */}
+              it and a dead end before you do, since the whole page had no visible exit. Its links
+              end the film: the story provider exits on any change of path. */}
           {/* Given the scroll container too: the nav's active section and its
               hide-on-scroll all read the overlay, which is outside the provider above. */}
           <ScrollContainerContext.Provider value={scrollRef}>

@@ -8,10 +8,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bearingRad,
-  blendHeadingRad,
   legBearingRad,
   tourFlightSeconds,
-  travelFollowSeconds,
+  travelGlideSeconds,
   TOUR_HOLD_MS,
 } from "./tourPacing.ts";
 
@@ -116,68 +115,27 @@ test("a step is shorter than the metronome it replaces", () => {
   }
 });
 
-/* --- travelFollowSeconds ---
+/* --- travelGlideSeconds ---
  *
- * The narration is the target; the speed ceiling is the only thing allowed to override it. Both
- * ways of getting this wrong have been shipped: a 400 m/s ceiling let a 900m leg run at 650 km/h
- * and read as a lurch, and a 45 m/s cruise held the same leg open for twenty seconds under a
- * five-second line, which is fifteen seconds of dead air over a camera still going. */
+ * A travel beat is one direct glide, not a walk along the street. What replaced it held a single
+ * Val d'Orcia "On to …" beat open for 123 seconds, so the ceiling is the assertion that matters. */
 
-test("the sentence sets the length whenever the camera can keep up", () => {
-  // 400m in 5s is 80 m/s — inside the ceiling, so the words win outright and there is no silence.
-  assert.equal(travelFollowSeconds(400, 5_000), 5);
-  assert.equal(travelFollowSeconds(750, 6_000), 6);
-});
-
-test("a long leg is stretched only as far as the speed ceiling demands", () => {
-  // 1500m in 6s would be 250 m/s. At the 150 m/s ceiling it takes 10s — four seconds of silence,
-  // not fourteen.
-  assert.equal(travelFollowSeconds(1500, 6_000), 10);
-  assert.equal(travelFollowSeconds(900, 5_000), 6, "900m at the ceiling is 6s, barely over the line");
-});
-
-test("a very short hop still registers as a movement", () => {
-  assert.equal(travelFollowSeconds(60, 1_000), 4);
-});
-
-test("a zero-length path falls back to the narration and never divides by it", () => {
-  assert.equal(travelFollowSeconds(0, 5_000), 5);
-  assert.ok(Number.isFinite(travelFollowSeconds(0, 0)));
-  assert.ok(Number.isFinite(travelFollowSeconds(NaN, 4_000)));
-  assert.ok(travelFollowSeconds(500, -100) > 0, "a negative narration still yields a real flight");
-});
-
-/* --- blendHeadingRad ---
- *
- * The arrival settle. Without the shortest-arc reduction the camera spins the long way round at
- * the exact moment it should be coming to rest — 340 degrees instead of 20. */
-
-const TAU = 2 * Math.PI;
-const headingDeg = (r) => ((((r * 180) / Math.PI) % 360) + 360) % 360;
-
-test("a heading blend takes the short way round the wrap", () => {
-  // 350 degrees -> 10 degrees is a 20-degree turn, not a 340-degree one.
-  const half = blendHeadingRad((350 / 180) * Math.PI, (10 / 180) * Math.PI, 0.5);
-  assert.ok(Math.abs(headingDeg(half) - 0) < 0.001, `expected to pass through 0/360, got ${headingDeg(half)}`);
-});
-
-test("a blend of 0 holds and a blend of 1 lands", () => {
-  const from = 1.2;
-  const to = 2.9;
-  assert.equal(blendHeadingRad(from, to, 0), from);
-  assert.ok(Math.abs(headingDeg(blendHeadingRad(from, to, 1)) - headingDeg(to)) < 1e-9);
-});
-
-test("the blend is monotonic across the wrap rather than jumping", () => {
-  const from = (350 / 180) * Math.PI;
-  const to = (10 / 180) * Math.PI;
-  let previous = null;
-  for (let k = 0; k <= 1.0001; k += 0.1) {
-    const now = blendHeadingRad(from, to, k);
-    if (previous !== null) {
-      assert.ok(now >= previous - 1e-9, "a settle must never reverse direction mid-turn");
-      assert.ok(now - previous < TAU / 8, "nor cover a large arc in one step");
-    }
-    previous = now;
+test("a travel glide is never shorter than the stop flight over the same leg", () => {
+  for (const legM of [0, 300, 2000, 25_000]) {
+    assert.ok(travelGlideSeconds(legM, 0.5, 0) >= tourFlightSeconds(legM, 0.5), `leg ${legM}m`);
   }
+});
+
+test("a travel glide stretches toward its line, so the camera is moving while it is said", () => {
+  assert.equal(travelGlideSeconds(400, 0, 4_500), 4.5);
+});
+
+test("a travel glide never runs past six seconds, however long the leg or the line", () => {
+  assert.equal(travelGlideSeconds(25_000, Math.PI, 40_000), 6);
+  assert.equal(travelGlideSeconds(250_000, 0, 9_000), 6);
+});
+
+test("a travel glide survives a missing or nonsense narration estimate", () => {
+  assert.equal(travelGlideSeconds(400, 0, NaN), tourFlightSeconds(400, 0));
+  assert.equal(travelGlideSeconds(400, 0, -100), tourFlightSeconds(400, 0));
 });

@@ -111,48 +111,22 @@ export function tourFlightSeconds(legM: number, turnRad = 0): number {
  */
 export const TOUR_HOLD_MS = 3600;
 
-/**
- * The fastest the ground may pass under a travel beat, in metres per second.
- *
- * A ceiling, not a target — it only bites on a leg long enough that covering it in the time the
- * sentence takes would blur the ground. 150 m/s is ~540 km/h seen from 1200m. The first version
- * allowed 400, which on a 900m leg under a one-sentence line worked out at 650 km/h and read as a
- * lurch rather than as going somewhere.
- */
-const TRAVEL_SPEED_MAX_MPS = 150;
-/** Under this the movement is over before it registers as one, however short the ground. */
-const TRAVEL_MIN_S = 4;
+/** The longest a travel beat's glide may take. Past this a flight between two places stops reading
+ *  as travel and starts reading as a wait, whatever the line over it says. */
+const TRAVEL_GLIDE_MAX_S = 6;
 
 /**
- * How long the camera takes to walk a leg.
+ * Seconds for a travel beat's glide to the stop it is about.
  *
- * **The narration is the target and the speed ceiling is the only thing that overrides it.** The
- * beat should end about when the sentence does; silence over a camera still travelling is dead
- * air, and it is what a cruise-speed version of this produced — a 900m leg held open for twenty
- * seconds under a five-second line.
+ * At least the flight the stop beat would have flown (`tourFlightSeconds`), stretched toward the
+ * length of the sentence about the going (`narrationMs`, the beat's estimate) so the camera is still
+ * moving while the line is said and lands about when it ends — but never past `TRAVEL_GLIDE_MAX_S`.
  *
- * So: the sentence's length, unless that would mean moving faster than `TRAVEL_SPEED_MAX_MPS`, in
- * which case the leg takes as long as that speed needs and the difference is a second or two of
- * silence at the end. A genuinely long leg cannot be both slow and over when the voice stops, and
- * this resolves that in favour of legible ground.
- *
- * The caller holds the beat open for whatever this returns, so the camera is never cut off
- * mid-street.
+ * This replaced `travelFollowSeconds`, which paced a walk along the leg's street geometry at no
+ * more than 150 m/s and held the beat open for it: on a 25km Tuscan drive that was over two minutes
+ * of street-level panning under one sentence.
  */
-export function travelFollowSeconds(pathM: number, narrationMs: number): number {
-  const narrationS = Math.max(narrationMs, 0) / 1000;
-  if (!(pathM > 0)) return narrationS;
-  return Math.max(narrationS, pathM / TRAVEL_SPEED_MAX_MPS, TRAVEL_MIN_S);
-}
-
-/**
- * Turn `from` toward `to` by fraction `k`, the short way round.
- *
- * Used to settle the fly-along's tangent heading into the heading the arriving stop beat will use,
- * so the handoff has no swing left to perform. Without the shortest-arc reduction a turn from 350°
- * to 10° goes the long way — 340° of spin at the exact moment the camera should be coming to rest.
- */
-export function blendHeadingRad(from: number, to: number, k: number): number {
-  const delta = (((to - from + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
-  return from + delta * k;
+export function travelGlideSeconds(legM: number, turnRad: number, narrationMs: number): number {
+  const narrationS = Number.isFinite(narrationMs) ? Math.max(narrationMs, 0) / 1000 : 0;
+  return Math.max(tourFlightSeconds(legM, turnRad), Math.min(narrationS, TRAVEL_GLIDE_MAX_S));
 }

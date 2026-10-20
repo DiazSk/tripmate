@@ -388,11 +388,12 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   border-radius: 50%;
   transition: color 0.2s, background-color 0.2s;
 }
-.sp-icon:hover:not(:disabled) {
+.sp-icon:hover:not(:disabled, [aria-disabled="true"]) {
   color: #fff;
   background: rgba(255, 255, 255, 0.07);
 }
-.sp-icon:disabled {
+.sp-icon:disabled,
+.sp-icon[aria-disabled="true"] {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -408,9 +409,6 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   height: 0.25rem;
   border-radius: 50%;
   background: currentColor;
-}
-.sp-icon-gap {
-  width: 2.5rem;
 }
 .sp-nextday {
   font-family: var(--wd-font-condensed);
@@ -700,6 +698,13 @@ html:has(.trip-page.has-drawer) .story-player .sp-stack {
   }
   .sp-sub-line {
     font-size: 1.3em;
+  }
+}
+/* On a phone the top row is the trip's name and the icon controls; replay there cut the name to
+   "Val d…". It stays reachable from the end screen's Again and chapter 01. */
+@media (width < 40rem) {
+  .story-player .sp-replay {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

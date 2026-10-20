@@ -4,13 +4,14 @@ import {
   NOVELTY_VOICES,
   pauseAfter,
   rateFor,
+  resumePoint,
   sentenceTimings,
   splitForSpeech,
 } from "./storyPacing";
 // `kokoroVoice` takes its pacing from `storyPacing` and only a type from here, so there is no
 // runtime cycle. Keeping the seam in one file is worth it — every caller above imports `speakOn`
 // and nothing else knows there are two engines.
-import { naturalVoiceReady, setNaturalVolume, speakNatural } from "./kokoroVoice";
+import { naturalVoiceReady, setNaturalVolume, speakNatural, warmNatural } from "./kokoroVoice";
 
 // Re-exported so the web's callers (and `storyVoice.test.mjs`) keep importing pacing from here.
 export { estimateDurationMs, pauseAfter, rateFor, splitForSpeech };
@@ -199,7 +200,7 @@ export function setNarrationVolume(volume: number): void {
   setNaturalVolume(narrationVolume);
 }
 
-export function speak(text: string, handlers: SpeakHandlers = {}, from = 0): SpeakHandle {
+export function speak(text: string, handlers: SpeakHandlers = {}, from = 0, intoMs = 0): SpeakHandle {
   if (!speechAvailable()) {
     const timer = setTimeout(() => handlers.onError?.(), 0);
     return { cancel: () => clearTimeout(timer) };
@@ -219,6 +220,10 @@ export function speak(text: string, handlers: SpeakHandlers = {}, from = 0): Spe
     const timer = setTimeout(() => handlers.onEnd?.(), 0);
     return { cancel: () => clearTimeout(timer) };
   }
+
+  // `intoMs` picks the first sentence up mid-way — a resume: the words already heard are dropped from
+  // its utterance, and the sentence is reported as started that far back so the caption keeps them lit.
+  const resume = resumePoint(text, first, intoMs);
 
   let done = false;
   let index = first;
@@ -243,7 +248,8 @@ export function speak(text: string, handlers: SpeakHandlers = {}, from = 0): Spe
   const speakChunk = () => {
     if (done) return;
     const chunk = chunks[index];
-    const utterance = new SpeechSynthesisUtterance(chunk);
+    const skipped = index === first ? resume : { words: 0, ms: 0 };
+    const utterance = new SpeechSynthesisUtterance(skipped.words ? chunk.split(" ").slice(skipped.words).join(" ") : chunk);
     const voice = pickVoice(synth.getVoices());
     if (voice) {
       utterance.voice = voice;
@@ -260,7 +266,7 @@ export function speak(text: string, handlers: SpeakHandlers = {}, from = 0): Spe
     utterance.onstart = () => {
       if (done) return;
       clearTimeout(startGuard);
-      handlers.onSentence?.(at, performance.now());
+      handlers.onSentence?.(at, performance.now() - skipped.ms);
     };
     if (index === first) {
       startGuard = setTimeout(() => {
@@ -284,7 +290,7 @@ export function speak(text: string, handlers: SpeakHandlers = {}, from = 0): Spe
 
     // Per chunk rather than per beat, so a stalled sentence resolves in seconds instead of after
     // the whole beat's allowance. Generous still: firing early cuts a voice off mid-sentence.
-    watchdog = setTimeout(() => settle("end"), estimateDurationMs(chunk) * 2.5 + 4000);
+    watchdog = setTimeout(() => settle("end"), estimateDurationMs(utterance.text) * 2.5 + 4000);
     synth.speak(utterance);
   };
 
@@ -383,6 +389,12 @@ export function silence(): void {
  */
 export type VoiceEngine = "browser" | "natural";
 
+/** Get the next beat ready to be said, on whichever engine will say it. Only the natural voice has
+ *  anything to prepare — see `warmNatural` for why, and for when to call it. */
+export function warmOn(engine: VoiceEngine, text: string): void {
+  if (engine === "natural") warmNatural(text);
+}
+
 /**
  * Speak a beat on whichever engine is asked for — the one function everything above this file
  * calls.
@@ -392,8 +404,8 @@ export type VoiceEngine = "browser" | "natural";
  * does not have to sequence the load against the film; it flips a preference and the narration
  * upgrades itself when the model arrives.
  */
-export function speakOn(engine: VoiceEngine, text: string, handlers: SpeakHandlers = {}, from = 0): SpeakHandle {
-  if (engine !== "natural" || !naturalVoiceReady()) return speak(text, handlers, from);
+export function speakOn(engine: VoiceEngine, text: string, handlers: SpeakHandlers = {}, from = 0, intoMs = 0): SpeakHandle {
+  if (engine !== "natural" || !naturalVoiceReady()) return speak(text, handlers, from, intoMs);
 
   /**
    * The natural voice, with the platform voice underneath it.
@@ -417,7 +429,8 @@ export function speakOn(engine: VoiceEngine, text: string, handlers: SpeakHandle
         live.handle = speak(text, handlers, at);
       },
     },
-    from
+    from,
+    intoMs
   );
   return { cancel: () => live.handle?.cancel() };
 }

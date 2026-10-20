@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { LEAD_IN_MS, sentenceTimings, splitForSpeech } from "./storyPacing.ts";
+import { LEAD_IN_MS, resumePoint, sentenceTimings, splitForSpeech } from "./storyPacing.ts";
 import { setNarrationVolume, speak, speakOn, speakSilently } from "./storyVoice.ts";
 
 const BEAT = "The castle stands above Alfama. Walk the walls slowly. Then come down for lunch.";
@@ -130,4 +130,47 @@ test("changing the volume, mute included, speaks and cancels nothing", (t) => {
   assert.equal(synth.spoken.length, 0);
   assert.equal(synth.cancels, 0);
   setNarrationVolume(1);
+});
+
+/* --- resuming mid-sentence ---
+ *
+ * A pause used to re-speak the sentence from its first word, and most beats are one or two long
+ * sentences, so to the ear the beat started over. */
+
+const LONG = "You wake in the heart of the valley with warm sun already on the stone walls and the cypress lines below the house. Today is about arrival.";
+
+test("a resume picks the sentence up one word before the word it was paused on", (t) => {
+  reset(t);
+  const { spokenMs } = sentenceTimings(LONG);
+  const words = splitForSpeech(LONG)[0].split(" ");
+  const halfway = spokenMs[0] / 2;
+  const at = resumePoint(LONG, 0, halfway);
+  assert.equal(at.words, Math.round(words.length / 2) - 1);
+  let heard = null;
+  speak(LONG, { onSentence: (i, startedAt) => (heard = { i, startedAt }) }, 0, halfway);
+  t.mock.timers.tick(LEAD_IN_MS);
+  assert.equal(synth.spoken[0].text, words.slice(at.words).join(" "), "the utterance is the rest of the sentence");
+  const before = performance.now();
+  synth.spoken[0].onstart();
+  assert.equal(heard.i, 0);
+  // Reported as started `at.ms` ago, so the caption keeps the words already said lit.
+  assert.ok(Math.abs(before - heard.startedAt - at.ms) < 50);
+});
+
+test("a resume never skips a whole sentence, and nothing held means from the top", () => {
+  const { spokenMs } = sentenceTimings(LONG);
+  const count = splitForSpeech(LONG)[0].split(" ").length;
+  assert.equal(resumePoint(LONG, 0, spokenMs[0] * 5).words, count - 1, "the last word is still said");
+  assert.deepEqual(resumePoint(LONG, 0, 0), { words: 0, ms: 0 });
+  assert.deepEqual(resumePoint(LONG, 0, NaN), { words: 0, ms: 0 });
+  assert.deepEqual(resumePoint(LONG, 9, 1000), { words: 0, ms: 0 });
+});
+
+test("the sentences after a resumed one are spoken whole", (t) => {
+  reset(t);
+  const chunks = splitForSpeech(LONG);
+  speak(LONG, {}, 0, 2000);
+  t.mock.timers.tick(LEAD_IN_MS);
+  playThrough(t);
+  assert.equal(synth.spoken.at(-1).text, chunks[1]);
 });

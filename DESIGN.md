@@ -724,8 +724,14 @@ to 36vw on smaller laptops), keeping every per-place detail: a row opens to it a
 
 ### The Story Player (signature)
 A film of a day (canvas "Story mode · 1 Subtitles"): the narration as subtitles above a near-opaque
-night bar, 4.75rem tall, with Previous, an ice Play disc, Next, a 3px scrub track that turns signal on
-hover, drag or focus. The board hides while it plays.
+night bar, 4.75rem tall, with a transport of exactly five — previous day, previous place, an ice Play
+disc, next place, next day — and a 3px scrub track under it that turns signal on hover, drag or focus.
+The row is mirrored so Play sits dead centre of it on every day: the day buttons (condensed "D2",
+"D4") are always drawn, and on the first or last day the one with no day that way reads "D–" at 35%
+opacity, `aria-disabled` and inert, rather than leaving a hole that pulls the row off centre. Replay
+("Play the day again") is not transport; it is an icon in the right-hand cluster, beside Subtitles
+and Chapters, ahead of volume and Plan. The board hides while it plays, and following a navbar link
+ends the film.
 
 ### The Pass, the Postcard Wall, Field Notes
 Sign-in is a boarding pass on paper (canvas "Sign in · B"); `/trips` is a wall of 4:3

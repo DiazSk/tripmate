@@ -75,8 +75,8 @@ export const NARRATION_WPM = 160;
  *
  * v1: first version. v2: the spoken-cadence rewrite (short naming first sentence, varied lengths,
  * no em-dashes, numbers as words) that `splitForSpeech`'s sentence pauses depend on. v3: travel
- * beats — a one-sentence line between two stops, played while the camera walks the real street
- * route between them.
+ * beats — a one-sentence line between two stops, played while the camera travels between them
+ * (once a walk along the street route, since 2026-10 one direct glide).
  */
 export const STORY_PROMPT_VERSION = 5;
 

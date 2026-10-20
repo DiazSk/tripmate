@@ -177,3 +177,21 @@ export function sentenceTimings(text: string): { chunks: string[]; startMs: numb
   });
   return { chunks, startMs, spokenMs, totalMs: Math.max(3200, Math.round(at) + 300) };
 }
+
+/**
+ * Where to pick a sentence up after `intoMs` of it has been heard: how many of its words to skip,
+ * and how far into the sentence (on the estimate) that puts the voice.
+ *
+ * The same estimate the subtitle lights words by (`subtitleAt`), so a resume starts on the word the
+ * caption was paused on rather than on one the listener never saw lit — one word back, so the
+ * sentence is re-entered on a word already heard instead of cut into mid-phrase. Never skips the
+ * last word: a sentence resumed at its very end still says something before its pause.
+ */
+export function resumePoint(text: string, index: number, intoMs: number): { words: number; ms: number } {
+  const { chunks, spokenMs } = sentenceTimings(text);
+  const chunk = chunks[index];
+  if (!chunk || !(intoMs > 0) || !(spokenMs[index] > 0)) return { words: 0, ms: 0 };
+  const count = chunk.split(" ").length;
+  const words = Math.max(0, Math.min(count - 1, Math.round((intoMs / spokenMs[index]) * count) - 1));
+  return { words, ms: (words / count) * spokenMs[index] };
+}

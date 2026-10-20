@@ -147,7 +147,8 @@ function StoryPlayerBody({
   // The subtitle and the scrubber follow the voice, not a clock started with the beat: which
   // sentence comes from the controller (`playback.sentence`, the voice's own `onSentence`), and only
   // the time into that sentence is ticked here. The tick stops while paused, so the line holds; a
-  // sentence queued but not yet audible (`startedAt` null) shows unlit until the voice reaches it.
+  // sentence queued but not yet audible (`startedAt` null) shows lit only as far as it was held
+  // (`intoMs`, a pause or an unmute) until the voice reaches it again.
   const [now, setNow] = useState(0);
   useEffect(() => {
     if (phase !== "playing") return;
@@ -156,7 +157,7 @@ function StoryPlayerBody({
   }, [phase]);
   const current = beats[beatIndex];
   const { sentence } = playback;
-  const sub = current ? subtitleAt(current.text, sentence.index, sentence.startedAt === null ? 0 : now - sentence.startedAt) : null;
+  const sub = current ? subtitleAt(current.text, sentence.index, sentence.startedAt === null ? sentence.intoMs : now - sentence.startedAt) : null;
   const elapsed = script ? elapsedMs(durations, beatIndex, sub?.withinMs ?? 0, ended) : 0;
   const fraction = total > 0 ? elapsed / total : 0;
 
@@ -380,19 +381,11 @@ function StoryPlayerBody({
 
         {/* Transport and the day's scrubber */}
         <div className="sp-center">
-          {/* Day, place, play, place, day: the day buttons mirror each other, and each leaves a gap
-              where there is no day that way, so play stays centred. */}
+          {/* Day, place, play, place, day — exactly five, mirrored, so play is dead centre on every
+              day. A day button with no day that way stays where it is, dimmed and inert, rather than
+              leaving a hole that pulls the row off centre. */}
           <div className="sp-transport">
-            <button type="button" className="sp-icon" aria-label="Play the day again" title="Again" onClick={() => playDay(dayIndex)} disabled={!script}>
-              <ReplayIcon />
-            </button>
-            {dayIndex > 0 ? (
-              <button type="button" className="sp-icon sp-nextday" aria-label={`Play day ${dayIndex}`} title={`Day ${dayIndex}`} onClick={() => playDay(dayIndex - 1)}>
-                D{dayIndex}
-              </button>
-            ) : (
-              <span className="sp-icon-gap" />
-            )}
+            <DayButton day={dayIndex > 0 ? dayIndex - 1 : null} direction="previous" playDay={playDay} />
             <button type="button" className="sp-icon" aria-label="Previous place" title="Previous place" onClick={prev} disabled={!script}>
               <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
                 <path d="M12.5 3.5L6 8l6.5 4.5zM3.5 3v10" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
@@ -414,13 +407,7 @@ function StoryPlayerBody({
                 <path d="M3.5 3.5L10 8l-6.5 4.5zM12.5 3v10" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
               </svg>
             </button>
-            {hasNextDay ? (
-              <button type="button" className="sp-icon sp-nextday" aria-label={`Play day ${dayIndex + 2}`} title={`Day ${dayIndex + 2}`} onClick={() => playDay(dayIndex + 1)}>
-                D{dayIndex + 2}
-              </button>
-            ) : (
-              <span className="sp-icon-gap" />
-            )}
+            <DayButton day={hasNextDay ? dayIndex + 1 : null} direction="next" playDay={playDay} />
           </div>
           <div className="sp-scrub">
             <span className="sp-time">{clockLabel(elapsed)}</span>
@@ -472,8 +459,11 @@ function StoryPlayerBody({
           </div>
         </div>
 
-        {/* Subtitles, chapters, volume, and back to the plan */}
+        {/* Again, subtitles, chapters, volume, and back to the plan */}
         <div className="sp-right">
+          <button type="button" className="sp-icon sp-replay" aria-label="Play the day again" title="Again" onClick={() => playDay(dayIndex)} disabled={!script}>
+            <ReplayIcon />
+          </button>
           <button type="button" className={`sp-icon${subs ? " is-on" : ""}`} aria-pressed={subs} aria-label="Subtitles" title="Subtitles (C)" onClick={() => setSubs(!subs)}>
             <svg viewBox="0 0 18 16" width="17" height="15" aria-hidden="true">
               <rect x="1.5" y="2.5" width="15" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
@@ -534,6 +524,24 @@ function StoryPlayerBody({
         {script ? beats[beatIndex]?.text : `Writing the story of day ${dayIndex + 1}`}
       </div>
     </motion.div>
+  );
+}
+
+/** The transport's day buttons. Always drawn, so the row never changes shape: with no day that way
+ *  it is `aria-disabled` (still focusable, so a screen reader can hear why) and does nothing. */
+function DayButton({ day, direction, playDay }: { day: number | null; direction: "previous" | "next"; playDay: (day: number) => void }) {
+  const label = day === null ? `No ${direction} day` : `Play day ${day + 1}`;
+  return (
+    <button
+      type="button"
+      className="sp-icon sp-nextday"
+      aria-label={label}
+      aria-disabled={day === null || undefined}
+      title={day === null ? label : `Day ${day + 1}`}
+      onClick={day === null ? undefined : () => playDay(day)}
+    >
+      {day === null ? "D–" : `D${day + 1}`}
+    </button>
   );
 }
 

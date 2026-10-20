@@ -393,6 +393,14 @@ let storyFlightDetailUntil = 0;
 const STORY_FLIGHT_TAIL_S = 0.15;
 /** True while the film is mid-dive and the ground is rushing past rather than being read. */
 export const inStoryFlight = () => performance.now() < storyFlightDetailUntil;
+/** How long until the film's current flight is (all but) over, in ms; 0 while the camera holds. The
+ *  natural voice waits this out before synthesising ahead — see `warmNatural` in kokoroVoice.ts. */
+export const storyFlightLeftMs = () => Math.max(0, storyFlightDetailUntil - performance.now());
+/** Mark a film's camera move of `seconds` as a flight: `inStoryFlight` holds until its tail. Written
+ *  by `flyToStoryStop`, and by the film's closing pull-back, which goes through `reframeRoute`. */
+export function markStoryFlight(seconds: number): void {
+  storyFlightDetailUntil = performance.now() + (seconds - STORY_FLIGHT_TAIL_S) * 1000;
+}
 /**
  * The hover peek is a *relative* zoom, not a destination.
  *
@@ -1449,13 +1457,13 @@ export function MapCameraProvider({
       // instead is the one lever above the canvas: it costs detail on ground that is a blur going
       // past anyway, and gives the arrival back untouched.
       //
-      // Only Cesium reads this. The fly-along that MapLibre uses for travel beats never calls this
-      // function, and MapLibre's vector tiles were measured at zero dropped frames for a whole
-      // film, so there is nothing there to relax.
+      // Only Cesium reads this. Every move the film makes comes through here, travel beats' glides
+      // included (they walked the street with `restoreCamera` until 2026-10, bypassing it), and
+      // MapLibre's vector tiles were measured at zero dropped frames for a whole film, so there is
+      // nothing there to relax.
       //
       // 2.5 is `CesiumRenderer.flyToPoint`'s own default when a beat passes no duration.
-      storyFlightDetailUntil =
-        performance.now() + ((motion.durationS ?? 2.5) - STORY_FLIGHT_TAIL_S) * 1000;
+      markStoryFlight(motion.durationS ?? 2.5);
       return flyTo(
         lat,
         lng,

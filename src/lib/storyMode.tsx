@@ -11,19 +11,16 @@ import {
   type ReactNode,
 } from "react";
 
-import { STORY_PITCH_DEG, STORY_RANGE_M, useMapCamera } from "@/lib/mapCamera";
+import { usePathname } from "next/navigation";
+
+import { markStoryFlight, storyFlightLeftMs, useMapCamera } from "@/lib/mapCamera";
 import {
   fallbackScript,
   storyCacheKey,
   type CompactLeg,
   type StoryScript,
 } from "@/lib/storyScript";
-import {
-  blendHeadingRad,
-  legBearingRad,
-  tourFlightSeconds,
-  travelFollowSeconds,
-} from "@/lib/tourPacing";
+import { legBearingRad, tourFlightSeconds, travelGlideSeconds } from "@/lib/tourPacing";
 import { metresBetween } from "@/lib/peekRange";
 import { failureFromResponse, failureFromThrown, holdFromFailure, type Failure } from "@/lib/failure";
 import {
@@ -33,7 +30,6 @@ import {
   peekDayRoute,
 } from "@/lib/dayRoutes";
 import { formatDistance } from "@/lib/format";
-import { measurePath, sampleAt, travelEase } from "@/lib/pathFollow";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import type { NaturalVoiceStatus } from "@/lib/kokoroVoice";
 import { loadNaturalVoice, naturalVoiceReady, naturalVoiceSupported } from "@/lib/kokoroVoice";
@@ -43,12 +39,13 @@ import {
   setNarrationVolume,
   speakOn,
   speakSilently,
+  splitForSpeech,
+  warmOn,
   speechAvailable,
   warmVoices,
   type SpeakHandle,
   type VoiceEngine,
 } from "@/lib/storyVoice";
-import type { MapRenderer } from "@/lib/mapRenderer";
 import type { DayPlan, Itinerary, Stop } from "@/lib/types";
 
 /**
@@ -139,7 +136,7 @@ export interface StoryPlayback {
    * is null while a sentence is queued but not yet audible (the lead-in, a resume, the natural voice
    * synthesising), so the subtitle waits with the voice rather than running ahead of it.
    */
-  sentence: { index: number; startedAt: number | null };
+  sentence: SentenceAt;
   muted: boolean;
   /**
    * True when no voice is going to speak here — either the API is absent (some Linux desktops,
@@ -181,6 +178,11 @@ export interface StoryPlayback {
   openStop: ((stop: Stop) => void) | null;
   exit: () => void;
 }
+
+/** See `StoryPlayback.sentence`. `intoMs` is how much of the sentence had been heard when it was last
+ *  held (a pause, an unmute, a change of voice), which is where the voice picks it up; zero for a
+ *  sentence not yet begun. Only meaningful while `startedAt` is null. */
+export type SentenceAt = { index: number; startedAt: number | null; intoMs: number };
 
 type ScriptParams = {
   day: DayPlan;
@@ -270,149 +272,28 @@ const WARM_DWELL_MS = 1200;
 
 
 /**
- * Walk the camera along a real street route, over `durationS`.
+ * How the film's camera reaches stop `i` of a day: facing along the day (`legBearingRad`, so the next
+ * place is ahead on arrival), over a flight paced by the leg it covers (`tourFlightSeconds`), or by
+ * `minS` when the beat has a line to fill. Zero under `prefers-reduced-motion`: the camera cuts and
+ * the beat keeps its full length, the same trade `useTripCamera` makes for the streaming camera.
  *
- * **A `requestAnimationFrame` loop over `restoreCamera`, on both engines, with no contract change.**
- * That method is already "put the camera exactly here, no flight and no framing correction" — it is
- * a `flyToBoundingSphere(duration: 0)` on Cesium and a `jumpTo` on MapLibre, both in metres and
- * degrees, both already exercised every time somebody presses Map/Satellite. A per-frame camera
- * *setter* is exactly what a fly-along needs, and one already existed.
- *
- * The two engine-native options were both rejected. Cesium's `SampledPositionProperty` needs the
- * clock running, which means undoing `requestRenderMode` and `maximumRenderTimeChange: Infinity` in
- * `GlobeBackground` — a deliberately tuned global whose comment says nothing in this scene is
- * time-driven. MapLibre's `freeCameraOptions` appears nowhere in this repo. Neither has an analogue
- * on the other engine, so either would have been two implementations of one behaviour.
- *
- * Not `onFrame` either, despite it being the shared per-frame hook: that fires *after* a render, and
- * this driver needs to *cause* renders. rAF drives, and each tick asks for the frame it just set up.
- *
- * The renderer is read every tick rather than captured once, because the Map/Satellite toggle works
- * mid-film and a driver holding the outgoing engine would be writing to a hidden canvas.
+ * A `null` bearing (a single-stop day, or a day at one coordinate) is left *undefined* rather than
+ * sent as 0, which is due north and a claim; omitting it keeps the renderers' `?? 0` fallback.
  */
-/** Over the last stretch of a leg, the tangent heading gives way to the heading the arriving stop
- *  beat will use. A quarter of the path is long enough to read as coming to rest and short enough
- *  that the middle of the leg still faces the way the street actually goes. */
-const HEADING_SETTLE_FRACTION = 0.25;
-
-/** The glide from the end of the walk onto the canonical stop pose. Short, because the heading
- *  has already settled and all that is left is the framing offset between `restoreCamera` and
- *  `flyToPoint`. */
-const ARRIVAL_SETTLE_S = 0.9;
-
-/**
- * Time constant of the heading filter, in milliseconds.
- *
- * Expressed as a time constant and applied as `1 - exp(-dt / TAU)` so the smoothing is the same on
- * a 144Hz laptop as on a 30fps one — a fixed per-frame fraction is silently twice as aggressive at
- * half the frame rate, which is the classic way a filter tuned on one machine feels wrong on
- * another. 900ms is slow enough to ignore individual street kinks and quick enough to have come
- * round by the end of a real corner.
- */
-const HEADING_TAU_MS = 900;
-
-function followPath(
-  rendererRef: { current: MapRenderer | null },
-  points: { lat: number; lng: number }[],
-  durationS: number,
-  opts: {
-    /** The heading the *next* beat will hold. Blended into over the final stretch. */
-    arrivalHeadingRad?: number;
-    /** Called once the walk is done, to settle onto the canonical stop pose. */
-    onArrive?: () => void;
-  } = {}
-): { cancel: () => void } {
-  const path = measurePath(points);
-  const cursor = { i: 0 };
-  let frame = 0;
-  let done = false;
-  /** The filtered heading actually sent to the camera. See `HEADING_TAU_MS`. */
-  let heldHeading: number | null = null;
-
-  const place = (fraction: number, dtMs: number) => {
-    const renderer = rendererRef.current;
-    if (!renderer?.isAlive()) return false;
-    const sample = sampleAt(path, fraction * path.totalM, cursor);
-    // Settle the tangent into the arrival heading over the last quarter, so the beat that follows
-    // has no swing left to make. Without this the camera arrived facing along the street and the
-    // stop beat immediately spun it to face the *next* stop — one of the two jerks that made the
-    // handoff read as the film reloading.
-    let target = sample.headingRad;
-    if (opts.arrivalHeadingRad !== undefined && fraction > 1 - HEADING_SETTLE_FRACTION) {
-      const k = (fraction - (1 - HEADING_SETTLE_FRACTION)) / HEADING_SETTLE_FRACTION;
-      target = blendHeadingRad(target, opts.arrivalHeadingRad, k);
-    }
-
-    // Low-pass the heading rather than send the raw tangent. A real street is a polyline with a
-    // kink every few metres, and at this range a degree of yaw swings the camera a long way, so
-    // following the tangent exactly makes the whole frame twitch even though the *position* is
-    // perfectly smooth. The filter is what turns that into the gliding course a map walkthrough
-    // holds. Seeded on the first frame rather than from zero, or every walk would begin by
-    // swinging round from due north.
-    const alpha = 1 - Math.exp(-Math.max(dtMs, 0) / HEADING_TAU_MS);
-    heldHeading =
-      heldHeading === null ? target : blendHeadingRad(heldHeading, target, alpha);
-
-    renderer.restoreCamera({
-      lat: sample.lat,
-      lng: sample.lng,
-      rangeM: STORY_RANGE_M,
-      headingRad: heldHeading,
-      pitchDeg: STORY_PITCH_DEG,
-    });
-    renderer.requestRender();
-    return true;
-  };
-
-  const arrive = () => {
-    if (done) return;
-    done = true;
-    opts.onArrive?.();
-  };
-
-  // Reduced motion: no frames at all, straight to the canonical arrival pose. The beat keeps its
-  // full length, so the film runs the same wall-clock time with more stillness — the same trade the
-  // stop beats already make by dropping their flight to zero.
-  if (prefersReducedMotion() || durationS <= 0 || path.totalM === 0) {
-    arrive();
-    return { cancel: () => {} };
-  }
-
-  const startedAt = performance.now();
-  let lastTickAt = startedAt;
-  const tick = () => {
-    const now = performance.now();
-    const dtMs = now - lastTickAt;
-    lastTickAt = now;
-    const t = Math.min((now - startedAt) / (durationS * 1000), 1);
-    if (!place(travelEase(t), dtMs)) return;
-    if (t < 1) {
-      frame = requestAnimationFrame(tick);
-      return;
-    }
-    frame = 0;
-    arrive();
-  };
-  frame = requestAnimationFrame(tick);
-
+function glideTo(stops: readonly Stop[], i: number, narrationMs?: number): { headingRad?: number; durationS: number } {
+  const heading = legBearingRad(stops, i) ?? undefined;
+  const previous = i > 0 ? stops[i - 1] : undefined;
+  const previousHeading = i > 0 ? legBearingRad(stops, i - 1) : null;
+  const legM = previous ? metresBetween(previous, stops[i]) : 0;
+  const turn = heading !== undefined && previousHeading !== null ? heading - previousHeading : 0;
   return {
-    cancel: () => {
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
-      // Deliberately NOT calling `arrive()`. A cancel is Skip, Pause or Exit, and each of those
-      // has its own idea of where the camera belongs next; settling onto this leg's destination on
-      // the way out would fight it.
-      done = true;
-    },
+    headingRad: heading,
+    durationS: prefersReducedMotion()
+      ? 0
+      : narrationMs === undefined
+        ? tourFlightSeconds(legM, turn)
+        : travelGlideSeconds(legM, turn, narrationMs),
   };
-}
-
-
-/** Ground length of a path, in metres. Measured rather than taken from the leg's own `distanceM`
- *  so the flight is paced by the line actually being drawn — the two agree, but only one of them
- *  is what the camera traverses. */
-function pathLengthM(points: { lat: number; lng: number }[]): number {
-  return measurePath(points).totalM;
 }
 
 const ControlsContext = createContext<StoryControls | null>(null);
@@ -436,7 +317,6 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     setActiveIndex,
     reframeRoute,
     setRouteConnectorsHidden,
-    rendererRef,
     // Aliased: `engine` already means the *voice* engine throughout this file.
     engine: mapEngine,
   } =
@@ -452,18 +332,23 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    *
    * The ref is what the voice effect reads to know where to pick a beat up; the state is what the
    * stage draws. Every way to a *different* beat resets it to the top (`markSentence(0, null)`);
-   * pause/resume, mute/unmute and the natural voice arriving keep the index, which is what makes
-   * each of those continue at the sentence it was on instead of restarting the beat.
+   * pause/resume, mute/unmute and the natural voice arriving `holdSentence()` instead, which keeps
+   * the sentence *and how far into it the voice was*, so each of those continues at the word it was
+   * on rather than restarting the sentence — or, for the one- and two-sentence beats most scripts
+   * are made of, the whole beat.
    */
-  const sentenceRef = useRef<{ index: number; startedAt: number | null }>({ index: 0, startedAt: null });
-  const [sentence, setSentence] = useState<{ index: number; startedAt: number | null }>({ index: 0, startedAt: null });
-  const markSentence = useCallback((index: number, startedAt: number | null) => {
-    sentenceRef.current = { index, startedAt };
+  const sentenceRef = useRef<SentenceAt>({ index: 0, startedAt: null, intoMs: 0 });
+  const [sentence, setSentence] = useState<SentenceAt>({ index: 0, startedAt: null, intoMs: 0 });
+  const markSentence = useCallback((index: number, startedAt: number | null, intoMs = 0) => {
+    sentenceRef.current = { index, startedAt, intoMs };
     setSentence(sentenceRef.current);
   }, []);
-  /** Earliest the beat may end, set by the camera effect for a travel beat whose walk outlasts its
-   *  words, read by the voice effect when the words are done. Zero for every other beat. */
-  const holdUntilRef = useRef(0);
+  /** Freeze the sentence where it is: unheard (`startedAt` null) until a voice picks it up again, at
+   *  the point it had reached. What a pause, an unmute and a change of voice all do. */
+  const holdSentence = useCallback(() => {
+    const { index, startedAt, intoMs } = sentenceRef.current;
+    markSentence(index, null, startedAt === null ? intoMs : performance.now() - startedAt);
+  }, [markSentence]);
   const [muted, setMuted] = useState(false);
   const [volume, setVolumeState] = useState(1);
   const [stopOpener, setStopOpenerState] = useState<((stop: Stop) => void) | null>(null);
@@ -557,31 +442,21 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * The street geometry the camera walks on a travel beat, index-aligned with the day's legs.
-   *
-   * Read from `dayRoutes`' settled mirror, the same place the panel's travel lines and the map's
-   * drawn paths come from — one fetch, three surfaces, and no way for the line on the map and the
-   * line the camera follows to disagree. Empty where a leg did not route, which the beat effect
-   * treats as "no path to walk".
-   */
-  /**
-   * The stop a travel beat actually finished arriving at, read once by the beat that follows.
-   *
-   * A ref rather than `script.beats[beatIndex - 1]?.kind === "travel"`, because the question is not
-   * "was there a walk" but "did it finish". Skip during a walk cancels the driver mid-street
-   * without arriving, and a stop beat that trusted the beat *kind* would then decline to fly and
-   * strand the camera between two places.
+   * The stop a travel beat sent the camera gliding to, read once by the beat that follows: that stop
+   * beat then has nowhere to fly, since the glide is the canonical `flyToStoryStop` to the same pose.
+   * Without it the film arrived, paused, and re-arrived. A flight is never cancelled by Next, so a
+   * skip mid-glide still lands where this says.
    */
   const arrivedStopRef = useRef<number | null>(null);
-
-  const legPaths = useMemo(() => {
-    if (!day) return undefined;
-    const route = peekDayRoute(
-      currentRouteProfile(),
-      day.stops.map((st) => ({ lat: st.lat, lng: st.lng }))
-    );
-    return route?.map((leg) => meaningfulLeg(leg)?.points ?? []);
-  }, [day]);
+  /**
+   * The beat (and map) whose camera has already been played, so a resume does not play it again.
+   *
+   * The camera effect re-runs on `phase`, and before this every resume re-shot the beat: a travel
+   * beat walked its street again from the first metre and the opening re-framed the day, which read
+   * as the film restarting even where the voice did not. Cleared by everything that means "from the
+   * top" — a new day, a seek, a replay — so those still shoot.
+   */
+  const shotRef = useRef<string | null>(null);
 
   /**
    * Start the natural voice's download, if this browser can run it at all.
@@ -604,13 +479,16 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     }
     setNaturalStatus("loading");
     setNaturalProgress(0);
-    void loadNaturalVoice(setNaturalProgress).then((ok) => {
-      // The natural voice takes over at the sentence being heard, restarting that sentence in its
-      // own voice: its words wait, unlit, until that voice is actually saying them.
-      if (ok) markSentence(sentenceRef.current.index, null);
+    // Whole percents only. transformers.js reports every chunk of every shard, and each report was a
+    // render of the whole player: measured at 76 commits a second for the length of the download,
+    // against ~4 for the subtitle's own tick. The label shows a whole percent anyway.
+    void loadNaturalVoice((fraction) => setNaturalProgress(Math.floor(fraction * 100) / 100)).then((ok) => {
+      // The natural voice takes over at the word being heard, in its own voice: the rest of the
+      // sentence waits, unlit, until that voice is actually saying it.
+      if (ok) holdSentence();
       setNaturalStatus(ok ? "ready" : "unavailable");
     });
-  }, [markSentence]);
+  }, [holdSentence]);
 
   /** Every entry point into a day — the first press and the "next day" offer at the end — resets
    *  the same four pieces of state. It happens in these handlers rather than in the fetch effect
@@ -621,6 +499,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       setScript(null);
       setBeatIndex(0);
       markSentence(0, null);
+      shotRef.current = null;
       setPhase("loading");
       setVoiceBroken(false);
       // **Here rather than on mount, and that is the whole reason this is not just a module-level
@@ -743,129 +622,80 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Leaving the page ends the film.
+   *
+   * The provider and the stage live in `AppShell`, above every route, so nothing about a navigation
+   * reaches them on its own: pressing a navbar link mid-film used to leave the subtitle, the "Next ·"
+   * line and the player bar drawn over the next page, still narrating a trip that was no longer on
+   * screen. The navbar stays usable during a film on purpose (see the note in `AppShell`), so this
+   * is where leaving is made clean — any change of pathname is an exit, the same exit Esc and Plan
+   * take. It runs as the outgoing path's cleanup, which still sees the film that was playing there.
+   */
+  const pathname = usePathname();
+  const exitOnLeaveRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    exitOnLeaveRef.current = request ? exit : null;
+  }, [request, exit]);
+  useEffect(() => () => exitOnLeaveRef.current?.(), [pathname]);
+
+  /**
    * Play one beat's camera: aim it at the place the beat is about. The words are the next effect's.
    *
    * **Two effects, because the voice changes for reasons the camera must not hear.** They were one,
    * and that one listed `muted` and the voice `engine` among its dependencies, so pressing mute, or
-   * the natural voice finishing its download, re-ran the whole beat: the camera flew again, a travel
-   * walk restarted from its first street, and the voice began the beat from the top while the
-   * subtitle, on its own clock, carried on. Now the camera re-runs only for a beat, a phase or a map,
-   * and the voice re-runs for those or for a change of voice — and picks up at the sentence it was on.
+   * the natural voice finishing its download, re-ran the whole beat: the camera flew again and the
+   * voice began the beat from the top while the subtitle, on its own clock, carried on. Now the
+   * camera plays once per beat (`shotRef`) — a resume does not re-shoot it — and the voice re-runs
+   * for a beat, a phase or a change of voice, and picks up at the word it was on.
    *
-   * The cleanups are what make Next, Pause and Exit all work by the same mechanism — each of them
-   * only changes state, and the re-runs tear down what was in progress. Nothing has to cancel
-   * anything by hand.
+   * **Every move is one flight, `flyToStoryStop`.** Travel beats used to walk the camera along the
+   * leg's street geometry, a frame-by-frame `restoreCamera` loop paced at no more than 150 m/s and
+   * holding the beat open until it finished. On a Val d'Orcia drive that was a single "On to …" beat
+   * of **123 seconds** of continuous street-level panning under a one-line sentence; the same day's
+   * film now runs 132s instead of 160s, at 5,365 WebGL draw calls a second instead of 7,964. A travel
+   * beat now glides straight to the stop it is about, the engine's own eased flight along the line
+   * between the two, facing the way the day goes — so the stop beat that follows has already arrived.
    */
   useEffect(() => {
-    holdUntilRef.current = 0;
     if (!request || !script || !day || phase !== "playing") return;
     const beat = script.beats[beatIndex];
     if (!beat) return;
+    const shot = `${beatIndex}|${mapEngine}`;
+    if (shotRef.current === shot) return;
+    shotRef.current = shot;
 
-    /** The fly-along, when this beat has one. Cancelled by the same cleanup that cancels the
-     *  sentence, which is what makes Next, Pause and Exit all work without touching it. */
-    let follow: { cancel: () => void } | undefined;
     // Read once and cleared immediately, so it can only ever excuse the single beat that follows
-    // the arrival — a replay of the same day starts with nothing owed.
+    // the glide — a replay of the same day starts with nothing owed.
     const arrivedAt = arrivedStopRef.current;
     arrivedStopRef.current = null;
 
     if (beat.kind === "stop" && beat.stopIndex !== undefined) {
       const stop = day.stops[beat.stopIndex];
-      // A travel beat ends by flying to this exact stop, with this exact heading, through this
-      // exact call — so flying again here is a second trip to somewhere the camera already is.
-      // That was the visible one: the film appeared to arrive, pause, and then re-arrive.
-      const alreadyArrived = arrivedAt === beat.stopIndex;
-      if (stop && !alreadyArrived) {
+      if (stop) {
         setActiveIndex(dayOffset + beat.stopIndex);
         /**
-         * Face the way the day is going, and take longer over a longer leg.
+         * Face the way the day is going, and take longer over a longer leg — the retired Play tour's
+         * work (`tourPacing.ts`), inherited rather than re-derived; see `glideTo`. Without a heading
+         * every stop is framed due north and four arrivals in a row are the same frame; without
+         * distance in the flight a twelve-kilometre hop is the same whip pan as a two-hundred-metre
+         * one. `TOUR_HOLD_MS` is the one part that does not transfer: a film already has a hold —
+         * the beat lasts exactly as long as the sentence takes to say.
          *
-         * Both of these are the retired Play tour's work (`tourPacing.ts`), inherited rather than
-         * re-derived. They were written for a silent walk through a day's stops, and a narrated
-         * one is the same journey: without a heading every stop is framed due north and four
-         * arrivals in a row are the same frame, which is what made the tour read as a slideshow;
-         * without distance in the flight, a twelve-kilometre hop is the same whip pan as a
-         * two-hundred-metre one.
-         *
-         * `TOUR_HOLD_MS` is the one part that does not transfer, and it is the difference between
-         * the two features: a tour needs to invent a hold, where a film already has one — the beat
-         * lasts exactly as long as the sentence takes to say.
-         *
-         * A `null` bearing (a single-stop day, or a day at one coordinate) is left *undefined*
-         * rather than sent as 0, which is due north and a claim; omitting it keeps the renderers'
-         * existing `?? 0` fallback without pretending it was a decision.
+         * Not when a travel beat has just glided here: that was this exact call, so flying again
+         * would be a second trip to somewhere the camera already is.
          */
-        const stops = day.stops;
-        const heading = legBearingRad(stops, beat.stopIndex) ?? undefined;
-        const previous = beat.stopIndex > 0 ? stops[beat.stopIndex - 1] : undefined;
-        const previousHeading =
-          beat.stopIndex > 0 ? legBearingRad(stops, beat.stopIndex - 1) : null;
-        flyToStoryStop(stop.lat, stop.lng, {
-          headingRad: heading,
-          // Zero under `prefers-reduced-motion`: the camera arrives cut rather than flown, and the
-          // beat keeps its full length, so the film runs the same wall-clock time with more
-          // stillness. The same trade `useTripCamera` makes for the streaming camera — the framing
-          // is the information, the flight is the decoration.
-          durationS: prefersReducedMotion()
-            ? 0
-            : tourFlightSeconds(
-                previous ? metresBetween(previous, stop) : 0,
-                heading !== undefined && previousHeading !== null ? heading - previousHeading : 0
-              ),
-        });
-      } else if (stop) {
-        // Arrived already; the highlight is the only thing left to move.
-        setActiveIndex(dayOffset + beat.stopIndex);
+        if (arrivedAt !== beat.stopIndex) flyToStoryStop(stop.lat, stop.lng, glideTo(day.stops, beat.stopIndex));
       }
     } else if (beat.kind === "travel" && beat.legIndex !== undefined) {
-      /**
-       * The camera walks the leg while one sentence plays over it.
-       *
-       * The highlight moves to the stop being *left*, not the one being approached: this beat is
-       * about the going, and lighting the destination before arriving there is the spoiler the
-       * film already puts the arcs away to avoid.
-       *
-       * With no path to walk — the legs never landed, or this one did not route — the beat falls
-       * through to flying to the stop ahead, which is what the film did before travel beats. It
-       * should not normally happen: `normaliseScript` only emits a travel beat for a routed leg.
-       */
+      // The highlight stays on the stop being *left*: this beat is about the going, and lighting the
+      // destination before arriving is the spoiler the film already puts the arcs away to avoid.
       setActiveIndex(dayOffset + beat.legIndex);
-      // MapLibre only, and the one-line gate is enough because everything below keys on there
-      // being a path to walk — no path means the existing single-flight fallback, no hold, no
-      // driver. Cesium is excluded for two measured reasons rather than a preference: it cannot
-      // draw the route on the ground at all (see `drawLegPaths` there), so the camera would be
-      // walking a street with nothing marking it; and `docs/map-engine-gpu.md` puts it at 798
-      // requests / 16.9MB under a drag against MapLibre's 158 / 9.2MB, where a walk along a street
-      // is a continuous drag for the length of the beat. The beat itself stays either way — the
-      // line is still worth hearing over a flight.
-      const points = mapEngine === "maplibre" ? legPaths?.[beat.legIndex] ?? [] : [];
       const arriving = day.stops[beat.legIndex + 1];
-      if (points.length >= 2 && arriving) {
-        // The heading the stop beat after this one would have flown to. Settling into it here is
-        // half of why that beat now has nothing to do.
-        const arrivalHeadingRad = legBearingRad(day.stops, beat.legIndex + 1) ?? undefined;
-        const walkS = travelFollowSeconds(pathLengthM(points), estimateDurationMs(beat.text));
-        // The camera is the clock here — see `travelFollowSeconds`. Holding the beat open for the
-        // walk plus its settle is what stops a short line cutting a long movement in half.
-        holdUntilRef.current = performance.now() + (walkS + ARRIVAL_SETTLE_S) * 1000;
-        follow = followPath(rendererRef, points, walkS, {
-          arrivalHeadingRad,
-          // The other half. The walk ends on `restoreCamera`, which clears padding and applies no
-          // centre offset; `flyToStoryStop` goes through `flyToPoint`, which applies both. Same
-          // coordinate, two different places on screen — so the stop beat used to shunt the view
-          // sideways on arrival even when the heading already matched. Ending the walk *with the
-          // canonical call* leaves one framing, glided into over a beat rather than jumped to.
-          onArrive: () => {
-            arrivedStopRef.current = beat.legIndex! + 1;
-            flyToStoryStop(arriving.lat, arriving.lng, {
-              headingRad: arrivalHeadingRad,
-              durationS: prefersReducedMotion() ? 0 : ARRIVAL_SETTLE_S,
-            });
-          },
-        });
-      } else if (arriving) {
-        flyToStoryStop(arriving.lat, arriving.lng);
+      if (arriving) {
+        arrivedStopRef.current = beat.legIndex + 1;
+        // Paced by the line as well as the leg (`travelGlideSeconds`), so the camera is still going
+        // while the sentence about going is said, and lands about when it ends.
+        flyToStoryStop(arriving.lat, arriving.lng, glideTo(day.stops, beat.legIndex + 1, estimateDurationMs(beat.text)));
       }
     } else if (beat.kind === "opening") {
       // The day alone, centred, with no panel to aim beside — the film's establishing shot. This
@@ -880,6 +710,11 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       // Closing: pull back off the last stop to the day's framing, and drop the highlight so the
       // final line is about the day rather than about one place in it.
       setActiveIndex(null);
+      // A flight too, for Cesium's detail ceiling (`inStoryFlight`): the pull-back from 1200m to the
+      // whole day crosses the most new ground of any move in the film. Measured A/B, two runs each,
+      // this beat dropped 1 and 2 frames over 32ms with it against 14 and 3 without. 2.0 is
+      // `frameRoute`'s own default flight.
+      markStoryFlight(2.0);
       reframeRoute();
     }
     // Any other kind: hold the camera where the previous beat left it and just play the line.
@@ -889,21 +724,10 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     // day's framing and cleared the highlight — the closing's behaviour, performed in the middle
     // of a film, with nothing to attribute it to. Holding is the honest no-op: an unknown beat
     // still gets narrated, and the camera says nothing rather than saying the wrong thing.
-
-    return () => {
-      // Skip, Pause and Exit all reach here, because all three work by changing state and letting
-      // this effect re-run. One line covers a camera mid-flight in all of them.
-      follow?.cancel();
-    };
   }, [
     request,
     script,
     day,
-    // Neither of these can churn mid-film, which is why listing them is free. `rendererRef` is a
-    // ref, and `legPaths` is memoised on `day` — it reads `peekDayRoute` *inside* the memo, so
-    // routes landing after a film starts do not re-run it and cannot restart the beat in progress.
-    legPaths,
-    rendererRef,
     mapEngine,
     phase,
     beatIndex,
@@ -930,46 +754,49 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     const beat = script.beats[beatIndex];
     if (!beat) return;
 
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const advance = () => {
-      // Re-entrant by design: the narration finishing is permission to leave, not the instruction.
-      // A travel beat's sentence is one line and its movement is ten to twenty seconds, so the
-      // beat waits out the difference in silence rather than cutting the camera mid-street.
-      const remaining = holdUntilRef.current - performance.now();
-      if (remaining > 0) {
-        timer = setTimeout(advance, remaining);
-        return;
-      }
       markSentence(0, null);
       if (beatIndex + 1 >= script.beats.length) setPhase("ended");
       else setBeatIndex(beatIndex + 1);
     };
 
-    const { index: from, startedAt } = sentenceRef.current;
+    // A sentence still running (a mute of the platform voice) continues from now; a held one (a
+    // resume, an unmute, a voice arriving or failing) from where it was held; a new beat from zero.
+    const { index: from, startedAt, intoMs } = sentenceRef.current;
+    const into = startedAt === null ? intoMs : performance.now() - startedAt;
+    // Get the next beat's audio ready while the camera holds still: from this beat's last sentence,
+    // once any flight still running is over. Synthesising when the next beat starts put the GPU
+    // inference on top of its flight; synthesising at the last sentence of a one-line travel beat
+    // put it on top of the glide that sentence is said over. See `warmNatural`.
+    const last = splitForSpeech(beat.text).length - 1;
+    const following = script.beats[beatIndex + 1]?.text;
+    let warm: ReturnType<typeof setTimeout> | undefined;
     const handlers = {
       onEnd: advance,
-      onSentence: markSentence,
+      onSentence: (index: number, at: number) => {
+        markSentence(index, at);
+        if (index === last && following && voiceMode !== "silent") {
+          warm = setTimeout(() => warmOn(voiceMode, following), storyFlightLeftMs());
+        }
+      },
       // A voice that never started, or that died mid-beat, must not strand the film. Latching
-      // `voiceBroken` re-runs this effect down the silent path, at the sentence the voice failed
-      // on, so that line is the one that gets played rather than skipped.
+      // `voiceBroken` re-runs this effect down the silent path, at the word the voice failed on,
+      // so that line is the one that gets played rather than skipped.
       onError: () => {
-        markSentence(sentenceRef.current.index, null);
+        holdSentence();
         setVoiceBroken(true);
       },
     };
     const handle =
-      voiceMode === "silent"
-        ? // A mute continues mid-sentence; a resume (startedAt cleared) starts the sentence over.
-          speakSilently(beat.text, handlers, from, startedAt === null ? 0 : performance.now() - startedAt)
-        : speakOn(voiceMode, beat.text, handlers, from);
+      voiceMode === "silent" ? speakSilently(beat.text, handlers, from, into) : speakOn(voiceMode, beat.text, handlers, from, into);
     speakRef.current = handle;
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(warm);
       handle.cancel();
       if (speakRef.current === handle) speakRef.current = null;
     };
-  }, [request, script, phase, beatIndex, voiceMode, markSentence]);
+  }, [request, script, phase, beatIndex, voiceMode, markSentence, holdSentence]);
 
   /**
    * Move to a beat and play it from its top — Next, Previous and the scrubber's seek alike. Moving
@@ -980,6 +807,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     (target: number) => {
       if (target === beatIndex && phase === "playing") return;
       markSentence(0, null);
+      shotRef.current = null;
       setBeatIndex(target);
       setPhase("playing");
     },
@@ -1012,38 +840,42 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   /**
    * Pause, resume, or replay from the top once the film has ended.
    *
-   * Resuming **re-speaks the current sentence from its beginning** rather than picking up
-   * mid-word, and rather than the whole beat as it once did. `speechSynthesis.pause()`/`resume()`
-   * exist, and are the obvious thing to reach for, but they are unreliable across engines in exactly
-   * the way that matters here — a pause that does not take leaves the voice talking over a stopped
-   * camera. Cancelling and re-reading one sentence is a second or two of repetition, the same on
-   * every platform, and the subtitle re-lights that sentence with it.
+   * Resuming **picks the sentence up at the word it was paused on**, not at its start. It used to
+   * re-speak the sentence from its beginning, and since most beats are one or two long sentences that
+   * was, to the ear, the beat starting over — measured on Val d'Orcia's opening, a pause 17 words in
+   * resumed at word 0, three times out of three. `speechSynthesis.pause()`/`resume()` are still not
+   * used: they are unreliable across engines in exactly the way that matters here, a pause that does
+   * not take leaving the voice talking over a stopped film. So the beat is still cancelled and
+   * re-spoken, from the sentence and the time into it that `holdSentence` kept: the platform voice
+   * drops the words already lit (`resumePoint`, one word back), the natural voice starts the same
+   * audio 0.3s before where it stopped, and the silent path continues on its estimate.
    */
   const togglePlay = useCallback(() => {
     if (phase === "ended") {
       markSentence(0, null);
+      shotRef.current = null;
       setBeatIndex(0);
       setPhase("playing");
-    } else if (phase === "playing") setPhase("paused");
-    else if (phase === "paused") {
-      markSentence(sentenceRef.current.index, null);
-      setPhase("playing");
-    }
-  }, [phase, markSentence]);
+    } else if (phase === "playing") {
+      // Held at the word: the caption stops on it, and the resume speaks from it.
+      holdSentence();
+      setPhase("paused");
+    } else if (phase === "paused") setPhase("playing");
+  }, [phase, markSentence, holdSentence]);
 
   /**
    * Mute is a volume, never a restart. The natural voice is silenced through its gain, mid-sentence,
    * and nothing re-runs. The platform voice's volume is fixed once an utterance is spoken, so muting
-   * it moves the beat to `speakSilently` at the very word it was on, and unmuting re-says the current
-   * sentence aloud (marked unheard here, so its words wait for the voice).
+   * it moves the beat to `speakSilently` at the very word it was on, and unmuting hands it back to the
+   * voice at the word the silence had reached (held here, so the rest waits for the voice).
    */
   const applyMute = useCallback(
     (nextMuted: boolean, level: number) => {
       setNarrationVolume(nextMuted ? 0 : level);
-      if (!nextMuted && muted && engine === "browser" && speaks) markSentence(sentenceRef.current.index, null);
+      if (!nextMuted && muted && engine === "browser" && speaks) holdSentence();
       setMuted(nextMuted);
     },
-    [muted, engine, speaks, markSentence]
+    [muted, engine, speaks, holdSentence]
   );
   const toggleMute = useCallback(() => applyMute(!muted, volume), [applyMute, muted, volume]);
   const setVolume = useCallback(

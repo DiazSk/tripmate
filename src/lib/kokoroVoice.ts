@@ -89,6 +89,10 @@ function dtypeFor(device: "webgpu" | "wasm"): "fp32" | "q8" {
 
 const VOICE = "af_heart";
 
+/** A resumed sentence starts this much before where it was paused, so it re-enters on a syllable
+ *  already heard rather than on the half-word the pause cut. */
+const RESUME_REWIND_S = 0.3;
+
 /**
  * How long one sentence may take to synthesise before the beat gives up and lets the platform
  * voice read it instead.
@@ -320,8 +324,29 @@ export function loadNaturalVoice(onProgress?: (fraction: number) => void): Promi
   return loading;
 }
 
+/**
+ * The last few sentences synthesised, by speed and text. A pause cancels the beat and a resume asks
+ * for the same sentence again (and the one after it, already prefetched once); without this each
+ * resume was a second of silence and another GPU inference while the map was drawing. Twelve holds
+ * the beat being spoken and the next one `warmNatural` has synthesised ahead (a beat is at most four
+ * sentences), at a few hundred KB of audio each.
+ */
+const recent = new Map<string, Promise<{ audio: Float32Array; samplingRate: number }>>();
+const RECENT_MAX = 12;
+
 /** One sentence to the worker, one Float32Array back, with a deadline. */
-function generate(
+function generate(text: string, speed: number): Promise<{ audio: Float32Array; samplingRate: number }> {
+  const key = `${speed}|${text}`;
+  const hit = recent.get(key);
+  if (hit) return hit;
+  const pending = synthesise(text, speed);
+  recent.set(key, pending);
+  pending.catch(() => recent.delete(key));
+  if (recent.size > RECENT_MAX) recent.delete(recent.keys().next().value!);
+  return pending;
+}
+
+function synthesise(
   text: string,
   speed: number
 ): Promise<{ audio: Float32Array; samplingRate: number }> {
@@ -348,6 +373,25 @@ function generate(
 }
 
 /**
+ * Synthesise a beat ahead of time, one sentence after another, into `recent` — so that when it is
+ * spoken nothing has to be inferred.
+ *
+ * **Why, measured.** Kokoro runs on WebGPU and so does the map. A beat used to synthesise its first
+ * sentence the moment it began, which is exactly when the camera starts its flight to the next place:
+ * on MapLibre a day's film with the natural voice dropped **45 frames over 32ms** against **1** with
+ * the platform voice, the same film and the same flights, and 32 of the 45 fell in the three longest
+ * travel glides — with one main-thread long task in the whole film, so it was the GPU, not the page.
+ * The controller calls this from the current beat's last sentence, once the camera's flight is over
+ * (`storyFlightLeftMs`), so the inference happens in a hold instead of in a flight. Sequential rather
+ * than all at once, so it never asks the GPU for more than one sentence at a time.
+ */
+export function warmNatural(text: string): void {
+  if (!worker) return;
+  const chunks = splitForSpeech(text);
+  chunks.reduce<Promise<unknown>>((before, chunk, i) => before.then(() => generate(chunk, rateFor(i, chunks.length))).catch(() => {}), Promise.resolve());
+}
+
+/**
  * Speak one beat with the natural voice, honouring the same sentence pauses as the browser voice.
  *
  * **Synthesis is prefetched one sentence ahead.** Even in a worker, generating a sentence takes
@@ -368,7 +412,10 @@ export function speakNatural(
     onError?: (at: number) => void;
     onSentence?: (index: number, startedAt: number) => void;
   } = {},
-  from = 0
+  from = 0,
+  /** How much of sentence `from` has been heard already — a resume. Its audio starts that far in,
+   *  less `RESUME_REWIND_S`, and it is reported as started that far back. */
+  intoMs = 0
 ): SpeakHandle {
   const chunks = splitForSpeech(text);
   const first = Math.max(0, Math.min(from, chunks.length));
@@ -456,8 +503,11 @@ export function speakNatural(
       }
       timer = setTimeout(playNext, pause);
     };
-    source.start();
-    handlers.onSentence?.(index, performance.now());
+    // Only the first sentence of a resumed beat starts part-way in. Real audio time, not an
+    // estimate: `intoMs` was measured from this voice's own `onSentence`.
+    const offsetS = index === first ? Math.min(Math.max(0, intoMs / 1000 - RESUME_REWIND_S), buffer.duration * 0.9) : 0;
+    source.start(0, offsetS);
+    handlers.onSentence?.(index, performance.now() - offsetS * 1000);
   };
 
   void playNext();
