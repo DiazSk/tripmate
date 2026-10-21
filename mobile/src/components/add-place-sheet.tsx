@@ -3,7 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory } from '@/api/types';
-import { SheetDone } from '@/components/budget-sheet';
+import { SheetDone } from '@/components/sheet-done';
 import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';

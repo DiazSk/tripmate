@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { DayPlan } from '@/api/types';
+import { SheetDone } from '@/components/sheet-done';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { formatDayChip } from '@/lib/dayDisplay';
@@ -95,21 +96,6 @@ export function BudgetSheet({
         onSureness={onSureness}
       />
     </>
-  );
-}
-
-/**
- * The way out of a sheet that changes nothing on the way out: "Done", trailing, in the accent.
- * Shared by Budget and the chat history so the trip's sheets say it one way; Add a stop says
- * Cancel instead, because closing it drops a search and a chosen place.
- */
-export function SheetDone({ onPress, label = 'Done' }: { onPress: () => void; label?: string }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={12} style={styles.done}>
-      <ThemedText type="body" themeColor="accentText" style={{ fontWeight: '600' }}>
-        {label}
-      </ThemedText>
-    </Pressable>
   );
 }
 
@@ -350,7 +336,6 @@ const CHIP: Record<Sureness, { backgroundColor: string }> = {
 };
 
 const styles = StyleSheet.create({
-  done: { minHeight: 44, justifyContent: 'center' },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -50,12 +50,8 @@ const SHEET_OPTIONS: React.ComponentProps<typeof Stack.Screen>['options'] = {
   sheetAllowedDetents: [0.55, 1],
   sheetGrabberVisible: true,
   sheetCornerRadius: 24,
-  headerShown: true,
-  headerTransparent: false,
-  headerShadowVisible: false,
-  headerStyle: { backgroundColor: SettingsColors.ground },
-  headerTitleStyle: { color: '#000' },
-  headerTintColor: Polar.ember,
+  // The sheet draws its own bar (`SheetScreen`): the stack's runs the app's dark trait.
+  headerShown: false,
   contentStyle: { backgroundColor: SettingsColors.ground },
 };
 

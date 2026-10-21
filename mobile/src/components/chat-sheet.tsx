@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import type { ChatTurn } from '@/api/types';
-import { SheetDone } from '@/components/budget-sheet';
+import { SheetDone } from '@/components/sheet-done';
 import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';

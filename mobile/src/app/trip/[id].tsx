@@ -1443,16 +1443,17 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
   },
-  /** Flat on the night between two rules, as trip-2C draws it: a fact about the trip, not a card. */
+  /** A quiet slate card on the night, inset to the page's gutter. Between two rules it was one more
+   *  pair of hairlines right above the day's own edge. */
   shelf: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.rows,
-    paddingHorizontal: Spacing.read,
+    marginHorizontal: Spacing.read,
+    paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.tight,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
+    borderRadius: Radius.surface,
+    backgroundColor: Colors.surfaceDeep,
   },
   discard: { alignSelf: 'flex-start', marginTop: 2 },
   discardText: { textDecorationLine: 'underline' },

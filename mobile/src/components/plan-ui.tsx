@@ -1,10 +1,11 @@
 import NativeDatePicker from '@expo/ui/community/datetime-picker';
 import { SymbolView } from 'expo-symbols';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Children, Fragment, type ReactNode, type Ref } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 import { Header, Separator, SettingsColors } from '@/components/settings-list';
+import { SheetDone } from '@/components/sheet-done';
 import { nowTime, toClock, toDate, toIso, toTimeDate } from '@/components/form';
 import { Polar } from '@/constants/polar';
 
@@ -212,8 +213,11 @@ function Step({ sign, label, disabled, onPress }: { sign: 'minus' | 'plus'; labe
 export function SwitchRow({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
   return (
     <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} />
+      {/* Grows, so the switch sits at the row's end as in Settings rather than after the words. */}
+      <Text style={[styles.label, styles.grow]}>{label}</Text>
+      {/* The off track said outright: the sheet runs the app's dark trait, whose off track is near
+          white, and on this white row the switch read as missing. #E9E9EA is iOS's light one. */}
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ false: '#E9E9EA' }} ios_backgroundColor="#E9E9EA" />
     </View>
   );
 }
@@ -284,34 +288,44 @@ export function LinkRow({ label, value, onPress }: { label: string; value?: stri
  *
  * Done only closes. Every row writes the draft as it changes, the way the steps always did, so
  * there is nothing to save and nothing to lose by dragging the sheet away instead.
+ *
+ * **The ScrollView is the screen's only child, and that is what keeps the large detent drawn.**
+ * react-native-screens sizes a form sheet's content to the detent by finding a ScrollView among
+ * the screen's own children. Inside a `KeyboardAvoidingView` it found none, and dragged to full
+ * height the sheet showed its header over an empty page. The keyboard is the ScrollView's job now
+ * (`automaticallyAdjustKeyboardInsets`).
+ *
+ * The bar is the sheet's own, as the trip's sheets draw theirs: the stack's bar wrapped Done in a
+ * dark glass circle too small for the word.
  */
 export function SheetScreen({ title, children }: { title: string; children: ReactNode }) {
   const router = useRouter();
   return (
-    <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen
-        options={{
-          title,
-          headerRight: () => (
-            <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={12}>
-              <Text style={styles.done}>Done</Text>
-            </Pressable>
-          ),
-        }}
-      />
-      <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+    <>
+      {/* The sheet's own bar, not the stack's (see `SheetDone`); not flattened, so the sheet sees
+          exactly a header and a ScrollView. */}
+      <View collapsable={false} style={styles.sheetBar}>
+        <Text style={styles.sheetBarTitle} numberOfLines={1} accessibilityRole="header">
+          {title}
+        </Text>
+        <SheetDone paper onPress={() => router.back()} />
+      </View>
+      <ScrollView
+        contentContainerStyle={styles.sheetContent}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets>
         {children}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </>
   );
 }
 
 export const PlanColors = { ...SettingsColors, ink: '#000', tint: Polar.ember, signal: Polar.signal, fill: 'rgba(118,118,128,0.12)' } as const;
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1, backgroundColor: SettingsColors.ground },
   sheetContent: { paddingTop: 16, paddingBottom: 40 },
-  done: { fontSize: 17, fontWeight: '600', color: Polar.ember },
+  sheetBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', minHeight: 44, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
+  sheetBarTitle: { position: 'absolute', left: 88, right: 88, bottom: 12, textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#000' },
   section: { marginBottom: 22 },
   footer: { marginHorizontal: 32, marginTop: 7, fontSize: 13, lineHeight: 18, color: SettingsColors.grey },
   group: { marginHorizontal: 16, overflow: 'hidden', borderRadius: 12, backgroundColor: '#fff' },

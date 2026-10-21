@@ -447,11 +447,14 @@ const styles = StyleSheet.create({
   body: { flex: 1, justifyContent: 'flex-end', gap: 3 },
   icon: { position: 'absolute', top: 6, left: 0 },
 
-  // Into the card's corner, as home-4 sets it: the figure tight to the top and right edges and
-  // "days to go" tucked right under it, not floating a line below.
-  daysToGo: { position: 'absolute', top: -24, right: -6, alignItems: 'flex-end' },
-  daysValue: { fontFamily: PolarFonts.condensed, fontSize: 74, lineHeight: 80, color: Polar.signal },
-  daysUnit: { marginTop: -16, fontSize: 13, fontWeight: '600', color: Polar.ice },
+  // In the card's top-right corner on the same margins as the label opposite it: right flush with
+  // the padding (less the figures' side bearing), and the top pulled up by their own leading so the
+  // cap line meets the label's. Measured on the sim: both ~16pt in from the card's top and right.
+  // No lineHeight on the figure: Oswald's ascent is taller than 74pt type, and a tighter line box
+  // clips the tops of the digits flat on iOS.
+  daysToGo: { position: 'absolute', top: -40, right: -3, alignItems: 'flex-end' },
+  daysValue: { fontFamily: PolarFonts.condensed, fontSize: 74, color: Polar.signal },
+  daysUnit: { marginTop: -16, marginRight: 3, fontSize: 13, fontWeight: '600', color: Polar.ice },
   photoCity: { fontFamily: PolarFonts.condensed, fontSize: 52, lineHeight: 56, color: Polar.ice },
   photoMeta: { fontSize: 15, lineHeight: 20, fontWeight: '500', color: Polar.ice, fontVariant: ['tabular-nums'] },
   photoNote: { marginTop: 2, fontSize: 13, lineHeight: 17, color: Polar.frost68 },

@@ -154,7 +154,7 @@ export function DayPage({
 
         {groups.map((group, groupIndex) => (
           <View key={group.label ?? `group-${groupIndex}`}>
-            {showHeadings && group.label ? <SectionRule label={group.label} /> : null}
+            {showHeadings && group.label ? <Eyebrow label={group.label} /> : null}
             {group.stops.map((entry, indexInGroup) => (
               <View key={`${entry.stop.name}-${entry.index}`}>
                 {/* Only WITHIN a group, never across a heading. A leg spanning Morning to Afternoon
@@ -773,19 +773,27 @@ function Finding({
   );
 }
 
-function SectionRule({ label, trailing }: { label: string; trailing?: string }) {
+/**
+ * A section's name with one rule beneath it, as trip-2C draws "THE DAY · 5 STOPS". The rule used to
+ * run on from the label's end, and every part of the day had one too, so under the section's own
+ * edge the page stacked three or four hairlines inside 60pt.
+ */
+function SectionRule({ label }: { label: string }) {
   return (
     <View style={styles.sectionRule}>
       <ThemedText type="label" themeColor="muted">
         {label}
       </ThemedText>
-      <View style={styles.rule} />
-      {trailing ? (
-        <ThemedText type="money" themeColor="money">
-          {trailing}
-        </ThemedText>
-      ) : null}
     </View>
+  );
+}
+
+/** Morning / Afternoon / Evening: a plain eyebrow over its stops, with no rule of its own. */
+function Eyebrow({ label }: { label: string }) {
+  return (
+    <ThemedText type="label" themeColor="muted" style={styles.eyebrow}>
+      {label}
+    </ThemedText>
   );
 }
 
@@ -828,20 +836,19 @@ const styles = StyleSheet.create({
    */
   section: {
     backgroundColor: Colors.surfaceDeep,
+    // The top edge only. With both, two sections a gap apart drew two rules 12pt apart.
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
     paddingHorizontal: Spacing.read,
     paddingVertical: Spacing.rows,
   },
   sectionRule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.tight,
     marginTop: Spacing.hair,
-    marginBottom: Spacing.hair,
+    paddingBottom: Spacing.tight,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.cardBorder,
   },
-  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
+  eyebrow: { marginTop: Spacing.rows },
 
   /** A stop is a row, never a card: no divider between rows — the disc, the bold name and the
    *  leg between two stops already say where one ends. Its own wash runs the section's full width

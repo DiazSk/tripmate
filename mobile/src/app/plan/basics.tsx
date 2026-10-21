@@ -3,7 +3,7 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
@@ -199,6 +199,9 @@ export default function Basics() {
 
 
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  // 402:262, never shorter than what the band holds (see the note on `PlacePhoto` below).
+  const heroRatio = screenWidth / Math.max((screenWidth * 262) / 402, insets.top + HERO_BODY);
   const tiles = planTiles(draft);
   const open = (id: PlanTileId) => {
     closeSuggestions();
@@ -221,7 +224,12 @@ export default function Basics() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         {/* The place itself, once there is one. Until then the ink the photograph would sit on. */}
-        <PlacePhoto name={city || 'Travel'} aspectRatio={402 / 262} radius={0} scrim={0.42} style={styles.hero}>
+        {/* Never shorter than what it holds. At 402:262 alone, the close, the title and the field
+            came to more than the photograph under the status bar, the bottom padding gave way, and
+            the field sat 2pt above the sheet where plan-3C leaves 14pt. The floor goes into the
+            ratio, not into a `minHeight`: with a ratio, Yoga widens the box to keep it when the
+            height is clamped, and the band (and the field in it) ran past the screen's right edge. */}
+        <PlacePhoto name={city || 'Travel'} aspectRatio={heroRatio} radius={0} scrim={0.42} style={styles.hero}>
           <View style={[styles.heroInner, { paddingTop: insets.top + 4 }]}>
             <Pressable
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
@@ -403,6 +411,9 @@ const TILE_ICON: Record<PlanTileId, React.ComponentProps<typeof SymbolView>['nam
   must: { ios: 'mappin.circle', android: 'place' },
 };
 
+/** Below the inset: 4 + close 38 + 12 + title 44 + 12 + field 52 + 38 padding, and 14 to spare. */
+const HERO_BODY = 214;
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: PlanColors.ground },
   grow: { flex: 1 },
@@ -432,7 +443,7 @@ const styles = StyleSheet.create({
   },
   whereInput: { flex: 1, fontSize: 19, color: PlanColors.ink, paddingVertical: 10 },
   // Rounded over the photograph, the way a sheet sits on a page; the grouped ground beneath.
-  sheet: { marginTop: -24, paddingTop: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: PlanColors.ground },
+  sheet: { marginTop: -24, paddingTop: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: PlanColors.ground },
   suggestion: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 16, backgroundColor: '#fff' },
   suggestionText: { flex: 1, fontSize: 16, color: PlanColors.ink },
   suggestionArea: { color: PlanColors.grey },
