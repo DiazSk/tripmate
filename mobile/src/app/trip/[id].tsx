@@ -29,11 +29,8 @@ import {
 } from '@/api/tripMateApi';
 import type { ChatTurn, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
 import { lastRequestReachedServer } from '@/api/session';
-import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
 import { AskBar } from '@/components/ask-bar';
-import { BudgetSheet } from '@/components/budget-sheet';
-import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
 import { OfflineScreen } from '@/components/offline-screen';
@@ -45,13 +42,16 @@ import { TripToolbar } from '@/components/trip-toolbar';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
 import { type Repair, repairsFor } from '@shared/guardrailFixes';
+import { clearsIn } from '@shared/memories';
 
+import { confirmDelete } from '@/lib/confirmDelete';
 import { clockAt, formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { importNoteLines, showsHealthOnOpen } from '@/lib/importNotes';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 import { proposalRows } from '@/lib/proposalRows';
+import { publishTripSheets } from '@/lib/tripSheets';
 import { useStoryFilm } from '@/lib/useStoryFilm';
 import { surenessFields, tripSpend, type Sureness } from '@/lib/spend';
 import { loadTrip } from '@/lib/tripCache';
@@ -147,29 +147,14 @@ export default function TripDetail() {
   // Back during a film means Close, not "leave the trip" — Android's back button, and the header
   // and edge swipe the film hides.
   usePreventRemove(filming, closeFilm);
-  const [adding, setAdding] = useState(false);
-  /** The Budget sheet, and which tab it opens on: the ring asks about the trip, a day's total
-   *  about that day. */
-  const [budgetSheet, setBudgetSheet] = useState<'trip' | 'day' | null>(null);
   /** How much of the screen's foot the floating toolbar covers; the faces keep clear of it. */
   const [toolbarHeight, setToolbarHeight] = useState(0);
-  /**
-   * The stop being asked "what else is near this?", or null when the sheet was opened by +.
-   *
-   * One piece of state rather than a second sheet: the two ask the same question of the same
-   * endpoint and end in the same day-and-slot card, and the only difference is where they search
-   * and how tightly. Cleared alongside `adding` on every close, or the next + press would silently
-   * inherit the last stop asked about.
-   */
-  const [probe, setProbe] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const chat = useChat(id, trip, setTrip, opensOnAsk ? askedDay : null, (diff) => {
     // A proposal is drawn on the day it changes, so show one it changes, and show it as a list —
     // the map face has no rows to draw a change on.
     if (!diff.days.includes(day)) setChosen(diff.days[0] ?? day);
     setFace('list');
   });
-  /** The whole conversation, which the bar's "N messages" opens. */
-  const [history, setHistory] = useState(false);
   // Back while asking folds the bar into the toolbar rather than leaving the trip.
   usePreventRemove(chat.visible && !chat.pending && !filming, chat.close);
   /**
@@ -315,14 +300,36 @@ export default function TripDetail() {
     await commit(next, locking === wasFixed ? 'That cost' : locking ? 'Marking that stop booked' : 'Unlocking that stop');
   }
 
-  function closeSheet() {
-    setAdding(false);
-    setProbe(null);
+  /**
+   * The trip's sheets are form-sheet routes over this screen (`trip/[id]/budget|add|chat`); what
+   * they read is published below. Budget's ring asks about the trip and a day's total about that
+   * day. "What else is near this stop?" is Add a stop asked a tighter question, so the stop rides
+   * in the params, and + opens it with none.
+   */
+  function openBudget(tab: 'trip' | 'day') {
+    router.push({ pathname: '/trip/[id]/budget', params: { id, tab } });
   }
 
-  function findNearby(stop: { name: string; lat: number; lng: number }) {
-    setProbe({ lat: stop.lat, lng: stop.lng, name: stop.name });
-    setAdding(true);
+  function openAdd(stop?: { name: string; lat: number; lng: number }) {
+    router.push({
+      pathname: '/trip/[id]/add',
+      params: stop ? { id, lat: String(stop.lat), lng: String(stop.lng), name: stop.name } : { id },
+    });
+  }
+
+  async function addStop(next: Itinerary, name: string): Promise<boolean> {
+    if (!trip) return false;
+    // The write is a whole-itinerary overwrite with no server-side transaction to undo, so the
+    // only honest recovery is to put the object we replaced back exactly as it was — which
+    // `commit` does, and now says out loud.
+    const previous = trip.itinerary;
+    if (!(await commit(next, `Adding ${name}`))) return false;
+    // Nothing in this app removes a stop, so before this an add was permanent short of asking
+    // the planner to undo it in words. The day is read off the diff rather than passed down: the
+    // sheet may add to a day other than the one being read, and the comparison already knows
+    // which one it was.
+    chat.remember(previous, diffItineraries(previous, next).days);
+    return true;
   }
 
   /**
@@ -362,6 +369,35 @@ export default function TripDetail() {
 
   /** Nothing may be written against a copy from disk. */
   const offline = cachedAt !== null;
+
+  // What the sheet routes read, after every render, so an open sheet follows the trip as it
+  // changes (a Booked tap in Budget, a reply landing in the chat history). No deps on purpose.
+  useEffect(() => {
+    const sheetDays = trip?.itinerary?.days ?? [];
+    publishTripSheets(
+      id,
+      trip
+        ? {
+            days: sheetDays,
+            budget: trip.budget,
+            itinerary: trip.itinerary,
+            dayIndex: day,
+            offline,
+            // Search around the day you are reading. A day with no stops has no middle to search
+            // from, and the sheet says so rather than defaulting to somewhere arbitrary.
+            centre: centreOf(sheetDays[day]?.stops ?? []),
+            onDay: setDay,
+            onSureness: (dayIndex, stopIndex, sureness) =>
+              setCost(dayIndex, stopIndex, sheetDays[dayIndex]?.stops[stopIndex]?.actualCost, sureness),
+            onAdd: addStop,
+            turns: chat.turns,
+            replying: chat.replying,
+            failure: chat.failure,
+          }
+        : null
+    );
+  });
+  useEffect(() => () => publishTripSheets(id, null), [id]);
 
   /**
    * **Memoised because `headerRight` is a native header, not a view in the page.** Every day swipe
@@ -473,12 +509,6 @@ export default function TripDetail() {
                 </View>
               ) : null}
 
-              {/* Up here rather than as a shelf at the foot: the foot is the toolbar's now, and an
-                  unkept plan is a fact about the trip that belongs with the other one, offline. */}
-              {trip.status === 'draft' ? (
-                <KeepShelf trip={trip} onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })} />
-              ) : null}
-
               {/* **A refused write, said out loud.** Coral, because this is the alert sense the One
                   Meaning Rule reserves it for: something the traveller asked for cannot happen. It
                   sits in the same slot as the offline line above and never both at once — offline is
@@ -533,16 +563,23 @@ export default function TripDetail() {
               onDayChange={setDay}
               emphasis={emphasis}
               onEmphasise={setEmphasis}
-              onFindNearby={findNearby}
+              onFindNearby={openAdd}
               findings={findings}
               onSetCost={setCost}
-              onBudget={() => setBudgetSheet('day')}
+              onBudget={() => openBudget('day')}
               footer={filming ? 0 : toolbarHeight}
               onAsk={(message: string) => askWith(message, day)}
               repairs={repairs}
               onRepair={applyRepair}
               offline={offline}
               proposal={chat.pending ? { itinerary: chat.pending.itinerary, diff: chat.pending.diff } : null}
+              // Under the day's hero, as trip-2C draws it, not in the chrome above the day: that put
+              // ~290pt of header, strip and card between the traveller and the first stop.
+              shelf={
+                trip.status === 'draft' ? (
+                  <KeepShelf trip={trip} onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })} />
+                ) : null
+              }
             />
 
             {mapBuilt ? (
@@ -586,7 +623,7 @@ export default function TripDetail() {
               asked={chat.asked}
               reply={chat.reply}
               turns={chat.turns.length}
-              onHistory={() => setHistory(true)}
+              onHistory={() => router.push({ pathname: '/trip/[id]/chat', params: { id } })}
               pending={chat.pending?.diff ?? null}
               applying={chat.applying}
               onApply={chat.apply}
@@ -625,10 +662,10 @@ export default function TripDetail() {
                 // The plain Ask is about the trip, not the day you happen to be reading. Whatever
                 // was left in the box when it last closed is still there.
                 onAsk={() => chat.open(undefined, null)}
-                onAdd={() => setAdding(true)}
+                onAdd={() => openAdd()}
                 spent={tripSpend(days)}
                 budget={trip.budget}
-                onBudget={() => setBudgetSheet('trip')}
+                onBudget={() => openBudget('trip')}
                 onHeight={setToolbarHeight}
               />
             </>
@@ -636,52 +673,6 @@ export default function TripDetail() {
         </>
       )}
 
-      <BudgetSheet
-        visible={budgetSheet !== null}
-        initial={budgetSheet ?? 'trip'}
-        days={days}
-        budget={trip.budget}
-        dayIndex={day}
-        offline={offline}
-        onDay={setDay}
-        onSureness={(dayIndex, stopIndex, sureness) =>
-          setCost(dayIndex, stopIndex, days[dayIndex]?.stops[stopIndex]?.actualCost, sureness)
-        }
-        onClose={() => setBudgetSheet(null)}
-      />
-
-      <AddPlaceSheet
-        visible={adding}
-        onClose={closeSheet}
-        itinerary={trip.itinerary}
-        dayIndex={day}
-        // Search around the day you are reading. A day with no stops has no middle to search
-        // from, and the sheet says so rather than defaulting to somewhere arbitrary.
-        centre={centreOf(days[day]?.stops ?? [])}
-        at={probe}
-        onAdd={async (next, name) => {
-          // The write is a whole-itinerary overwrite with no server-side transaction to undo, so
-          // the only honest recovery is to put the object we replaced back exactly as it was —
-          // which `commit` does, and now says out loud.
-          const previous = trip.itinerary;
-          if (!(await commit(next, `Adding ${name}`))) return false;
-          // Nothing in this app removes a stop, so before this an add was permanent short of
-          // asking the planner to undo it in words. The day is read off the diff rather than
-          // passed down: the sheet may add to a day other than the one being read, and the
-          // comparison already knows which one it was.
-          chat.remember(previous, diffItineraries(previous, next).days);
-          return true;
-        }}
-      />
-
-      <ChatSheet
-        visible={history}
-        onClose={() => setHistory(false)}
-        turns={chat.turns}
-        replying={chat.replying}
-        failure={chat.failure}
-        days={days}
-      />
     </View>
   );
 }
@@ -1104,6 +1095,7 @@ function DayPager({
   onRepair,
   offline,
   proposal,
+  shelf,
 }: {
   trip: Trip;
   day: number;
@@ -1124,6 +1116,8 @@ function DayPager({
   offline: boolean;
   /** A change waiting for approval, drawn on each day it touches. */
   proposal: { itinerary: Itinerary; diff: ItineraryDiff } | null;
+  /** The draft's Keep shelf, drawn under every day's hero — see `DayPage`. */
+  shelf: React.ReactNode;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
   // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
@@ -1188,6 +1182,7 @@ function DayPager({
                   }
                 : null
             }
+            shelf={shelf}
           />
         </View>
       ))}
@@ -1249,11 +1244,11 @@ function DayStrip({
             accessibilityLabel={`Day ${index + 1} of ${count}${marked.includes(index) ? ', changes here' : ''}`}
             style={[styles.chip, active && styles.chipActive]}>
             {marked.includes(index) ? <View style={styles.chipMark} /> : null}
-            <ThemedText type="money" themeColor={active ? 'foreground' : 'muted'}>
+            <ThemedText type="money" themeColor="muted" style={active && styles.chipTextActive}>
               {chip?.dayOfMonth ?? index + 1}
             </ThemedText>
             {chip ? (
-              <ThemedText type="micro" themeColor="muted" style={styles.chipWeekday}>
+              <ThemedText type="micro" themeColor="muted" style={[styles.chipWeekday, active && styles.chipTextActive]}>
                 {chip.weekday.toUpperCase()}
               </ThemedText>
             ) : null}
@@ -1303,17 +1298,23 @@ function stopIndexFor(emphasis: string | null, dayIndex: number): number | null 
 }
 
 /**
- * An unkept plan's shelf.
+ * An unkept plan's shelf, under the day's hero: Draft, the days it has left, and Keep.
  *
  * A generated trip is a `draft` row from the moment it exists, so nothing is lost on a back
- * press — but a draft is invisible on the trips wall (`listTrips` defaults to saved), so
- * without this it could only be reached by going back through generation. Keeping promotes the
- * same row rather than inserting a second one, which is what keeps its `runId` link intact.
+ * press, and Trips and Home list it as a draft. Keeping promotes the same row rather than
+ * inserting a second one, which is what keeps its `runId` link intact. The line is the one Home
+ * and Trips print (`clearsIn`), so the three surfaces describe a draft in the same words.
+ *
+ * **Discard is a quiet line under the sentence, and it asks first.** It sat beside Keep and
+ * deleted minutes of generation in one tap; the design (trip-2C) has no Discard at all. It stays
+ * because a draft you do not want should not need a trip to the Trips tab's long-press menu, and
+ * it asks with that menu's own sheet (`confirmDelete`).
  */
 function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState<'keep' | 'discard' | null>(null);
   const [failed, setFailed] = useState(false);
+  const clears = clearsIn(trip);
 
   async function keep() {
     setBusy('keep');
@@ -1338,7 +1339,7 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
   }
 
   return (
-    <View style={styles.status}>
+    <View style={styles.shelf}>
       <SymbolView name={{ ios: 'doc.text', android: 'description' }} tintColor={Colors.muted} size={18} />
       <View style={styles.grow}>
         <ThemedText type="detail" style={{ fontWeight: '600' }}>Draft</ThemedText>
@@ -1346,17 +1347,21 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
           <ThemedText type="detail" themeColor="alert">
             That didn&rsquo;t go through. Try again.
           </ThemedText>
-        ) : (
-          <ThemedText type="detail" themeColor="muted">
-            Not under Trips until you keep it.
+        ) : clears ? (
+          <ThemedText type="detail" themeColor="muted">{clears}</ThemedText>
+        ) : null}
+        <Pressable
+          onPress={() => confirmDelete(trip, () => void discard())}
+          disabled={!!busy}
+          accessibilityRole="button"
+          accessibilityLabel="Discard this draft"
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+          style={styles.discard}>
+          <ThemedText type="detail" themeColor="muted" style={styles.discardText}>
+            {busy === 'discard' ? 'Discarding…' : 'Discard draft'}
           </ThemedText>
-        )}
+        </Pressable>
       </View>
-      <Pressable onPress={discard} disabled={!!busy} accessibilityRole="button" hitSlop={8}>
-        <ThemedText type="detail" themeColor="muted">
-          {busy === 'discard' ? 'Discarding…' : 'Discard'}
-        </ThemedText>
-      </Pressable>
       <Pressable
         onPress={keep}
         disabled={!!busy}
@@ -1423,7 +1428,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   stale: { paddingHorizontal: Spacing.read, paddingBottom: Spacing.tight },
-  /** A fact about the whole trip — offline, or not kept yet — said once, above the faces it
+  /** A fact about the whole trip — offline — said once, above the faces it
    *  applies to: a neutral slate card with its icon, never a tint on the page. */
   status: {
     flexDirection: 'row',
@@ -1438,6 +1443,19 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
   },
+  /** Flat on the night between two rules, as trip-2C draws it: a fact about the trip, not a card. */
+  shelf: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.rows,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: Spacing.tight,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  discard: { alignSelf: 'flex-start', marginTop: 2 },
+  discardText: { textDecorationLine: 'underline' },
   keep: {
     minHeight: 36,
     minWidth: 64,
@@ -1495,11 +1513,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: Colors.control,
   },
-  chipActive: {
-    backgroundColor: Colors.surfaceDeep,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-  },
+  // Filled, paper on night, as trip-2C draws it: "where am I" is the strongest figure in the strip.
+  // An outline alone read as one more chip.
+  chipActive: { backgroundColor: Colors.foreground },
+  chipTextActive: { color: Colors.canvas },
 
   // The keep shelf's material, but left-aligned and without its centred, decision-shaped
   // emphasis: keeping a plan is the step that gates the trip, and sharing one is a thing you may

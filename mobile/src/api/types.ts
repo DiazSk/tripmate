@@ -173,6 +173,8 @@ export interface Trip {
   endDate: string;
   budget: number;
   status?: TripStatus;
+  /** When the row was written (ISO); the detail payload spreads the summary, so it is here too. */
+  createdAt?: string;
   itinerary: Itinerary;
   userAnswers: unknown | null;
   chatSessionId: string | null;

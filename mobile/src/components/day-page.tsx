@@ -1,7 +1,7 @@
 import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { DayPlan, Stop } from '@/api/types';
@@ -11,7 +11,7 @@ import { TravelSegment } from '@/components/travel-segment';
 import { DISC_SIZE, StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
-import { stopParticulars, weatherLine } from '@/lib/dayDisplay';
+import { dayLine, stopParticulars } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
 import { evidenceTags } from '@/lib/provenance';
 import { locationNote } from '@shared/evidence';
@@ -45,6 +45,7 @@ export function DayPage({
   footer,
   offline,
   preview,
+  shelf,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -99,6 +100,8 @@ export function DayPage({
    * changed yet, and a cost edited on a row that might be about to move is a second edit.
    */
   preview?: { rows: ProposalRow[]; dayName: (index: number) => string } | null;
+  /** A fact about the whole trip that sits under the day's hero — the draft's Keep shelf. */
+  shelf?: ReactNode;
 }) {
   const stops = day.stops ?? [];
   const scroller = useRef<ScrollView>(null);
@@ -126,6 +129,7 @@ export function DayPage({
       contentContainerStyle={[styles.content, { paddingBottom: footer + Spacing.regular }]}
       showsVerticalScrollIndicator={false}>
       <DayHead day={day} dayIndex={dayIndex} dayCount={dayCount} destination={destination} />
+      {shelf}
 
       {preview ? (
         <View style={styles.section} onLayout={(e) => (listY.current = e.nativeEvent.layout.y)}>
@@ -237,7 +241,6 @@ function DayHead({
   dayCount: number;
   destination: string;
 }) {
-  const weather = weatherLine(day);
   return (
     <>
       <PlacePhoto
@@ -255,7 +258,7 @@ function DayHead({
             </ThemedText>
           ) : null}
           <ThemedText type="detail" themeColor="onDeep" numberOfLines={1} style={styles.bandLine}>
-            {[`Day ${dayIndex + 1} of ${dayCount}`, weather].filter(Boolean).join(' · ')}
+            {dayLine(day, dayIndex, dayCount)}
           </ThemedText>
         </View>
       </PlacePhoto>

@@ -21,7 +21,15 @@ export const Polar = {
   nightText2: '#A8ACB3',
   signal: '#FF7E15',
   signalPressed: '#E86F0C',
-  ember: '#B4530A',
+  /** Deepened from the reference's #B4530A (4.45:1 on paper, 4.50:1 on #F2F2F7) to the web's
+   *  `--accent-text`, as DESIGN.md records: 5.08:1 on paper, 5.14:1 on #F2F2F7, 5.74:1 on ice. */
+  ember: '#A64C09',
+  /**
+   * Secondary text on a light ground: footers, captions, dates, values, unselected tabs. iOS's own
+   * secondary label (60,60,67 at 60%) composites to #85858B, 3.3:1 on #F2F2F7 — under AA for the
+   * 13pt type it is used at. This is 4.69:1 on #F2F2F7 and 5.23:1 on white. Night keeps `nightText2`.
+   */
+  secondary: '#6C6C70',
   route: '#6AF0FF',
   alertText: '#D10F0F',
   /** Alert on night ground — the light cut measures under AA there. The web's night `--alert`. */

@@ -1,5 +1,4 @@
 import { BlurView } from 'expo-blur';
-import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -16,7 +15,7 @@ import { listTrips } from '@/api/tripMateApi';
 import type { Trip, TripSummary } from '@/api/types';
 import { TripPhotoWidget, TripWidgets, Widget, WidgetGrid, WidgetIcon, widgetText } from '@/components/home-widgets';
 import { OfflineScreen } from '@/components/offline-screen';
-import { usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
+import { PlusButton, usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
@@ -144,19 +143,6 @@ export default function Home() {
 
 /** The glass bar the greeting folds into, with Plan a trip beside it, always. */
 function Bar({ folded, title, top, onPlan }: { folded: boolean; title: string; top: number; onPlan: () => void }) {
-  const plus = (
-    <Pressable onPress={onPlan} accessibilityRole="button" accessibilityLabel="Plan a trip" hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
-      {isLiquidGlassAvailable() ? (
-        <GlassView glassEffectStyle="regular" colorScheme="light" isInteractive style={styles.plus}>
-          <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
-        </GlassView>
-      ) : (
-        <View style={[styles.plus, styles.plusFallback]}>
-          <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
-        </View>
-      )}
-    </Pressable>
-  );
   return (
     <View style={[styles.bar, { paddingTop: top, height: top + 50 }]} pointerEvents="box-none">
       {folded ? <BlurView intensity={60} tint="systemChromeMaterialLight" style={StyleSheet.absoluteFill} /> : null}
@@ -164,7 +150,9 @@ function Bar({ folded, title, top, onPlan }: { folded: boolean; title: string; t
       <Text style={[styles.barTitle, !folded && styles.hidden]} numberOfLines={1} accessibilityElementsHidden={!folded}>
         {title}
       </Text>
-      <View style={styles.barEnd}>{plus}</View>
+      <View style={styles.barEnd}>
+        <PlusButton onPress={onPlan} />
+      </View>
     </View>
   );
 }
@@ -275,7 +263,7 @@ function DraftWidget({ draft, more, onPress, onTrips }: { draft: TripSummary; mo
   const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
   const clears = clearsIn(draft);
   return (
-    <Widget size="medium" label={more > 0 ? `Not kept yet · ${more + 1}` : 'Not kept yet'} onPress={more > 0 ? onTrips : onPress} accessibilityLabel={`Your ${draft.destination} draft, not kept yet`}>
+    <Widget size="medium" label={more > 0 ? `Drafts · ${more + 1}` : 'Draft'} onPress={more > 0 ? onTrips : onPress} accessibilityLabel={`Your ${draft.destination} draft`}>
       <View style={styles.draft}>
         <View style={styles.draftThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}</View>
         <View style={styles.draftText}>
@@ -335,7 +323,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
   hidden: { opacity: 0 },
   head: { paddingHorizontal: 20, marginBottom: 16 },
-  date: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5, color: 'rgba(60,60,67,0.6)' },
+  date: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5, color: Polar.secondary },
   title: { marginTop: 2, fontSize: 36, lineHeight: 42, color: Polar.ink },
   titleFont: { fontFamily: PolarFonts.display, fontSize: 40, lineHeight: 44 },
 
@@ -343,8 +331,6 @@ const styles = StyleSheet.create({
   barRule: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(60,60,67,0.22)' },
   barTitle: { maxWidth: '70%', fontSize: 17, fontWeight: '600', color: '#000' },
   barEnd: { position: 'absolute', right: 12, bottom: 3 },
-  plus: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  plusFallback: { backgroundColor: 'rgba(255,255,255,0.85)' },
 
   loading: { width: '100%', height: 200, alignItems: 'center', justifyContent: 'center' },
   first: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 34, color: Polar.ink, marginBottom: 6 },
@@ -365,7 +351,7 @@ const styles = StyleSheet.create({
   rowThumb: { width: 52, height: 52, overflow: 'hidden', borderRadius: 10, backgroundColor: Polar.deep },
   rowText: { flex: 1, gap: 1 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
-  rowMeta: { fontSize: 13, color: 'rgba(60,60,67,0.6)' },
+  rowMeta: { fontSize: 13, color: Polar.secondary },
 
   method: { marginTop: 14 },
   steps: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 8 },

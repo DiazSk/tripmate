@@ -4,7 +4,6 @@ import { Link, Stack, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Platform,
@@ -28,9 +27,10 @@ import { discardTrip, listTrips, shareTrip } from '@/api/tripMateApi';
 import type { TripSummary } from '@/api/types';
 import { OfflineScreen } from '@/components/offline-screen';
 import { Scrim } from '@/components/polar-landing/scrim';
-import { usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
+import { PlusButton, usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
+import { confirmDelete } from '@/lib/confirmDelete';
 import { tripDays } from '@/lib/tiers';
 import { matchesQuery, todayISO, tripShelves } from '@/lib/tripsWall';
 import { useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
@@ -40,7 +40,7 @@ type Loaded = { saved: TripSummary[]; drafts: TripSummary[] };
 const PAD = 20;
 const GAP = 12;
 const GRID_PREVIEW = 4;
-const GREY = 'rgba(60,60,67,0.6)';
+const GREY = Polar.secondary;
 
 /**
  * Trips, as the canvas design "Phone trips · 2 Albums, like Photos": trips are photographs before
@@ -108,11 +108,10 @@ export default function Trips() {
           onChangeText: (e) => setQuery(e.nativeEvent.text),
           onCancelButtonPress: () => setQuery(''),
         },
-        headerRight: () => (
-          <Pressable onPress={() => router.push('/plan/basics')} accessibilityRole="button" accessibilityLabel="Plan a trip" hitSlop={8} style={styles.plus}>
-            <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
-          </Pressable>
-        ),
+        // Home's + exactly, as a custom item without the bar's shared glass (see `PlusButton`).
+        unstable_headerRightItems: () => [
+          { type: 'custom', element: <PlusButton onPress={() => router.push('/plan/basics')} />, hidesSharedBackground: true },
+        ],
       }}
     />
   );
@@ -141,26 +140,11 @@ export default function Trips() {
   }
 
   function askDelete(trip: TripSummary) {
-    const draft = trip.status === 'draft';
-    const title = draft ? 'Discard this draft?' : 'Delete this trip?';
-    const message = `Your ${trip.destination} itinerary will be permanently deleted. This can't be undone.`;
-    const action = draft ? 'Discard Draft' : 'Delete Trip';
-    const run = async () => {
+    confirmDelete(trip, async () => {
       // Spliced locally once the server agrees; a failure leaves the card where it was.
       if (await discardTrip(trip.id)) setGone((g) => [...g, trip.id]);
       else Alert.alert("We couldn't delete that trip", 'Try again.');
-    };
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { title, message, options: [action, 'Cancel'], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
-        (i) => i === 0 && void run(),
-      );
-    } else {
-      Alert.alert(title, message, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: action, style: 'destructive', onPress: () => void run() },
-      ]);
-    }
+    });
   }
 
   /** The same share the trip screen makes: a read-only link, then the system sheet. */
@@ -194,9 +178,15 @@ export default function Trips() {
         )
       ) : (
         <>
+          {/* "0 trips" over a draft read as "nothing here" beside the thing that is here. */}
           <Text style={styles.sub}>
-            {kept} {kept === 1 ? 'trip' : 'trips'}
-            {upcoming.length ? ` · ${upcoming.length} coming up` : ''}
+            {[
+              kept ? `${kept} ${kept === 1 ? 'trip' : 'trips'}` : 'No kept trips yet',
+              upcoming.length ? `${upcoming.length} coming up` : null,
+              drafts.length ? `${drafts.length} ${drafts.length === 1 ? 'draft' : 'drafts'}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
 
           {upcoming.length ? (
@@ -211,6 +201,11 @@ export default function Trips() {
           {drafts.map((t) => (
             <DraftLine key={t.id} trip={t} {...menu} />
           ))}
+
+          {/* A draft is not a kept trip, so the invitation (and its Sign in) stays until one is. */}
+          {kept === 0 ? (
+            <Empty under signedOut={!account} onPlan={() => router.push('/plan/basics')} onSignIn={() => router.push('/signin')} />
+          ) : null}
 
           {past.length ? (
             <>
@@ -337,7 +332,7 @@ function DraftLine({ trip, ...menu }: Menu & { trip: TripSummary }) {
         </View>
         <View style={styles.draftText}>
           <Text style={styles.draftTitle} numberOfLines={1}>
-            Not kept yet · {city(trip)}
+            Draft · {city(trip)}
           </Text>
           {clears ? <Text style={styles.draftClears}>{clears}</Text> : null}
         </View>
@@ -412,9 +407,9 @@ function Preview({ trip, url }: { trip: TripSummary; url: string | null }) {
   );
 }
 
-function Empty({ signedOut, onPlan, onSignIn }: { signedOut: boolean; onPlan: () => void; onSignIn: () => void }) {
+function Empty({ signedOut, onPlan, onSignIn, under = false }: { signedOut: boolean; onPlan: () => void; onSignIn: () => void; under?: boolean }) {
   return (
-    <View style={styles.empty}>
+    <View style={[styles.empty, under && styles.emptyUnder]}>
       <View style={styles.emptyStack} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <View style={[styles.emptyCard, styles.emptyLeft]} />
         <View style={[styles.emptyCard, styles.emptyRight]} />
@@ -427,7 +422,7 @@ function Empty({ signedOut, onPlan, onSignIn }: { signedOut: boolean; onPlan: ()
       <Pressable onPress={onPlan} accessibilityRole="button" style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
         <Text style={styles.ctaText}>Plan a Trip</Text>
       </Pressable>
-      {/* Only signed out, and only with nothing here: somebody with trips on the web opens this app
+      {/* Only signed out, and only with nothing kept: somebody with trips on the web opens this app
           to an empty tab, and this is the reason. */}
       {signedOut ? (
         <Pressable onPress={onSignIn} accessibilityRole="button" style={styles.link}>
@@ -453,7 +448,6 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   // Clears the floating tab bar, whose inset does not reach this list.
   content: { paddingBottom: BarHeight + 40 },
-  plus: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
   sub: { marginHorizontal: PAD, marginTop: 2, marginBottom: 18, fontSize: 15, color: GREY },
   hRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingRight: PAD },
@@ -499,6 +493,7 @@ const styles = StyleSheet.create({
   foot: { marginTop: 22, marginHorizontal: PAD, fontSize: 12, textAlign: 'center', color: GREY },
 
   empty: { alignItems: 'center', gap: 8, paddingHorizontal: 28, paddingTop: 60 },
+  emptyUnder: { paddingTop: 4 },
   emptyStack: { width: 120, height: 120, marginBottom: 14 },
   emptyCard: { position: 'absolute', top: 10, bottom: 10, left: 20, right: 20, borderRadius: 14, backgroundColor: '#E5E5EA' },
   emptyLeft: { transform: [{ translateX: -14 }, { rotate: '-10deg' }] },

@@ -57,6 +57,7 @@ export function TextRow({
           ref={ref}
           placeholderTextColor={SettingsColors.faint}
           selectionColor={Polar.ember}
+          keyboardAppearance="light"
           maxFontSizeMultiplier={1.6}
           {...input}
           style={[styles.input, prefix ? styles.inputPrefixed : null, input.style]}

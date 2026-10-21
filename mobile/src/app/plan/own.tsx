@@ -169,20 +169,25 @@ export default function OwnPlan() {
 
   if (plan === null) {
     return (
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.screen}
+        // `flexGrow` so the docked Read my plan sits at the foot of a short page, at the thumb.
+        contentContainerStyle={[styles.content, styles.compose, { paddingBottom: Math.max(insets.bottom, 12) }]}
+        keyboardShouldPersistTaps="handled">
         {header}
         <Text style={styles.title}>Bring your plan</Text>
         <Text style={styles.sub}>Paste it, add screenshots of it, or both. TripMate keeps your days and your order.</Text>
         <ImportComposer
           light
+          docked
           busy={busy}
           unread={problems}
           actionTitle="Read my plan"
           placeholder="Paste your plan, or links to it"
           initialText={text ?? ''}
           onSubmit={read}
+          below={() => <Text style={styles.foot}>A list of places rather than days? It goes to the planner as places to fit in.</Text>}
         />
-        <Text style={styles.foot}>A list of places rather than days? It goes to the planner as places to fit in.</Text>
       </ScrollView>
     );
   }
@@ -227,6 +232,7 @@ export default function OwnPlan() {
                   value={stop.name}
                   onChangeText={(name) => rename(d, s, name)}
                   style={styles.fixInput}
+                  keyboardAppearance="light"
                   selectionColor={Polar.ember}
                   maxFontSizeMultiplier={1.6}
                   accessibilityLabel={`${label(d)}: rename ${stop.name}`}
@@ -295,6 +301,7 @@ export default function OwnPlan() {
                               onChangeText={(name) => rename(d, s, name)}
                               style={styles.stopName}
                               selectionColor={Polar.ember}
+                              keyboardAppearance="light"
                               maxFontSizeMultiplier={1.6}
                               accessibilityLabel={`Stop ${s + 1}`}
                             />
@@ -419,6 +426,7 @@ const MISS = '#C2410C';
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: PlanColors.ground },
   content: { padding: 16, paddingBottom: 48, gap: 14 },
+  compose: { flexGrow: 1 },
   review: { paddingTop: 8 },
   intro: { paddingHorizontal: 16, paddingBottom: 18, gap: 6 },
   title: { fontFamily: PolarFonts.display, fontSize: 34, lineHeight: 37, color: Polar.ink },

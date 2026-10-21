@@ -137,22 +137,33 @@ export function formatDayChip(iso: string): { dayOfMonth: string; weekday: strin
  * none of it observed. Truncating at the comma dropped the invented figures and kept the
  * invented claim, in the one position on the screen that means "this is the weather".
  *
- * So: structured figures or nothing. `theme` is the planner's own label for the day's shape
- * ("Old town on foot") and makes no claim about the world, so it is a safe second choice. A day
- * with neither renders no badge, which is what most stored trips will now do — the masthead
- * loses nothing it was entitled to.
+ * So: structured figures or nothing. It used to fall back to `theme` as a "safe second choice",
+ * but the hero prints `theme` as its title directly above this line, so a day without a forecast
+ * said its own name twice ("Baixa arrival, gentle orientation" over "Day 1 of 7 · Baixa arrival,
+ * gentle orientation"). A day with no figures says no weather; `dayLine` still gives it a date.
  *
  * `historical` says the numbers are last year's same-date weather rather than a forecast, which
- * is cheap to say and worth saying. The prompt is fixed in the same change, so new plans stop
- * producing the prose at all; this guards the ones already on disk.
+ * is cheap to say and worth saying. The sun is only drawn for a forecast whose WMO code is clear
+ * or mainly clear (0-1): a glyph on a rainy day would be the invented claim this guards against,
+ * and last year's sky is no forecast at all.
  */
 export function weatherLine(day: DayPlan): string | undefined {
   const detail = day.weatherDetail;
-  if (detail) {
-    const temps = `${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`;
-    return detail.historical ? `${temps}  ·  typical` : temps;
-  }
-  return day.theme?.trim() || undefined;
+  if (!detail) return undefined;
+  const temps = `${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`;
+  if (detail.historical) return `${temps}  ·  typical`;
+  return detail.weatherCode !== null && detail.weatherCode <= 1 ? `☀ ${temps}` : temps;
+}
+
+/**
+ * The hero's line under the day's name, as the design (trip-2C) sets it: `Day 2 of 7 · Fri, Nov 7`,
+ * then the weather when there is some. The date comes off the string, never a `Date` — see the top
+ * of this file — so it cannot roll back a day west of Greenwich.
+ */
+export function dayLine(day: DayPlan, dayIndex: number, dayCount: number): string {
+  const date = split(day.date);
+  const when = date ? `${SHORT_WEEKDAYS[weekdayIndex(date)]}, ${MONTHS[date.month - 1]} ${date.day}` : null;
+  return [`Day ${dayIndex + 1} of ${dayCount}`, when, weatherLine(day)].filter(Boolean).join(' · ');
 }
 
 /**

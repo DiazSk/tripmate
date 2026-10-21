@@ -224,7 +224,10 @@ export function DayMap({
    */
   const overImagery = IMAGERY.includes(shownType);
   const wantTraffic = overImagery ? trafficWanted : !!mode.traffic;
-  const wantPoi = overImagery ? poiWanted : true;
+  // A film's map is plain, as the generating map is: Apple's labels sat right under the subtitle
+  // ("Hotel Mundial", "Mouraria Berço") while the voice was naming somewhere else. Close restores
+  // whatever the reader had, since this is derived rather than written over `poiWanted`.
+  const wantPoi = film ? false : overImagery ? poiWanted : true;
 
   useEffect(() => {
     let frame = requestAnimationFrame(() => {
@@ -697,7 +700,9 @@ function StopMarker({
       // are pointing at always on top.
       zIndex={emphasised ? 999 : index}
       tracksViewChanges={tracking}
-      onPress={onPress}>
+      onPress={onPress}
+      // VoiceOver reached the pins with no name and no order; this is the row's own order.
+      accessibilityLabel={[`Stop ${index + 1}`, stop.name, stop.time?.trim()].filter(Boolean).join(', ')}>
       {/* A symmetric 44pt target around a 26pt disc: symmetric so the centre does not move and
           no anchor arithmetic is needed. Google hit-tests the bitmap's bounds, alpha included. */}
       <View style={styles.target}>

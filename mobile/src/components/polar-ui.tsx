@@ -2,7 +2,9 @@ import { CormorantGaramond_400Regular, CormorantGaramond_500Medium_Italic } from
 import { InterTight_400Regular, InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight';
 import { Oswald_400Regular } from '@expo-google-fonts/oswald';
 import { useFonts } from 'expo-font';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useFocusEffect } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { forwardRef, useCallback, useState } from 'react';
 import {
@@ -134,6 +136,7 @@ export const PaperInput = forwardRef<TextInput, TextInputProps & { label: string
       <TextInput
         ref={ref}
         placeholderTextColor={Polar.stone}
+        keyboardAppearance="light"
         style={[styles.input, focused && styles.inputFocused, style]}
         onFocus={(e) => {
           setFocused(true);
@@ -158,7 +161,32 @@ export function PaperError({ children }: { children: string }) {
   );
 }
 
+/**
+ * Plan a trip, as the + at the top of a paper page: Home's bar and the Trips header share it, so
+ * the same action has one look. Light glass by name, because the app runs in dark appearance and
+ * the system would otherwise draw a night disc over paper. In the Trips header it goes in as a
+ * custom item with `hidesSharedBackground`, or iOS 26 wraps it in a second, dark, bar glass.
+ */
+export function PlusButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Plan a trip" hitSlop={6} style={({ pressed }) => pressed && styles.plusPressed}>
+      {isLiquidGlassAvailable() ? (
+        <GlassView glassEffectStyle="regular" colorScheme="light" isInteractive style={styles.plus}>
+          <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
+        </GlassView>
+      ) : (
+        <View style={[styles.plus, styles.plusFallback]}>
+          <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  plus: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  plusFallback: { backgroundColor: 'rgba(255,255,255,0.85)' },
+  plusPressed: { opacity: 0.8 },
   signal: { minHeight: 46, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
   signalLg: { minHeight: 52 },
   signalPressed: { backgroundColor: Polar.signalPressed },

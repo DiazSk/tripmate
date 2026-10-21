@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory } from '@/api/types';
+import { SheetDone } from '@/components/budget-sheet';
 import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
@@ -44,9 +45,12 @@ const PROBE_RADIUS_M = 200;
  *
  * The day you were reading wins over the geometry. Geometry only decides when nobody has an
  * opinion — the recommendation is a starting point on a picker, never a decision taken for you.
+ *
+ * The body of the `trip/[id]/add` form-sheet route (see `lib/tripSheets.ts`). Mounting with the
+ * route is the whole reset: the query, the results and the chosen place start empty every time,
+ * with no effect clearing four pieces of state on the way out.
  */
 export function AddPlaceSheet({
-  visible,
   onClose,
   itinerary,
   dayIndex,
@@ -54,7 +58,6 @@ export function AddPlaceSheet({
   at,
   onAdd,
 }: {
-  visible: boolean;
   onClose: () => void;
   itinerary: Itinerary;
   /** The day being read — the default, ahead of whatever the geometry suggests. */
@@ -75,34 +78,21 @@ export function AddPlaceSheet({
   onAdd: (next: Itinerary, placeName: string) => Promise<boolean>;
 }) {
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.sheet}>
-        <View style={styles.bar}>
-          <ThemedText type="title" numberOfLines={1}>
-            {at ? `Near ${at.name}` : 'Add a stop'}
-          </ThemedText>
-          <Pressable onPress={onClose} accessibilityRole="button" hitSlop={12}>
-            <ThemedText type="label" themeColor="muted">
-              Close
-            </ThemedText>
-          </Pressable>
-        </View>
-
-        {/* Mounted only while open, which is the whole reset mechanism. Clearing the query, the
-            results and the chosen place from an effect on the way out would be the same thing
-            written as four `setState` calls React would rather not see in an effect body. */}
-        {visible ? (
-          <SheetBody
-            itinerary={itinerary}
-            dayIndex={dayIndex}
-            centre={centre}
-            at={at ?? null}
-            onAdd={onAdd}
-            onClose={onClose}
-          />
-        ) : null}
+    <>
+      {/* Two children, header then the ScrollView, and the header not flattened: that is the
+          shape react-native-screens' form sheet sizes to the detent (`RNSScreenContentWrapper`
+          coerces a ScrollView at index 0 or 1 and gives up past two siblings). A wrapping View,
+          or a header flattened into its Text and Pressable, left the ScrollView at the sheet's
+          top, over the title and over Done. */}
+      <View collapsable={false} style={styles.bar}>
+        <ThemedText type="title" numberOfLines={1} style={styles.title}>
+          {at ? `Near ${at.name}` : 'Add a stop'}
+        </ThemedText>
+        {/* Cancel, not Done: closing here drops the search and any place chosen, and adds nothing. */}
+        <SheetDone onPress={onClose} label="Cancel" />
       </View>
-    </Modal>
+      <SheetBody itinerary={itinerary} dayIndex={dayIndex} centre={centre} at={at ?? null} onAdd={onAdd} onClose={onClose} />
+    </>
   );
 }
 
@@ -519,7 +509,7 @@ const LABELS: Record<string, string> = {
 };
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1, backgroundColor: Colors.canvas },
+  title: { flexShrink: 1 },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

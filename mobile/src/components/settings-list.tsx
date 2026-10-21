@@ -19,7 +19,8 @@ import { Polar } from '@/constants/polar';
 
 export const SettingsColors = {
   ground: '#F2F2F7',
-  grey: 'rgba(60,60,67,0.6)',
+  /** Secondary text on this light ground — the one token, see `Polar.secondary`. */
+  grey: Polar.secondary,
   faint: 'rgba(60,60,67,0.3)',
   separator: 'rgba(60,60,67,0.22)',
   pressed: '#E5E5EA',

@@ -36,6 +36,7 @@ export function ImportComposer({
   onSubmit,
   below,
   light = false,
+  docked = false,
 }: {
   busy: boolean;
   unread: string[];
@@ -49,6 +50,14 @@ export function ImportComposer({
   /** Drawn for the grouped light the planner uses: a white box, black ink, the action as a tinted
    *  capsule — the night's slate capsule reads as a hole in white. Behaviour is identical. */
   light?: boolean;
+  /**
+   * The action as the screen's full-width button at the thumb (canvas design ownplan-1B), rather
+   * than a capsule in the box's footer, where it read as disabled and sat in the top half. Drawn
+   * last with `marginTop: 'auto'`, so a caller whose scroll content has `flexGrow: 1` gets it at
+   * the foot; the box grows to a notebook's height to meet it. Faded until there is something to
+   * read, and still pressable then — it puts the cursor in the box, as the capsule did.
+   */
+  docked?: boolean;
 }) {
   const [text, setText] = useState(initialText);
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -132,9 +141,10 @@ export function ImportComposer({
           placeholder={placeholder}
           placeholderTextColor={light ? SettingsColors.faint : Colors.muted}
           selectionColor={light ? Polar.ember : Colors.accent}
+          keyboardAppearance={light ? 'light' : 'dark'}
           multiline
           maxFontSizeMultiplier={1.6}
-          style={[styles.composerInput, light && styles.inkLight]}
+          style={[styles.composerInput, light && styles.inkLight, docked && styles.inputDocked]}
         />
         <View style={[styles.composerFooter, light && styles.footerLight]}>
           <Pressable
@@ -166,7 +176,7 @@ export function ImportComposer({
           {/* No `disabled`: an empty box is incomplete, not unavailable. Pressing it puts the
               cursor in the box and says nothing — the gap is two centimetres away and a cursor
               arriving explains itself, where a field three rows up does not. */}
-          {light ? (
+          {docked ? null : light ? (
             <Pressable onPress={() => void submit()} accessibilityRole="button" style={styles.actionLight}>
               {busy ? <ActivityIndicator color={Polar.ember} /> : <Text style={styles.actionLightText}>{actionTitle}</Text>}
             </Pressable>
@@ -188,6 +198,17 @@ export function ImportComposer({
             </ThemedText>
           ))}
         </View>
+      ) : null}
+
+      {docked ? (
+        <Pressable
+          onPress={() => void submit()}
+          accessibilityRole="button"
+          accessibilityState={{ busy }}
+          accessibilityHint={hasContent ? undefined : 'Paste your plan or add screenshots first'}
+          style={({ pressed }) => [styles.dockAction, !hasContent && styles.dockActionEmpty, pressed && hasContent && styles.dockActionPressed]}>
+          {busy ? <ActivityIndicator color={Polar.ink} /> : <Text style={styles.dockActionText}>{actionTitle}</Text>}
+        </Pressable>
       ) : null}
     </>
   );
@@ -254,4 +275,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(118,118,128,0.12)',
   },
   actionLightText: { fontSize: 15, fontWeight: '600', color: Polar.ember },
+  inputDocked: { minHeight: 220 },
+  // The review's "Build my trip" (`plan/own.tsx`), so the two steps end on the same button.
+  dockAction: { marginTop: 'auto', height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
+  dockActionEmpty: { opacity: 0.45 },
+  dockActionPressed: { backgroundColor: Polar.signalPressed },
+  dockActionText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
 });

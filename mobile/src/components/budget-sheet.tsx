@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { DayPlan } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
@@ -51,9 +51,11 @@ export function MoneyBand({ shares }: { shares: SpendShare[] }) {
  * category and by day — a day row opens that day. **Day**: the day stop by stop, where each cost's
  * state is set with one tap (Estimate, then Booked, then Paid), which also locks the stop — see
  * `surenessFields`. The amount itself is entered on the stop, where you know what it was.
+ *
+ * The body of the `trip/[id]/budget` form-sheet route (see `lib/tripSheets.ts`); mounting with the
+ * route is the reset, so it opens on the tab it was asked for.
  */
 export function BudgetSheet({
-  visible,
   initial,
   days,
   budget,
@@ -63,7 +65,6 @@ export function BudgetSheet({
   onSureness,
   onClose,
 }: {
-  visible: boolean;
   initial: 'trip' | 'day';
   days: DayPlan[];
   budget: number;
@@ -74,30 +75,41 @@ export function BudgetSheet({
   onClose: () => void;
 }) {
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.sheet}>
-        <View style={styles.bar}>
-          <ThemedText type="title">Budget</ThemedText>
-          <Pressable onPress={onClose} accessibilityRole="button" hitSlop={12}>
-            <ThemedText type="body" themeColor="accentText" style={{ fontWeight: '600' }}>
-              Done
-            </ThemedText>
-          </Pressable>
-        </View>
-        {/* Mounted only while open, which is the reset: it reopens on the tab it was asked for. */}
-        {visible ? (
-          <Body
-            initial={initial}
-            days={days}
-            budget={budget}
-            dayIndex={dayIndex}
-            offline={offline}
-            onDay={onDay}
-            onSureness={onSureness}
-          />
-        ) : null}
+    <>
+      {/* Two children, header then the ScrollView, and the header not flattened: that is the
+          shape react-native-screens' form sheet sizes to the detent (`RNSScreenContentWrapper`
+          coerces a ScrollView at index 0 or 1 and gives up past two siblings). A wrapping View,
+          or a header flattened into its Text and Pressable, left the ScrollView at the sheet's
+          top, over the title and over Done. */}
+      <View collapsable={false} style={styles.bar}>
+        <ThemedText type="title">Budget</ThemedText>
+        <SheetDone onPress={onClose} />
       </View>
-    </Modal>
+      <Body
+        initial={initial}
+        days={days}
+        budget={budget}
+        dayIndex={dayIndex}
+        offline={offline}
+        onDay={onDay}
+        onSureness={onSureness}
+      />
+    </>
+  );
+}
+
+/**
+ * The way out of a sheet that changes nothing on the way out: "Done", trailing, in the accent.
+ * Shared by Budget and the chat history so the trip's sheets say it one way; Add a stop says
+ * Cancel instead, because closing it drops a search and a chosen place.
+ */
+export function SheetDone({ onPress, label = 'Done' }: { onPress: () => void; label?: string }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={12} style={styles.done}>
+      <ThemedText type="body" themeColor="accentText" style={{ fontWeight: '600' }}>
+        {label}
+      </ThemedText>
+    </Pressable>
   );
 }
 
@@ -109,7 +121,7 @@ function Body({
   offline,
   onDay,
   onSureness,
-}: Omit<Parameters<typeof BudgetSheet>[0], 'visible' | 'onClose'>) {
+}: Omit<Parameters<typeof BudgetSheet>[0], 'onClose'>) {
   const [tab, setTab] = useState(initial);
   const spent = tripSpend(days);
   const day = days[dayIndex];
@@ -338,7 +350,7 @@ const CHIP: Record<Sureness, { backgroundColor: string }> = {
 };
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1, backgroundColor: Colors.canvas },
+  done: { minHeight: 44, justifyContent: 'center' },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

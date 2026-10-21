@@ -34,6 +34,17 @@ SplashScreen.preventAutoHideAsync();
  */
 export const unstable_settings = { anchor: '(tabs)' };
 
+const TRIP_SHEETS = ['budget', 'add', 'chat'] as const;
+
+const TRIP_SHEET_OPTIONS: React.ComponentProps<typeof Stack.Screen>['options'] = {
+  presentation: 'formSheet',
+  sheetAllowedDetents: [0.55, 1],
+  sheetGrabberVisible: true,
+  sheetCornerRadius: 24,
+  headerShown: false,
+  contentStyle: { backgroundColor: Colors.canvas },
+};
+
 // A Stack root, not the tab navigator directly: NativeTabs only ever mounts screens matching
 // one of its own <NativeTabs.Trigger> names (expo-router/build/native-tabs/NativeBottomTabsNavigator.js
 // passes useOnlyUserDefinedScreens=true to withLayoutContext), so a non-tab route like
@@ -119,6 +130,12 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: SettingsColors.ground },
             }}
           />
+          {/* The trip's sheets: native form sheets at the planner's detents, over the trip, on its
+              night. Routes rather than RN Modals, for the detents and grabber; `lib/tripSheets.ts`
+              says how they read the trip screen's state. */}
+          {TRIP_SHEETS.map((name) => (
+            <Stack.Screen key={name} name={`trip/[id]/${name}`} options={TRIP_SHEET_OPTIONS} />
+          ))}
           {/* A trip somebody sent you: its cover runs under the status bar, so no header. */}
           <Stack.Screen name="s/[token]" options={{ headerShown: false }} />
           <Stack.Screen name="signin" options={{ presentation: 'fullScreenModal', headerShown: false }} />

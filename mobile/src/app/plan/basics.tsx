@@ -244,6 +244,7 @@ export default function Basics() {
                 placeholder="Where to?"
                 placeholderTextColor={PlanColors.faint}
                 selectionColor={Polar.ember}
+                keyboardAppearance="light"
                 autoCapitalize="words"
                 autoCorrect={false}
                 returnKeyType="done"
@@ -288,11 +289,13 @@ export default function Basics() {
             <TextRow
               ref={budgetField}
               label="Budget"
-              prefix="$"
+              // An example, said as one: a bare "2,600" in the value's place, at the value's size,
+              // read as a budget already set. The "$" joins once there is a figure to sit beside.
+              prefix={budgetText ? '$' : undefined}
               value={budgetText}
               onChangeText={setBudget}
               onFocus={closeSuggestions}
-              placeholder="2,600"
+              placeholder="e.g. $2,600"
               keyboardType="number-pad"
             />
             {/* The number means nothing without this: everything downstream reads a party total,

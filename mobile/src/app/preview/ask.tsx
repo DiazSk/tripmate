@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ChatTurn, DayPlan, Itinerary, Stop } from '@/api/types';
 import { AskBar } from '@/components/ask-bar';
@@ -190,7 +190,12 @@ export default function AskPreview() {
           />
         </>
       )}
-      <ChatSheet visible={history} onClose={() => setHistory(false)} turns={turns} replying={replying} failure={failure} days={plan.days} />
+      {/* A dev preview with no trip route to push, so the history keeps a plain Modal here. */}
+      <Modal visible={history} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setHistory(false)}>
+        <View style={styles.screen}>
+          <ChatSheet onClose={() => setHistory(false)} turns={turns} replying={replying} failure={failure} days={plan.days} />
+        </View>
+      </Modal>
     </View>
   );
 }

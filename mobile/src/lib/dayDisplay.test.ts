@@ -4,6 +4,7 @@ import {
   formatDateline,
   formatDayChip,
   formatRange,
+  dayLine,
   scopeDay,
   stopParticulars,
   weatherLine,
@@ -116,14 +117,44 @@ test('planner prose never reaches the badge, however plausible it reads', () => 
   expect(weatherLine(day({ weather: 'Pleasant autumn day, 18.9-23.5°C, mostly sunny' }))).toBeUndefined();
 });
 
-test("the day's own theme is allowed, because it claims nothing about the world", () => {
-  expect(weatherLine(day({ theme: 'Old town on foot' }))).toBe('Old town on foot');
-  expect(weatherLine(day({ theme: '   ' }))).toBeUndefined();
+// The hero prints the theme as its title right above this line; a fallback to it said it twice.
+test('the theme never stands in for the weather', () => {
+  expect(weatherLine(day({ theme: 'Old town on foot' }))).toBeUndefined();
 });
 
 test('a forecast outranks a theme; neither means no badge', () => {
   expect(weatherLine(day({ theme: 'Old town on foot', weatherDetail: detail() }))).toBe('23° / 19°');
   expect(weatherLine(day({}))).toBeUndefined();
+});
+
+test('the sun is drawn only for a clear forecast, never for last year', () => {
+  expect(weatherLine(day({ weatherDetail: detail({ weatherCode: 1 }) }))).toBe('☀ 23° / 19°');
+  expect(weatherLine(day({ weatherDetail: detail({ weatherCode: 61 }) }))).toBe('23° / 19°');
+  expect(weatherLine(day({ weatherDetail: detail({ weatherCode: 0, historical: true }) }))).toBe('23° / 19°  ·  typical');
+});
+
+describe('dayLine, west of Greenwich', () => {
+  const realTZ = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/Los_Angeles';
+  });
+  afterAll(() => {
+    process.env.TZ = realTZ;
+  });
+
+  test('says which day, and the date, as the design does', () => {
+    expect(dayLine(day({ date: '2026-11-13', theme: 'Baixa arrival' }), 0, 7)).toBe('Day 1 of 7 · Fri, Nov 13');
+  });
+
+  test('adds the weather when there is some', () => {
+    expect(dayLine(day({ date: '2026-11-07', weatherDetail: detail({ weatherCode: 0 }) }), 1, 7)).toBe(
+      'Day 2 of 7 · Sat, Nov 7 · ☀ 23° / 19°',
+    );
+  });
+
+  test('an unreadable date drops out rather than printing garbage', () => {
+    expect(dayLine(day({ date: 'someday' }), 2, 3)).toBe('Day 3 of 3');
+  });
 });
 
 test('a stop states its time, its length and what it is, in that order', () => {

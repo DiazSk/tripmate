@@ -27,7 +27,7 @@ import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
  */
 
 export const WidgetColors = {
-  grey: 'rgba(60,60,67,0.6)',
+  grey: Polar.secondary,
   card: '#FFFFFF',
   live: '#1C1C1E',
   warn: '#FFF4E0',

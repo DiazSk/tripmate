@@ -1,7 +1,8 @@
 import { useRef } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import type { ChatTurn } from '@/api/types';
+import { SheetDone } from '@/components/budget-sheet';
 import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
@@ -16,18 +17,16 @@ import { meriForChat } from '@/lib/meri';
  * rest of that answer lives, and the turns before it. So it is read-only: one place to write,
  * and it is at the thumb.
  *
- * `presentationStyle="pageSheet"` and `animationType="slide"` match `add-place-sheet.tsx` and
- * `field-sheet.tsx`, so every sheet in this app arrives the same way.
+ * The body of the `trip/[id]/chat` form-sheet route, at the same detents as Budget and Add a stop
+ * (see `lib/tripSheets.ts` for why the trip's sheets are routes rather than RN Modals).
  */
 export function ChatSheet({
-  visible,
   onClose,
   turns,
   replying,
   failure,
   days,
 }: {
-  visible: boolean;
   onClose: () => void;
   turns: ChatTurn[];
   replying: boolean;
@@ -38,40 +37,39 @@ export function ChatSheet({
 }) {
   const transcript = useRef<ScrollView>(null);
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.sheet}>
-        <View style={styles.bar}>
-          <Meridian state={meriForChat({ replying, failure, justReplied: false })} size={36} />
-          <View style={styles.grow}>
-            <ThemedText type="headingSmall" numberOfLines={1}>
-              Your TripMate
-            </ThemedText>
-            <ThemedText type="caption" themeColor="muted">
-              {replying ? 'Replying' : `${turns.length} ${turns.length === 1 ? 'message' : 'messages'}`}
-            </ThemedText>
-          </View>
-          <Pressable onPress={onClose} accessibilityRole="button" hitSlop={12}>
-            <ThemedText type="label" themeColor="muted">
-              Done
-            </ThemedText>
-          </Pressable>
+    <>
+      {/* Two children, header then the ScrollView, and the header not flattened: that is the
+          shape react-native-screens' form sheet sizes to the detent (`RNSScreenContentWrapper`
+          coerces a ScrollView at index 0 or 1 and gives up past two siblings). A wrapping View,
+          or a header flattened into its Text and Pressable, left the ScrollView at the sheet's
+          top, over the title and over Done. */}
+      <View collapsable={false} style={styles.bar}>
+        <Meridian state={meriForChat({ replying, failure, justReplied: false })} size={36} />
+        <View style={styles.grow}>
+          <ThemedText type="headingSmall" numberOfLines={1}>
+            Your TripMate
+          </ThemedText>
+          <ThemedText type="caption" themeColor="muted">
+            {replying ? 'Replying' : `${turns.length} ${turns.length === 1 ? 'message' : 'messages'}`}
+          </ThemedText>
         </View>
-
-        <ScrollView
-          ref={transcript}
-          contentContainerStyle={styles.transcript}
-          onContentSizeChange={() => transcript.current?.scrollToEnd({ animated: false })}>
-          {turns.map((turn, i) => (
-            <Turn key={i} turn={turn} days={days} />
-          ))}
-          {failure ? (
-            <ThemedText type="detail" style={styles.failure}>
-              {failure}
-            </ThemedText>
-          ) : null}
-        </ScrollView>
+        <SheetDone onPress={onClose} />
       </View>
-    </Modal>
+
+      <ScrollView
+        ref={transcript}
+        contentContainerStyle={styles.transcript}
+        onContentSizeChange={() => transcript.current?.scrollToEnd({ animated: false })}>
+        {turns.map((turn, i) => (
+          <Turn key={i} turn={turn} days={days} />
+        ))}
+        {failure ? (
+          <ThemedText type="detail" style={styles.failure}>
+            {failure}
+          </ThemedText>
+        ) : null}
+      </ScrollView>
+    </>
   );
 }
 
@@ -122,7 +120,6 @@ function Turn({ turn, days }: { turn: ChatTurn; days: { date: string }[] }) {
 }
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1, backgroundColor: Colors.canvas },
   stamp: { marginBottom: Spacing.hair, marginRight: 2 },
   bar: {
     flexDirection: 'row',
