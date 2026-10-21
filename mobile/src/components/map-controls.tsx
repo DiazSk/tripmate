@@ -184,6 +184,7 @@ export function MapControls({
   onPoi,
   floor = MAP_FLOOR,
   region,
+  foot = 0,
 }: {
   pitched: boolean;
   onToggle3D: () => void;
@@ -210,6 +211,13 @@ export function MapControls({
   floor?: number;
   /** The day's own framing, so each thumbnail previews this trip rather than a stock junction. */
   region: Region;
+  /**
+   * How far below these controls' box the screen still runs: the trip's floating toolbar and the
+   * home indicator under it (`DayMap`'s `lift`). The style sheet's night ground and its scrim reach
+   * down through it to the screen's edge, so no band of map shows between the sheet and the
+   * bottom and the toolbar floats on the sheet; the sheet's content stays above the toolbar.
+   */
+  foot?: number;
 }) {
   const [picking, setPicking] = useState(false);
   const { tint, ink, inkMuted } = chrome(current.type);
@@ -344,7 +352,7 @@ export function MapControls({
         <Animated.View
           entering={FadeIn.duration(Motion.respond)}
           exiting={FadeOut.duration(Motion.exit)}
-          style={styles.scrim}>
+          style={[styles.scrim, { bottom: -foot }]}>
           {/* The scrim dismisses, which is what a reader tries first. */}
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -352,7 +360,7 @@ export function MapControls({
             accessibilityLabel="Close map styles"
             onPress={() => setPicking(false)}
           />
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: Spacing.regular + foot }]}>
             <View style={styles.cardHead}>
               <ThemedText type="headingSmall" style={styles.cardTitle}>
                 Map style

@@ -9,9 +9,9 @@ import { Polar } from '@/constants/polar';
  * **Light, because every page it sits over is paper.** Home, Trips and Profile hard-code the light
  * ground while the app runs in dark appearance, so this bar used to be the night palette (a dark
  * tint, white labels) over white pages: about 2:1, with the selected tab told apart only by a faint
- * pill. `colorScheme: 'light'` puts the tab host in the light trait, so the system draws light glass
- * the way the designs (home-4, trips-2, profile-4) show it; the colours are said outright as well,
- * so the labels hold even where the trait does not reach.
+ * pill. `(tabs)/_layout.tsx` puts the window in the light trait while the tabs show, so the system
+ * draws light glass the way the designs (home-4, trips-2, profile-4) show it; the colours are said
+ * outright too, for Android, which has no such trait.
  *
  * **The selected tab is ink, not signal.** Signal means action, and switching which list you are
  * looking at does not act on anything; a signal tab would be the One Meaning Rule leaking.
@@ -19,7 +19,6 @@ import { Polar } from '@/constants/polar';
 export default function AppTabs() {
   return (
     <NativeTabs
-      unstable_nativeProps={{ colorScheme: 'light' }}
       labelStyle={{ default: { color: Polar.secondary }, selected: { color: Polar.ink } }}
       iconColor={{ default: Polar.secondary, selected: Polar.ink }}
       tintColor={Polar.ink}>

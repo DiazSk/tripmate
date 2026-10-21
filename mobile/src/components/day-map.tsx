@@ -616,6 +616,7 @@ export function DayMap({
           onLocate={here ? locate : undefined}
           locating={locating}
           region={region}
+          foot={lift}
         />
       )}
       </View>

@@ -162,10 +162,9 @@ export function PaperError({ children }: { children: string }) {
 }
 
 /**
- * Plan a trip, as the + at the top of a paper page: Home's bar and the Trips header share it, so
- * the same action has one look. Light glass by name, because the app runs in dark appearance and
- * the system would otherwise draw a night disc over paper. In the Trips header it goes in as a
- * custom item with `hidesSharedBackground`, or iOS 26 wraps it in a second, dark, bar glass.
+ * Plan a trip, as the + in Home's own bar: light glass by name. The Trips header's + is a plain bar
+ * item instead, whose glass iOS 26 draws, light under the tabs' light theme (`(tabs)/_layout.tsx`);
+ * this one would sit inside that glass as a second disc there.
  */
 export function PlusButton({ onPress }: { onPress: () => void }) {
   return (

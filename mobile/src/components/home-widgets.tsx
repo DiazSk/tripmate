@@ -10,6 +10,8 @@ import { directionsUrl } from '@/lib/directions';
 import { isBlocking, tripHealth } from '@/lib/health';
 import { useHere } from '@/lib/here';
 import { describeDistance, savedNearby, savedNotInPlan } from '@/lib/savedPlaces';
+import { formatMoney } from '@/lib/spend';
+import { tripDays } from '@/lib/tiers';
 import { glanceFor, type NextGlance } from '@/lib/todayGlance';
 import { clockInZone, nowInZone } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
@@ -60,6 +62,7 @@ export function Widget({
   label,
   onPress,
   accessibilityLabel,
+  fit = false,
   children,
 }: {
   size: Size;
@@ -70,17 +73,20 @@ export function Widget({
   /** Absent for a widget that only reports, which is then not a button. */
   onPress?: () => void;
   accessibilityLabel?: string;
+  /** As tall as its words, never shorter than a row: for copy that would leave a fixed size half empty. */
+  fit?: boolean;
   children: ReactNode;
 }) {
   const width = useWidgetWidth(size);
-  const height = size === 'large' ? ROW * 2 + GAP : ROW;
+  const fixed = size === 'large' ? ROW * 2 + GAP : ROW;
+  const height = fit ? { minHeight: ROW } : { height: fixed };
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : 'summary'}
       accessibilityLabel={accessibilityLabel ?? label}
-      style={({ pressed }) => [styles.widget, toneStyle[tone], { width, height }, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.widget, toneStyle[tone], { width }, height, pressed && styles.pressed]}>
       {photo ? (
         <>
           <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} accessibilityIgnoresInvertColors />
@@ -362,10 +368,34 @@ function Attention({ trip, dayIndex, cachedAt, onPress }: { trip: Trip; dayIndex
 /* ---------------------------------------------------------------- planning */
 
 /** The large photo widget: the next trip and the days to go, or the latest memory. */
-export function TripPhotoWidget({ label, trip, photo, days, onPress }: { label: string; trip: { destination: string; startDate: string; endDate: string }; photo: string | null; days: number | null; onPress: () => void }) {
+/**
+ * The lead as the design draws it (home-4, Planning): the destination's photograph, the countdown
+ * top right in signal, the city as a monument, then "Nov 6 – 12 · 7 days · $1,800". `note` is a
+ * line under that, for a draft leading the page (its `clearsIn`), so the card never passes an
+ * unkept plan off as a trip.
+ */
+export function TripPhotoWidget({
+  label,
+  trip,
+  photo,
+  days,
+  note,
+  onPress,
+}: {
+  label: string;
+  trip: { destination: string; startDate: string; endDate: string; budget?: number };
+  photo: string | null;
+  days: number | null;
+  note?: string | null;
+  onPress: () => void;
+}) {
   const city = trip.destination.split(',')[0].trim();
+  const length = tripDays(trip.startDate, trip.endDate);
+  const meta = [formatRange(trip.startDate, trip.endDate), `${length} ${length === 1 ? 'day' : 'days'}`, trip.budget ? formatMoney(trip.budget) : null]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <Widget size="large" photo={photo} label={label} onPress={onPress} accessibilityLabel={`${label}: ${trip.destination}${days !== null ? `, in ${days} days` : ''}`}>
+    <Widget size="large" photo={photo} label={label} onPress={onPress} accessibilityLabel={`${label}: ${trip.destination}${days !== null ? `, in ${days} days` : ''}${note ? `. ${note}` : ''}`}>
       {days !== null && days > 0 ? (
         <View style={styles.daysToGo}>
           <Text style={styles.daysValue}>{days}</Text>
@@ -375,7 +405,10 @@ export function TripPhotoWidget({ label, trip, photo, days, onPress }: { label: 
       <Text style={styles.photoCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
         {city.toUpperCase()}
       </Text>
-      <Text style={[widgetText.dim, widgetText.onPhoto]}>{formatRange(trip.startDate, trip.endDate)}</Text>
+      <Text style={styles.photoMeta} numberOfLines={1}>
+        {meta}
+      </Text>
+      {note ? <Text style={styles.photoNote}>{note}</Text> : null}
     </Widget>
   );
 }
@@ -414,10 +447,14 @@ const styles = StyleSheet.create({
   body: { flex: 1, justifyContent: 'flex-end', gap: 3 },
   icon: { position: 'absolute', top: 6, left: 0 },
 
-  daysToGo: { position: 'absolute', top: -22, right: 0, alignItems: 'flex-end' },
-  daysValue: { fontFamily: PolarFonts.condensed, fontSize: 64, lineHeight: 70, color: Polar.signal },
-  daysUnit: { marginTop: -6, fontSize: 13, fontWeight: '600', color: Polar.ice },
+  // Into the card's corner, as home-4 sets it: the figure tight to the top and right edges and
+  // "days to go" tucked right under it, not floating a line below.
+  daysToGo: { position: 'absolute', top: -24, right: -6, alignItems: 'flex-end' },
+  daysValue: { fontFamily: PolarFonts.condensed, fontSize: 74, lineHeight: 80, color: Polar.signal },
+  daysUnit: { marginTop: -16, fontSize: 13, fontWeight: '600', color: Polar.ice },
   photoCity: { fontFamily: PolarFonts.condensed, fontSize: 52, lineHeight: 56, color: Polar.ice },
+  photoMeta: { fontSize: 15, lineHeight: 20, fontWeight: '500', color: Polar.ice, fontVariant: ['tabular-nums'] },
+  photoNote: { marginTop: 2, fontSize: 13, lineHeight: 17, color: Polar.frost68 },
 
   trip: { gap: GAP },
   stale: { marginHorizontal: 20, fontSize: 13, lineHeight: 18, color: WidgetColors.grey },

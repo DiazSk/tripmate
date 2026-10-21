@@ -27,7 +27,7 @@ import { discardTrip, listTrips, shareTrip } from '@/api/tripMateApi';
 import type { TripSummary } from '@/api/types';
 import { OfflineScreen } from '@/components/offline-screen';
 import { Scrim } from '@/components/polar-landing/scrim';
-import { PlusButton, usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
+import { usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
 import { confirmDelete } from '@/lib/confirmDelete';
@@ -108,10 +108,14 @@ export default function Trips() {
           onChangeText: (e) => setQuery(e.nativeEvent.text),
           onCancelButtonPress: () => setQuery(''),
         },
-        // Home's + exactly, as a custom item without the bar's shared glass (see `PlusButton`).
-        unstable_headerRightItems: () => [
-          { type: 'custom', element: <PlusButton onPress={() => router.push('/plan/basics')} />, hidesSharedBackground: true },
-        ],
+        // A plain bar item: iOS 26 draws its glass, light now that the tabs' stacks run the light
+        // theme (`(tabs)/_layout.tsx`), so it reads as Home's + without a second glass of our own.
+        // Drawn by the page over the bar instead, it never got the tap: the bar takes touches.
+        headerRight: () => (
+          <Pressable onPress={() => router.push('/plan/basics')} accessibilityRole="button" accessibilityLabel="Plan a trip" hitSlop={8} style={styles.plus}>
+            <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
+          </Pressable>
+        ),
       }}
     />
   );
@@ -446,6 +450,7 @@ const styles = StyleSheet.create({
   // White, as Photos is, so the pictures carry the colour.
   screen: { flex: 1, backgroundColor: '#fff' },
   center: { alignItems: 'center', justifyContent: 'center' },
+  plus: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   // Clears the floating tab bar, whose inset does not reach this list.
   content: { paddingBottom: BarHeight + 40 },
 

@@ -176,10 +176,15 @@ function Planning({
 }) {
   const today = todayISO();
   const { upcoming, past } = tripShelves(trips ?? [], today);
-  const lead = upcoming[0] ?? past[0];
+  // With nothing kept ahead, an unkept plan for days still to come leads the page (review H3):
+  // "Your first trip" above a draft said no trip existed while one did. Marked as a draft on the
+  // card, and so not repeated in the Draft widget below.
+  const draftLead = upcoming[0] ? null : (tripShelves(drafts, today).upcoming[0] ?? null);
+  const lead = upcoming[0] ?? draftLead ?? past[0];
   // Later: what is still to come after the lead, then the latest memory once something is ahead.
   const later = [...upcoming.slice(1, 4), ...(upcoming.length ? past.slice(0, 1) : [])];
-  const draft = drafts[0];
+  const rest = draftLead ? drafts.filter((d) => d.id !== draftLead.id) : drafts;
+  const draft = rest[0];
 
   return (
     <>
@@ -193,15 +198,14 @@ function Planning({
             <Text style={widgetText.dim}>Couldn’t reach TripMate. Your trips show up here once it answers.</Text>
           </Widget>
         ) : lead ? (
-          <LeadWidget trip={lead} upcoming={upcoming[0] === lead} today={today} onPress={() => onOpen(lead.id)} />
+          <LeadWidget trip={lead} upcoming={lead !== past[0]} draft={lead === draftLead} today={today} onPress={() => onOpen(lead.id)} />
         ) : (
-          <Widget size="large" tone="paper" label="Your first trip" onPress={onPlan}>
+          // No pill of its own: Plan a trip is already the small orange widget beside it and the +
+          // above, and the whole card still plans. Sized to its words, so the space the pill took
+          // is not left as a hole in a two-row card.
+          <Widget size="medium" fit tone="paper" label="Your first trip" onPress={onPlan} accessibilityLabel="Your first trip. Plan a trip">
             <Text style={styles.first}>Days worth keeping, written for where you are going.</Text>
             <Text style={widgetText.dim}>Tell TripMate where, when and how much. It writes the days and checks every place.</Text>
-            <View style={styles.firstCta}>
-              <SymbolView name="sparkles" size={15} tintColor={Polar.ink} />
-              <Text style={styles.firstCtaText}>Plan a trip</Text>
-            </View>
           </Widget>
         )}
 
@@ -216,7 +220,7 @@ function Planning({
           <Text style={widgetText.dim}>Paste it, or a photo.</Text>
         </Widget>
 
-        {draft ? <DraftWidget draft={draft} more={drafts.length - 1} onPress={() => onOpen(draft.id)} onTrips={onTrips} /> : null}
+        {draft ? <DraftWidget draft={draft} more={rest.length - 1} onPress={() => onOpen(draft.id)} onTrips={onTrips} /> : null}
       </WidgetGrid>
 
       {later.length ? (
@@ -252,10 +256,20 @@ function Planning({
   );
 }
 
-function LeadWidget({ trip, upcoming, today, onPress }: { trip: TripSummary; upcoming: boolean; today: string; onPress: () => void }) {
+function LeadWidget({ trip, upcoming, draft, today, onPress }: { trip: TripSummary; upcoming: boolean; draft: boolean; today: string; onPress: () => void }) {
   const photo = usePlacePhoto(trip.destination);
   const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
-  return <TripPhotoWidget label={upcoming ? 'Up next' : 'Latest memory'} trip={trip} photo={url} days={upcoming ? daysUntil(trip.startDate, today) : null} onPress={onPress} />;
+  const label = draft ? 'Draft · Up next' : upcoming ? 'Up next' : 'Latest memory';
+  return (
+    <TripPhotoWidget
+      label={label}
+      trip={trip}
+      photo={url}
+      days={upcoming ? daysUntil(trip.startDate, today) : null}
+      note={draft ? clearsIn(trip) : null}
+      onPress={onPress}
+    />
+  );
 }
 
 function DraftWidget({ draft, more, onPress, onTrips }: { draft: TripSummary; more: number; onPress: () => void; onTrips: () => void }) {
@@ -333,9 +347,7 @@ const styles = StyleSheet.create({
   barEnd: { position: 'absolute', right: 12, bottom: 3 },
 
   loading: { width: '100%', height: 200, alignItems: 'center', justifyContent: 'center' },
-  first: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 34, color: Polar.ink, marginBottom: 6 },
-  firstCta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 14, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24, backgroundColor: Polar.signal },
-  firstCtaText: { fontSize: 16, fontWeight: '600', color: Polar.ink },
+  first: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 34, color: Polar.ink, marginTop: 14, marginBottom: 6 },
   onSignal: { color: 'rgba(31,42,68,0.75)' },
 
   draft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
