@@ -88,3 +88,24 @@ test("a 200 with no `elements` key at all is still an empty answer, not a failur
   stubFetch(() => ({}));
   assert.deepEqual(await askOverpass("[out:json];node(1);out;"), []);
 });
+
+test("a deadline caps the whole call, not each mirror", async () => {
+  // Every mirror hangs until its signal aborts — the down-Overpass case that cost a generation
+  // ~90s per lookup, twice in a row, by waiting the full per-mirror timeout on each in turn.
+  const tried = [];
+  globalThis.fetch = (url, { signal }) => {
+    tried.push(url);
+    return new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+  };
+  const started = Date.now();
+  const out = await askOverpass("[out:json];node(1);out;", { timeoutMs: 10_000, deadline: started + 60 });
+  assert.equal(out, null, "no mirror answered, so null — not []");
+  assert.ok(Date.now() - started < 1_000, "gave up at the deadline, not after 3 x 10s");
+  assert.equal(tried.length, 1, "the first attempt took the whole budget, so no mirror after it was tried");
+});
+
+test("a deadline already past asks nothing", async () => {
+  const tried = stubFetch(() => ({ elements: [{ id: 3 }] }));
+  assert.equal(await askOverpass("[out:json];node(1);out;", { deadline: Date.now() - 1 }), null);
+  assert.equal(tried.length, 0);
+});

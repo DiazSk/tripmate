@@ -93,21 +93,30 @@ let preferredMirror = 0;
  * thing: we could not ask.
  *
  * `[]` is a real answer: the query ran and matched nothing.
+ *
+ * **`timeoutMs` is per mirror; `deadline` is for the whole call.** Without a deadline a query that
+ * no mirror answers costs up to `timeoutMs` three times over. A generation paid that twice in a
+ * row, measured: the tags lookup and the coordinate sweep each spent ~90s failing over dead
+ * mirrors to return nothing, and the traveller watched "Almost there" for four minutes. A
+ * `deadline` (epoch ms) shortens each attempt to the time left and stops trying mirrors once it
+ * passes, returning `null` exactly as if every mirror had refused.
  */
 export async function askOverpass(
   body: string,
-  { timeoutMs = DEFAULT_TIMEOUT_MS }: { timeoutMs?: number } = {}
+  { timeoutMs = DEFAULT_TIMEOUT_MS, deadline }: { timeoutMs?: number; deadline?: number } = {}
 ): Promise<OverpassElement[] | null> {
   // Start at the last known-good mirror and wrap, so every mirror is still tried exactly once.
   const order = OVERPASS_URLS.map((_, i) => (preferredMirror + i) % OVERPASS_URLS.length);
   for (const index of order) {
     const url = OVERPASS_URLS[index];
+    const left = deadline === undefined ? timeoutMs : Math.min(timeoutMs, deadline - Date.now());
+    if (left <= 0) break;
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: HEADERS,
         body,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(left),
       });
       if (!res.ok) continue;
       const data = (await res.json()) as { elements?: OverpassElement[]; remark?: string };

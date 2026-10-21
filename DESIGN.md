@@ -350,6 +350,12 @@ always the largest thing on screen.
 
 **Key Characteristics:**
 - Two materials: night glass over the world, opaque ice and paper away from it. Never a third grey.
+  On the phone that assigns whole screens: paper for browsing and settings (Home, Trips, Profile,
+  the planner, Bring your plan, How it works, Share in, a shared trip), night for the map and the
+  film (the trip, the story, writing the plan) and for the glass entrances (sign-in, the welcome,
+  the landing, offline). Each screen's system chrome follows its own ground, never the app's
+  appearance: the tab bar runs the light trait while the tabs show, paper inputs open a light
+  keyboard, glass on paper is `colorScheme="light"`.
 - One action colour, signal orange, on what you press and on the focus ring. Money has no hue.
 - Three faces with one job each: Cormorant Garamond speaks, Inter Tight is read, Oswald names places.
 - A whole Polar screen is an em of one fluid base, so it scales with the viewport as one piece.

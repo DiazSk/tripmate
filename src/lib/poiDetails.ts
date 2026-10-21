@@ -146,7 +146,9 @@ export async function fetchPoiOsmTags(
    * a stop that matches nothing was measured taking **36 seconds** to say so, which is a skeleton
    * nobody watches to the end. It passes a few seconds and does without.
    */
-  timeoutMs: number = OVERPASS_TIMEOUT_MS
+  timeoutMs: number = OVERPASS_TIMEOUT_MS,
+  /** Epoch ms after which no further mirror is tried; see `askOverpass`. */
+  deadline?: number
 ): Promise<Record<string, PoiOsmTags> | null> {
   if (pois.length === 0) return {};
 
@@ -167,19 +169,20 @@ export async function fetchPoiOsmTags(
       .sort()
       .join("|");
 
-  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query, pois, timeoutMs));
+  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query, pois, timeoutMs, deadline));
 }
 
 async function fetchPoiOsmTagsUncached(
   query: string,
   pois: { name: string; lat: number; lon: number }[],
-  timeoutMs: number
+  timeoutMs: number,
+  deadline?: number
 ): Promise<Record<string, PoiOsmTags> | null> {
   try {
     // `null` from here means no mirror answered, which is exactly this function's own `null`:
     // "the fetch failed", as distinct from `{}` for "asked, matched nothing". The caller needs
     // that difference — see the fail-soft note in CLAUDE.md.
-    const elements = (await askOverpass(query, { timeoutMs })) as
+    const elements = (await askOverpass(query, { timeoutMs, deadline })) as
       | OverpassPoiElement[]
       | null;
     if (elements === null) return null;
@@ -259,7 +262,9 @@ function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: num
 export async function resolveNamedPlaceCoords(
   names: string[],
   near: { lat: number; lon: number },
-  radiusM = 30000
+  radiusM = 30000,
+  /** Epoch ms after which no further mirror is tried; see `askOverpass`. */
+  deadline?: number
 ): Promise<Record<string, { lat: number; lon: number }>> {
   const terms = searchTermsFor(names);
   const unique = Array.from(terms.keys());
@@ -286,7 +291,7 @@ export async function resolveNamedPlaceCoords(
   // kept — so the cache miss and the empty answer look the same to every caller. The `null`
   // matters one layer down, where it decides whether an Overpass refusal gets written down as
   // "none of these places exist" and freezes every stop's wrong coordinates for ninety days.
-  return (await cached(key, TTL.STATIC, () => resolveNamedPlaceCoordsUncached(clauses, near, terms))) ?? {};
+  return (await cached(key, TTL.STATIC, () => resolveNamedPlaceCoordsUncached(clauses, near, terms, deadline))) ?? {};
 }
 
 async function resolveNamedPlaceCoordsUncached(
@@ -294,11 +299,13 @@ async function resolveNamedPlaceCoordsUncached(
   near: { lat: number; lon: number },
   /** Search term -> the stop names that asked for it, so a hit can be keyed back to the caller's
    *  own name. One term can serve several stops ("Breakfast at X" and "Coffee at X"). */
-  terms: Map<string, string[]>
+  terms: Map<string, string[]>,
+  deadline?: number
 ): Promise<Record<string, { lat: number; lon: number }> | null> {
   try {
     const elements = (await askOverpass(`[out:json][timeout:40];(${clauses});out center tags;`, {
       timeoutMs: OVERPASS_TIMEOUT_MS,
+      deadline,
     })) as OverpassPoiElement[] | null;
     if (elements === null) return null;
 

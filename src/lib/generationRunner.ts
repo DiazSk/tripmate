@@ -67,6 +67,23 @@ export interface LiveSink {
   onSketch?(days: SketchDay[]): void;
 }
 
+/** The shared budget for every Overpass lookup between the model's answer and the hand-over; see
+ *  `placingDeadline`. One generous attempt, the same 45s a single lookup already allows itself. */
+export const PLACING_BUDGET_MS = 45_000;
+
+/** `work`, or nothing once `deadline` (epoch ms) passes, whichever comes first. */
+export async function untilDeadline<T>(work: Promise<T>, deadline: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), Math.max(0, deadline - Date.now()));
+  });
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface GenerationParams {
   destination: string;
   startDate: string;
@@ -431,6 +448,16 @@ export async function runGeneration(
     for (const day of itinerary.days) if (!day.theme?.trim()) day.theme = themeByDate.get(day.date);
   }
 
+  // **Everything Overpass costs between the model's answer and the hand-over shares one deadline.**
+  // The tags lookup, the day lookups still in flight from the stream and the coordinate sweep each
+  // fall over three community mirrors, and without a shared cap a down Overpass made them pay the
+  // whole failover each, in a row: measured, a two-day Porto plan answered at 179s and reached the
+  // phone 3m45s later, with every lookup returning nothing. One healthy attempt fits (the sweep's
+  // union query returns in ~25s); three dead mirrors twice over do not. Past it, the plan goes out
+  // on the model's own coordinates and without listing facts, which is the fail-soft answer this
+  // step already gave when Overpass was unreachable, only four minutes sooner.
+  const placingDeadline = Date.now() + PLACING_BUDGET_MS;
+
   // Look up real listings for the stops where the answer can change the plan, then check the
   // schedule against them. Selective on purpose: a call per stop put one 44-stop trip at ~91
   // metered calls in the Phase 0 spike, so only "entry" stops qualify — plus every stop when
@@ -459,7 +486,7 @@ export async function runGeneration(
       .filter((name) => coordsByName.has(name))
       .map((name) => ({ name, ...coordsByName.get(name)! }))
       .map(({ name, lat, lng }) => ({ name, lat, lon: lng }));
-    const tagsByName = await fetchPoiOsmTags(toFetch);
+    const tagsByName = await fetchPoiOsmTags(toFetch, undefined, placingDeadline);
     if (tagsByName) {
       for (const { name } of toFetch) {
         const facts = buildPlaceFacts(tagsByName[name]);
@@ -566,7 +593,9 @@ export async function runGeneration(
       try {
         // Settle whatever the stream started. `allSettled`, not `all`: each lookup already
         // swallows its own failure, and one that somehow rejects must not skip the sweep.
-        await Promise.allSettled(pendingCoordLookups);
+        // …but no later than the deadline. A day lookup still running past it keeps going and can
+        // still draw its pins on a writing screen that is open; the sweep just stops waiting.
+        await untilDeadline(Promise.allSettled(pendingCoordLookups), placingDeadline);
         const allStops = itinerary.days.flatMap((d) => d.stops);
         // Only the names the stream never resolved. On a streaming run this is usually empty or
         // near it, so the stage that used to be a ~25s whole-trip Overpass call becomes a sweep
@@ -576,7 +605,7 @@ export async function runGeneration(
           .map((s) => s.name.trim())
           .filter((name) => !(name in streamedCoords));
         const resolved = unresolved.length
-          ? await resolveNamedPlaceCoords(unresolved, geoPoint)
+          ? await resolveNamedPlaceCoords(unresolved, geoPoint, undefined, placingDeadline)
           : {};
         const all = { ...streamedCoords, ...resolved };
         resolvedCoords = all;
@@ -796,9 +825,11 @@ export async function runGeneration(
   // spend the ~150s critique costs. This is the halving — interactive at ~160s rather than ~310s.
   finalizeDays(itinerary.days);
   await placeStops();
-  await computeTravelFindings();
   live.onPlan({ itinerary, traceId, runId, sessionId });
 
+  // After the hand-over, as its own comment always said: critique is its only reader, so routing
+  // every leg (up to OSRM's 15s batch budget) is time the traveller need not wait for.
+  await computeTravelFindings();
   const revision = await runCritique();
   if (revision) {
     applyResolvedCoords(revision.days);
