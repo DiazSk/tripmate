@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
+import { Meridian } from '@/components/meridian';
 import { BlurView } from '@/components/blur';
 import { SymbolView } from '@/components/symbol';
 import { ThemedText } from '@/components/themed-text';
@@ -106,18 +107,12 @@ export function TripToolbar({
         <Tool label={`Play this day`} disabled={!canPlay} onPress={onPlay}>
           <SymbolView name={{ ios: 'play.fill', android: 'play_arrow' }} tintColor={canPlay ? Colors.foreground : Colors.muted} size={16} />
         </Tool>
-        {/* The one target with a word in it: sparkles is not a learned symbol for "ask for a change",
-            and Play's triangle and the budget's ring are. Room for it came out of the switch's halves
-            and the bar's gaps, so the row is no wider than it was unlabelled (~354pt, under the 359
-            a 375pt phone gives it with 8pt gutters). */}
-        <Tool label="Ask for a change" disabled={offline} onPress={onAsk} wide>
-          <SymbolView name={{ ios: 'sparkles', android: 'auto_awesome' }} tintColor={offline ? Colors.muted : Colors.foreground} size={16} />
-          <ThemedText
-            type="detail"
-            maxFontSizeMultiplier={LABEL_SCALE}
-            style={{ color: offline ? Colors.muted : Colors.foreground, fontWeight: '600' }}>
-            Ask
-          </ThemedText>
+        {/* Meri alone, no word: Ask opens a conversation with your TripMate, the chat sheet it opens
+            is headed by Meri, and a face with eyes asks to be tapped in a way a label does not. It
+            was "✦ Ask" for the review's unlabelled-icon finding (TR7); Zaid chose the face over the
+            word. The accessible label still says what it does. */}
+        <Tool label="Ask for a change" disabled={offline} onPress={onAsk}>
+          <Meridian state={offline ? 'offline' : 'idle'} size={24} />
         </Tool>
         {budget > 0 ? (
           <Tool label={`Budget: ${formatMoney(spent)} of ${formatMoney(budget)}`} onPress={onBudget}>
@@ -140,15 +135,12 @@ function Tool({
   label,
   disabled = false,
   primary = false,
-  wide = false,
   onPress,
   children,
 }: {
   label: string;
   disabled?: boolean;
   primary?: boolean;
-  /** A pill that fits its icon and word, rather than a 44pt circle. */
-  wide?: boolean;
   onPress: () => void;
   children: React.ReactNode;
 }) {
@@ -161,7 +153,6 @@ function Tool({
       accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.tool,
-        wide && styles.toolWide,
         primary && !disabled && styles.toolPrimary,
         pressed && styles.toolPressed,
       ]}>
@@ -234,7 +225,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.control,
   },
-  toolWide: { width: 'auto', flexDirection: 'row', gap: 4, paddingHorizontal: 10 },
   toolPrimary: { backgroundColor: Colors.accent },
   toolPressed: { opacity: 0.7 },
   ring: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
