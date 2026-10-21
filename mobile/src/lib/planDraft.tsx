@@ -59,6 +59,21 @@ export function partyForGroup(group: GroupType): PartyCounts | null {
 }
 
 /**
+ * The other direction: the preset the counters now describe, so the two never state different
+ * facts. A preset seeds the counters (`partyForGroup`); a counter changed by hand re-derives the
+ * preset here, which is what makes "Solo" over three adults unreachable.
+ *
+ * Any child or infant is a family. One adult is solo. Two is a couple unless the traveller already
+ * said "Friends / group", which two friends are. Three or more adults is a group.
+ */
+export function groupForParty(party: PartyCounts, current: GroupType): GroupType {
+  if (party.children + party.infants > 0) return 'family_with_kids';
+  if (party.adults <= 1) return 'solo';
+  if (party.adults === 2) return current === 'other' ? 'other' : 'couple';
+  return 'other';
+}
+
+/**
  * Two questions, where there was one.
  *
  * "How you like to explore" offered `packed`, `relaxed`, `offbeat` and `mixed` — the first two

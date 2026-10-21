@@ -117,8 +117,8 @@ export default function Home() {
         scrollEventThrottle={32}
         onScroll={(e) => setFolded(e.nativeEvent.contentOffset.y > 46)}>
         <View style={styles.head}>
-          <Text style={styles.date}>{dateLine.toUpperCase()}</Text>
-          <Text style={[styles.title, fonts && styles.titleFont]} accessibilityRole="header" numberOfLines={2}>
+          <Text maxFontSizeMultiplier={1.6} style={styles.date}>{dateLine.toUpperCase()}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={[styles.title, fonts && styles.titleFont]} accessibilityRole="header" numberOfLines={2}>
             {title}
           </Text>
         </View>
@@ -147,7 +147,7 @@ function Bar({ folded, title, top, onPlan }: { folded: boolean; title: string; t
     <View style={[styles.bar, { paddingTop: top, height: top + 50 }]} pointerEvents="box-none">
       {folded ? <BlurView intensity={60} tint="systemChromeMaterialLight" style={StyleSheet.absoluteFill} /> : null}
       {folded ? <View style={styles.barRule} /> : null}
-      <Text style={[styles.barTitle, !folded && styles.hidden]} numberOfLines={1} accessibilityElementsHidden={!folded}>
+      <Text maxFontSizeMultiplier={1.6} style={[styles.barTitle, !folded && styles.hidden]} numberOfLines={1} accessibilityElementsHidden={!folded}>
         {title}
       </Text>
       <View style={styles.barEnd}>
@@ -195,7 +195,7 @@ function Planning({
           </View>
         ) : trips === null ? (
           <Widget size="medium" tone="warn" label="Not loaded">
-            <Text style={widgetText.dim}>Couldn’t reach TripMate. Your trips show up here once it answers.</Text>
+            <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>Couldn’t reach TripMate. Your trips show up here once it answers.</Text>
           </Widget>
         ) : lead ? (
           <LeadWidget trip={lead} upcoming={lead !== past[0]} draft={lead === draftLead} today={today} onPress={() => onOpen(lead.id)} />
@@ -204,20 +204,20 @@ function Planning({
           // above, and the whole card still plans. Sized to its words, so the space the pill took
           // is not left as a hole in a two-row card.
           <Widget size="medium" fit tone="paper" label="Your first trip" onPress={onPlan} accessibilityLabel="Your first trip. Plan a trip">
-            <Text style={styles.first}>Days worth keeping, written for where you are going.</Text>
-            <Text style={widgetText.dim}>Tell TripMate where, when and how much. It writes the days and checks every place.</Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.first}>Days worth keeping, written for where you are going.</Text>
+            <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>Tell TripMate where, when and how much. It writes the days and checks every place.</Text>
           </Widget>
         )}
 
         <Widget size="small" tone="signal" label="New" onPress={onPlan} accessibilityLabel="Plan a trip">
           <WidgetIcon name="sparkles" />
-          <Text style={widgetText.title}>Plan a trip</Text>
-          <Text style={[widgetText.dim, styles.onSignal]}>Where, when, how much.</Text>
+          <Text maxFontSizeMultiplier={1.6} style={widgetText.title}>Plan a trip</Text>
+          <Text maxFontSizeMultiplier={1.6} style={[widgetText.dim, styles.onSignal]}>Where, when, how much.</Text>
         </Widget>
         <Widget size="small" label="Import" onPress={onImport} accessibilityLabel="Bring your own plan">
           <WidgetIcon name="doc.text" color={Polar.ember} />
-          <Text style={widgetText.title}>Bring your plan</Text>
-          <Text style={widgetText.dim}>Paste it, or a photo.</Text>
+          <Text maxFontSizeMultiplier={1.6} style={widgetText.title}>Bring your plan</Text>
+          <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>Paste it, or a photo.</Text>
         </Widget>
 
         {draft ? <DraftWidget draft={draft} more={rest.length - 1} onPress={() => onOpen(draft.id)} onTrips={onTrips} /> : null}
@@ -225,7 +225,7 @@ function Planning({
 
       {later.length ? (
         <View style={styles.later}>
-          <Text style={styles.h} accessibilityRole="header">
+          <Text maxFontSizeMultiplier={1.6} style={styles.h} accessibilityRole="header">
             Later
           </Text>
           <View style={styles.list}>
@@ -242,8 +242,8 @@ function Planning({
             <View style={styles.steps}>
               {METHOD.map((m) => (
                 <View key={m.number} style={styles.stepCell}>
-                  <Text style={styles.stepNum}>{m.number}</Text>
-                  <Text style={styles.stepTitle} numberOfLines={2}>
+                  <Text maxFontSizeMultiplier={1.6} style={styles.stepNum}>{m.number}</Text>
+                  <Text maxFontSizeMultiplier={1.6} style={styles.stepTitle} numberOfLines={2}>
                     {m.title}
                   </Text>
                 </View>
@@ -281,11 +281,11 @@ function DraftWidget({ draft, more, onPress, onTrips }: { draft: TripSummary; mo
       <View style={styles.draft}>
         <View style={styles.draftThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}</View>
         <View style={styles.draftText}>
-          <Text style={widgetText.big} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={1.3} style={widgetText.big} numberOfLines={1}>
             {draft.destination.split(',')[0].trim()}
           </Text>
-          {clears ? <Text style={widgetText.ember}>{clears}</Text> : null}
-          {more > 0 ? <Text style={widgetText.dim}>{`and ${more} more under Trips`}</Text> : null}
+          {clears ? <Text maxFontSizeMultiplier={1.6} style={widgetText.ember}>{clears}</Text> : null}
+          {more > 0 ? <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>{`and ${more} more under Trips`}</Text> : null}
         </View>
       </View>
     </Widget>
@@ -301,10 +301,10 @@ function LaterRow({ trip, today, memory, first, onPress }: { trip: TripSummary; 
     <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.row, !first && styles.rowRuled, pressed && styles.rowPressed]}>
       <View style={styles.rowThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={trip.id} /> : null}</View>
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={1.6} style={styles.rowTitle} numberOfLines={1}>
           {trip.destination.split(',')[0].trim()}
         </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>{`${formatRange(trip.startDate, trip.endDate)} · ${when}`}</Text>
+        <Text maxFontSizeMultiplier={1.6} style={styles.rowMeta} numberOfLines={1}>{`${formatRange(trip.startDate, trip.endDate)} · ${when}`}</Text>
       </View>
       <SymbolView name="chevron.right" size={13} tintColor="rgba(60,60,67,0.3)" weight="semibold" />
     </Pressable>

@@ -164,7 +164,9 @@ test('a stop states its time, its length and what it is, in that order', () => {
 });
 
 test('a hand-added stop with no time or length says only what it is', () => {
-  expect(stopParticulars({ time: '', durationLabel: '  ', category: 'other' })).toBe('Other');
+  expect(stopParticulars({ time: '', durationLabel: '  ', category: 'museum' })).toBe('Museum');
+  expect(stopParticulars({ time: '', durationLabel: '  ', category: 'other' })).toBe('');
+  expect(stopParticulars({ time: '2:30 PM', durationLabel: '45 minutes', category: 'other' })).toBe('2:30 PM  ·  45 minutes');
   expect(stopParticulars({})).toBe('');
 });
 

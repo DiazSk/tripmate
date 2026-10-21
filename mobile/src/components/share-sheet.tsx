@@ -86,6 +86,23 @@ export function ShareSheet({
             ))}
           </Group>
         </>
+      ) : state.kind === 'reading' ? (
+        // Before the first place arrives: the section it will land in, with two rows still being
+        // read, so the sheet says what it is doing rather than sitting blank under the spinner.
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Text style={styles.section}>FINDING</Text>
+          <Group>
+            {[0.62, 0.44].map((w, i) => (
+              <View key={w}>
+                {i ? <Separator inset={54} /> : null}
+                <View style={styles.row}>
+                  <View style={[styles.pin, styles.skeleton]} />
+                  <View style={[styles.skeletonLine, { width: `${w * 100}%` }]} />
+                </View>
+              </View>
+            ))}
+          </Group>
+        </View>
       ) : null}
 
       {state.kind === 'done' && state.truncated ? <Text style={styles.note}>That was a lot at once, so TripMate read the first 20.</Text> : null}
@@ -154,6 +171,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 16, paddingVertical: 6 },
   pin: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
   name: { fontSize: 17, color: '#000' },
+  skeleton: { backgroundColor: SettingsColors.pressed },
+  skeletonLine: { height: 14, borderRadius: 7, backgroundColor: SettingsColors.pressed },
   city: { fontSize: 13, color: SettingsColors.grey },
   note: { marginHorizontal: 32, marginTop: 8, fontSize: 13, lineHeight: 18, color: SettingsColors.grey },
   actions: { gap: 6, marginTop: 18, paddingHorizontal: 16 },

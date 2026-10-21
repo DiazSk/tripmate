@@ -41,8 +41,6 @@ import type { RawFetch } from '@shared/types';
 
 /** ~150s of waiting at this interval is ~21 facts, under `destinationFacts`' cap. The web's. */
 const FACT_INTERVAL_MS = 7000;
-/** Cancel waits this long, as on the web: a stray tap in the first seconds is not a decision. */
-const CANCEL_AFTER_MS = 10_000;
 /**
  * The least ground a day is framed at, about 2.2km. `regionForStops`' 400m floor suits the day map,
  * where you read one day; here a two-stop day at that floor filled the screen with a single block.
@@ -57,6 +55,8 @@ const CITY_SPAN = { lat: 0.06, lng: 0.1 };
  */
 const LENS_DEG = 3;
 const LENS_FILL = 'rgba(9,11,16,0.5)';
+/** A city's worth of ground from above, before the fetch's own framing takes over. */
+const SEED_ALTITUDE_M = 40_000;
 
 export function WritingThePlan({
   destination,
@@ -69,6 +69,7 @@ export function WritingThePlan({
   facts,
   raw,
   ready = false,
+  seed = null,
   onCancel,
 }: {
   destination: string;
@@ -83,6 +84,9 @@ export function WritingThePlan({
   raw: RawFetch | null;
   /** The plan is saved and the trip is about to open: the card says so over the same map. */
   ready?: boolean;
+  /** Where the destination is, when the planner already knows (a picked suggestion or its blur
+   *  geocode), so the map opens on the city rather than on a world view until the fetch lands. */
+  seed?: { lat: number; lon: number } | null;
   onCancel: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -92,7 +96,6 @@ export function WritingThePlan({
   const [ledeBottom, setLedeBottom] = useState(300);
   const [cardH, setCardH] = useState(200);
   const [factIndex, setFactIndex] = useState(0);
-  const [cancelReady, setCancelReady] = useState(false);
 
   const city = destination.split(',')[0]?.trim() || destination.trim() || 'your trip';
   const centre = raw?.destination.resolved && raw.destination.lat !== null && raw.destination.lon !== null ? { lat: raw.destination.lat, lon: raw.destination.lon } : null;
@@ -108,10 +111,6 @@ export function WritingThePlan({
   const forecast = forecastLine(raw);
   const pool = forecast ? [...facts, `The forecast: ${forecast}.`] : facts;
 
-  useEffect(() => {
-    const id = setTimeout(() => setCancelReady(true), CANCEL_AFTER_MS);
-    return () => clearTimeout(id);
-  }, []);
   useEffect(() => {
     if (pool.length < 2) return;
     const id = setInterval(() => setFactIndex((i) => (i + 1) % pool.length), FACT_INTERVAL_MS);
@@ -158,7 +157,11 @@ export function WritingThePlan({
       <MapView
         ref={map}
         style={StyleSheet.absoluteFill}
-        initialCamera={{ center: { latitude: 25, longitude: 10 }, altitude: 20_000_000, pitch: 0, heading: 0 }}
+        initialCamera={
+          seed
+            ? { center: { latitude: seed.lat, longitude: seed.lon }, altitude: SEED_ALTITUDE_M, pitch: 0, heading: 0 }
+            : { center: { latitude: 25, longitude: 10 }, altitude: 20_000_000, pitch: 0, heading: 0 }
+        }
         userInterfaceStyle="dark"
         // Apple's own muted type for a map carrying overlays, as on the landing's Petra map.
         mapType="mutedStandard"
@@ -210,9 +213,10 @@ export function WritingThePlan({
 
       <View style={[styles.header, { marginTop: insets.top }]} pointerEvents="box-none">
         <Wordmark light />
-        {/* Nothing here until Cancel can be pressed: the card already says how long, and a second
-            estimate up here was a second number to reconcile. */}
-        {cancelReady && !ready ? (
+        {/* Cancel from the first moment. It used to wait 10s, as the web does, against a stray tap —
+            which left the first ten seconds of a minutes-long wait with no way out at all, and a
+            stray tap costs only a return to the filled-in planner. */}
+        {!ready ? (
           <Animated.View entering={FadeIn.duration(400)}>
             <Pressable
               onPress={onCancel}

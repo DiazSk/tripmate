@@ -37,7 +37,9 @@ export default function SignInReset() {
 
   return (
     <GlassStep
-      step={3}
+      // Address, password, the emailed code, then this.
+      step={4}
+      count={4}
       title="Choose a new password"
       sub={
         <>

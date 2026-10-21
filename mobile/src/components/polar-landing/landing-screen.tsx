@@ -1,17 +1,18 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
   useWindowDimensions,
+  View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -21,8 +22,6 @@ import {
 import Animated, {
   Easing,
   Extrapolation,
-  SlideInDown,
-  SlideOutDown,
   interpolate,
   useAnimatedRef,
   useAnimatedStyle,
@@ -39,7 +38,7 @@ import { toPrefill, type PlanPrefill } from '@shared/planExamples';
 import { DateField } from '@/components/form';
 import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
 import { crossFieldProblem } from '@/lib/formGap';
-import { BEATS, DESTS, FACTS, FOOT_PHOTO, PLANS, STEPS, type LandingPlan } from './content';
+import { BEATS, DESTS, FACTS, FOOT_PHOTO, PLANS, type LandingPlan } from './content';
 import { DayStory, OpenDaySheet, PlanMap, TickContext, Ways, type Tick } from './imagine';
 import { Scrim } from './scrim';
 
@@ -168,7 +167,6 @@ export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
   const [showBar, setShowBar] = useState(false);
   const [pastHero, setPastHero] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [how, setHow] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [lens, setLens] = useState<LensId>('slow');
   const [hot, setHot] = useState<string | null>(null);
@@ -208,10 +206,27 @@ export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
   // before the How-it-works sheet opened, white over a white page for good once it closed. The
   // modals sit on dark scrims, so they get light; the page gets whatever it is scrolled to.
   useEffect(() => {
-    setStatusBarStyle(menu || how || sheet || !pastHero ? 'light' : 'dark', true);
-  }, [menu, how, sheet, pastHero]);
+    setStatusBarStyle(menu || sheet || !pastHero ? 'light' : 'dark', true);
+  }, [menu, sheet, pastHero]);
   // iOS can reset it again when the dismissal *finishes*, after the effect above has run.
   const restoreStatusBar = () => setStatusBarStyle(pastHero ? 'dark' : 'light', true);
+  // And when How it works, a route of its own, closes back onto this one.
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle(pastHero ? 'dark' : 'light', true);
+    }, [pastHero]),
+  );
+  // The one How it works, Home's own sheet (`app/how-it-works.tsx`): this page used to keep a second
+  // with its own copy, and the two said different things about the same four steps.
+  // From the menu it waits for the menu to go: iOS will not present a sheet from under an RN Modal
+  // that is still on its way out, so the push runs from the menu's `onDismiss` (iOS only).
+  const afterMenu = useRef<(() => void) | null>(null);
+  const openHow = () => {
+    const show = () => router.push('/how-it-works');
+    if (menu && Platform.OS === 'ios') afterMenu.current = show;
+    else show();
+    setMenu(false);
+  };
 
   // Only the bar's visibility is state — a scroll offset in state would re-render the map 60x/s.
   // The motion reads the same scroll through `useScrollOffset`, on the UI thread.
@@ -262,7 +277,7 @@ export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
                 carry={`Petra · ${dateLabel} · ${LENSES[lens].name}. Or start from your own idea below.`}
                 onPlan={startPlan}
                 onOpenDay={() => setSheet(true)}
-                onHow={() => setHow(true)}
+                onHow={openHow}
                 onGo={go}
                 onSignIn={signIn}
               />
@@ -274,7 +289,7 @@ export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
           {showBar && (
             <View style={[styles.barWrap, { bottom: insets.bottom + 6 }]} pointerEvents="box-none">
               <BlurView intensity={60} tint="dark" style={styles.bar}>
-                <Pressable onPress={() => setHow(true)} style={({ pressed }) => [styles.barQuiet, pressed && styles.dim]} accessibilityRole="button">
+                <Pressable onPress={openHow} style={({ pressed }) => [styles.barQuiet, pressed && styles.dim]} accessibilityRole="button">
                   <Text style={styles.barQuietText}>How it works</Text>
                 </Pressable>
                 <Pressable onPress={() => go('plan')} style={({ pressed }) => [styles.signal, styles.flex, pressed && styles.signalPressed]} accessibilityRole="button">
@@ -284,11 +299,21 @@ export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
             </View>
           )}
 
-          <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} onDismiss={restoreStatusBar} statusBarTranslucent>
+          <Modal
+            visible={menu}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setMenu(false)}
+            onDismiss={() => {
+              restoreStatusBar();
+              afterMenu.current?.();
+              afterMenu.current = null;
+            }}
+            statusBarTranslucent>
             <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, { paddingTop: insets.top + PolarSpace.s3, paddingHorizontal: PolarSpace.pad }]}>
               <View style={styles.menuHead}>
                 <Wordmark light />
-                <Pressable onPress={() => setMenu(false)} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Close menu">
+                <Pressable onPress={() => setMenu(false)} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Close menu">
                   <Text style={styles.glassText}>Close</Text>
                 </Pressable>
               </View>
@@ -299,54 +324,13 @@ export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
                     <Text style={styles.menuLabel}>{label}</Text>
                   </Pressable>
                 ))}
-                <Pressable
-                  onPress={() => {
-                    setMenu(false);
-                    setHow(true);
-                  }}
-                  style={({ pressed }) => [styles.menuRow, pressed && styles.dim]}
-                  accessibilityRole="button">
+                <Pressable onPress={openHow} style={({ pressed }) => [styles.menuRow, pressed && styles.dim]} accessibilityRole="button">
                   <Text style={styles.menuN}>{pad(menuItems.length + 1)}</Text>
                   <Text style={styles.menuLabel}>How it works</Text>
                 </Pressable>
               </View>
               <Text style={[PolarType.coord, styles.menuCoord, { marginBottom: insets.bottom + PolarSpace.s6 }]}>[ 42º 20’ 23” N, 71º 05’ 22” W ]</Text>
             </BlurView>
-          </Modal>
-
-          {/* A fade modal with the sheet sliding inside it: `animationType="slide"` would slide the
-              scrim up with the sheet, which reads as a second page arriving rather than a sheet. */}
-          <Modal visible={how} transparent animationType="fade" onRequestClose={() => setHow(false)} onDismiss={restoreStatusBar} statusBarTranslucent>
-            <Pressable style={styles.scrim} onPress={() => setHow(false)} accessibilityLabel="Close" />
-            <Animated.View entering={SlideInDown.duration(450)} exiting={SlideOutDown.duration(300)} style={[styles.sheet, { paddingBottom: insets.bottom + PolarSpace.s3 }]}>
-              <View style={styles.grabber} />
-              <View style={styles.sheetHead}>
-                <Text style={[PolarType.eyebrow, { color: Polar.ink }]} accessibilityRole="header">
-                  How it works
-                </Text>
-                <Pressable onPress={() => setHow(false)} style={({ pressed }) => [styles.quiet, pressed && styles.dim]} accessibilityRole="button">
-                  <Text style={styles.quietText}>Close</Text>
-                </Pressable>
-              </View>
-              <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
-                {STEPS.map((s) => (
-                  <View key={s.n} style={styles.step}>
-                    <Text style={styles.stepN}>{s.n}.</Text>
-                    <Text style={styles.stepTitle}>{s.title}</Text>
-                    <Text style={[PolarType.bodyS, { color: Polar.charcoal }]}>{s.prose}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-              <Pressable
-                onPress={() => {
-                  setHow(false);
-                  go('plan');
-                }}
-                style={({ pressed }) => [styles.signal, styles.signalLg, pressed && styles.signalPressed]}
-                accessibilityRole="button">
-                <Text style={styles.signalText}>Plan a trip</Text>
-              </Pressable>
-            </Animated.View>
           </Modal>
 
           <OpenDaySheet visible={sheet} lens={lens} dateLabel={dateLabel} onClose={() => setSheet(false)} onDismiss={restoreStatusBar} onOpen={(adults) => startPlan(petraPrefill(today, adults))} />
@@ -422,7 +406,7 @@ function Hero({
     <View style={[styles.hero, { height: H }]}>
       <Animated.View style={[StyleSheet.absoluteFill, media]} pointerEvents="none">
         <Image source={dest.img} style={StyleSheet.absoluteFill} contentFit="cover" transition={700} />
-        <Scrim stops={[[0, Polar.night, 0.55], [0.22, Polar.night, 0], [0.42, Polar.night, 0], [1, Polar.night, 0.82]]} />
+        <Scrim stops={[[0, Polar.night, 0.55], [0.22, Polar.night, 0], [0.42 - FOOT_SCRIM_LIFT / H, Polar.night, 0], [1, Polar.night, 0.82]]} />
         <Animated.View style={[StyleSheet.absoluteFill, styles.veil, veil]} />
       </Animated.View>
 
@@ -431,13 +415,13 @@ function Hero({
         <View style={styles.row}>
           {/* The way into the app, as iOS onboarding puts it: plain text in the top bar, quieter than
               the two buttons beside it. Skip on the welcome, Close on the tour. */}
-          <Pressable onPress={onLeave} hitSlop={8} style={({ pressed }) => [styles.leave, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel={welcome ? 'Skip to the app' : 'Close'}>
+          <Pressable onPress={onLeave} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.leave, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel={welcome ? 'Skip to the app' : 'Close'}>
             <Text style={styles.leaveText}>{welcome ? 'Skip' : 'Close'}</Text>
           </Pressable>
-          <Pressable onPress={onMenu} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Open menu">
+          <Pressable onPress={onMenu} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Open menu">
             <Text style={styles.glassText}>Menu</Text>
           </Pressable>
-          <Pressable onPress={onPlan} style={({ pressed }) => [styles.signal, pressed && styles.signalPressed]} accessibilityRole="button">
+          <Pressable onPress={onPlan} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.signal, pressed && styles.signalPressed]} accessibilityRole="button">
             <Text style={styles.signalText}>Plan a trip</Text>
           </Pressable>
         </View>
@@ -568,9 +552,21 @@ function Plans({ width, today, onPlan }: { width: number; today: string; onPlan:
           })}
         </ScrollView>
       </Rise>
-      <View style={styles.dots} accessibilityRole="adjustable" accessibilityLabel={`Plan ${page + 1} of ${PLANS.length}`}>
+      {/* One adjustable element for VoiceOver (swipe up and down to page), the dots for touch. */}
+      <View
+        style={styles.dots}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel="Sample journeys"
+        accessibilityValue={{ text: `${page + 1} of ${PLANS.length}, ${PLANS[page]?.title ?? ''}` }}
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        onAccessibilityAction={(e) => {
+          const i = Math.min(PLANS.length - 1, Math.max(0, page + (e.nativeEvent.actionName === 'increment' ? 1 : -1)));
+          ref.current?.scrollTo({ x: i * step, animated: true });
+          setPage(i);
+        }}>
         {PLANS.map((p, i) => (
-          <Pressable key={p.id} onPress={() => ref.current?.scrollTo({ x: i * step, animated: true })} style={[styles.dot, i === page && styles.dotOn]} hitSlop={8} accessibilityLabel={`Go to ${p.title}`} />
+          <Pressable key={p.id} onPress={() => ref.current?.scrollTo({ x: i * step, animated: true })} style={[styles.dot, i === page && styles.dotOn]} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Go to ${p.title}`} />
         ))}
       </View>
     </View>
@@ -789,6 +785,12 @@ function PlanFooter({
 /* ───────────────────────── Styles ───────────────────────── */
 
 const NIGHT_FIELD = 'rgba(9,11,16,0.35)';
+/** The top bar's buttons are drawn 36pt tall; this brings each touch to the 44pt floor. Vertical
+ *  only: they sit 6pt apart, and a sideways slop would hand a tap on one to its neighbour. */
+const TOP_BAR_SLOP = { top: 4, bottom: 4 };
+/** How far above its old start the hero's foot scrim now begins, so the coordinates line under the
+ *  chips sits on shade rather than on bright sandstone. */
+const FOOT_SCRIM_LIFT = 40;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Polar.ice },
@@ -798,16 +800,14 @@ const styles = StyleSheet.create({
   selfStart: { alignSelf: 'flex-start' },
   dim: { opacity: 0.72 },
 
-  glass: { height: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil20, borderWidth: 1, borderColor: Polar.frost20 },
+  glass: { minHeight: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil20, borderWidth: 1, borderColor: Polar.frost20 },
   glassText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ice },
-  leave: { height: 36, paddingHorizontal: 8, justifyContent: 'center' },
+  leave: { minHeight: 36, minWidth: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   leaveText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.frost68 },
-  signal: { height: 36, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
+  signal: { minHeight: 36, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
   signalPressed: { backgroundColor: Polar.signalPressed },
-  signalLg: { height: 46, paddingHorizontal: 22 },
+  signalLg: { minHeight: 46, paddingHorizontal: 22 },
   signalText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ink },
-  quiet: { height: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil05 },
-  quietText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ink },
   ghost: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: 210, paddingVertical: 10, paddingHorizontal: 2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Polar.frost20 },
   ghostText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ice },
 
@@ -821,7 +821,7 @@ const styles = StyleSheet.create({
   heroLead: { color: Polar.ice, maxWidth: 280, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 12 },
   heroFoot: { gap: PolarSpace.s2 },
   chips: { paddingHorizontal: PolarSpace.pad, gap: 6 },
-  chip: { height: 32, paddingHorizontal: 13, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.22)', overflow: 'hidden' },
+  chip: { minHeight: 32, paddingHorizontal: 13, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.22)', overflow: 'hidden' },
   chipOn: { backgroundColor: Polar.ice, borderColor: Polar.ice },
   chipText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
   chipFill: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: Polar.signal, transformOrigin: 'left' },
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
   card: { gap: PolarSpace.s4, padding: PolarSpace.s4, borderRadius: PolarRadius.card, borderWidth: 1, borderColor: Polar.frost10, overflow: 'hidden' },
   field: { gap: 7 },
   fieldLabel: { fontFamily: PolarFonts.displayItalic, fontSize: 17, lineHeight: 21, letterSpacing: 0, textTransform: 'none', color: Polar.ice },
-  input: { height: 46, paddingHorizontal: 13, borderRadius: PolarRadius.sm, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: NIGHT_FIELD, fontFamily: PolarFonts.sans, fontSize: 16, color: Polar.ice },
+  input: { minHeight: 46, paddingHorizontal: 13, borderRadius: PolarRadius.sm, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: NIGHT_FIELD, fontFamily: PolarFonts.sans, fontSize: 16, color: Polar.ice },
   inputErr: { borderColor: Polar.alertNight },
   err: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.alertNight, marginTop: -2 },
   // The wizard's trough, on night ground: two rows of label and native chip, one hairline between.
@@ -879,7 +879,7 @@ const styles = StyleSheet.create({
   statusGround: { position: 'absolute', top: 0, left: 0, right: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Polar.rule },
   barWrap: { position: 'absolute', left: PolarSpace.pad, right: PolarSpace.pad },
   bar: { flexDirection: 'row', gap: 6, padding: 6, borderRadius: PolarRadius.md, borderWidth: 1, borderColor: Polar.frost20, overflow: 'hidden' },
-  barQuiet: { height: 40, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20 },
+  barQuiet: { minHeight: 40, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20 },
   barQuietText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ice },
   menuHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   menuList: { marginTop: PolarSpace.s10 },
@@ -887,12 +887,4 @@ const styles = StyleSheet.create({
   menuN: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.nightText2 },
   menuLabel: { fontFamily: PolarFonts.display, fontSize: 30, lineHeight: 34, textTransform: 'uppercase', color: Polar.ice },
   menuCoord: { color: Polar.nightText2, marginTop: 'auto' },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(31,42,68,0.5)' },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '86%', backgroundColor: Polar.ice, borderTopLeftRadius: 14, borderTopRightRadius: 14, paddingHorizontal: PolarSpace.pad, gap: PolarSpace.s3 },
-  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: Polar.beige, marginTop: 8 },
-  sheetHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sheetScroll: { flexGrow: 0 },
-  step: { gap: 5, paddingVertical: PolarSpace.s3, borderTopWidth: 1, borderColor: Polar.rule },
-  stepN: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.charcoal },
-  stepTitle: { fontFamily: PolarFonts.displayItalic, fontSize: 24, lineHeight: 27, color: Polar.ink },
 });

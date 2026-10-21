@@ -74,6 +74,8 @@ export default function WritingPreview() {
         days={days}
         facts={FACTS}
         raw={null}
+        // What the planner holds once Where was picked: the map opens on Jaipur, not the world.
+        seed={{ lat: 26.9124, lon: 75.7873 }}
         ready={shown >= PLACES.length && t > 4 + PLACES.length * 2 + 1}
         onCancel={() => setT(0)}
       />

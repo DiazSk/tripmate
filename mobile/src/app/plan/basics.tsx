@@ -13,7 +13,7 @@ import { PlacePhoto } from '@/components/place-photo';
 import { DateRow, PlanColors, SegmentRow, Section, StepperRow, TextRow } from '@/components/plan-ui';
 import { ChoiceRow } from '@/components/settings-list';
 import { Polar, PolarFonts } from '@/constants/polar';
-import { GROUPS, partyForGroup, usePlanDraft } from '@/lib/planDraft';
+import { GROUPS, groupForParty, partyForGroup, usePlanDraft } from '@/lib/planDraft';
 import { planTiles, type PlanTileId } from '@/lib/planTiles';
 import { crossFieldProblem, gapSentence, planGap } from '@/lib/formGap';
 import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
@@ -34,6 +34,12 @@ import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
 export default function Basics() {
   const router = useRouter();
   const { draft, patch } = usePlanDraft();
+  // A counter changed by hand carries the preset with it, so "Who" never contradicts the counts.
+  const setParty = (change: Partial<typeof draft.party>) =>
+    patch((prev) => {
+      const party = { ...prev.party, ...change };
+      return { party, group: groupForParty(party, prev.group) };
+    });
   const { destination, startDate, endDate, budget } = draft;
   const budgetBasis = draft.budgetBasis ?? 'whole_party';
   /** Held as a string, not a number: a numeric binding renders "$ 01800" while you type. */
@@ -336,9 +342,9 @@ export default function Basics() {
                 autoCapitalize="none"
               />
             ) : null}
-            <StepperRow label="Adults" value={draft.party.adults} min={1} max={12} onChange={(adults) => patch({ party: { ...draft.party, adults } })} />
-            <StepperRow label="Children" caption="2 to 11" value={draft.party.children} max={12} onChange={(children) => patch({ party: { ...draft.party, children } })} />
-            <StepperRow label="Infants" caption="Under 2" value={draft.party.infants} max={6} onChange={(infants) => patch({ party: { ...draft.party, infants } })} />
+            <StepperRow label="Adults" value={draft.party.adults} min={1} max={12} onChange={(adults) => setParty({ adults })} />
+            <StepperRow label="Children" caption="2 to 11" value={draft.party.children} max={12} onChange={(children) => setParty({ children })} />
+            <StepperRow label="Infants" caption="Under 2" value={draft.party.infants} max={6} onChange={(infants) => setParty({ infants })} />
           </Section>
 
           <Text style={styles.heading}>MAKE IT YOURS</Text>

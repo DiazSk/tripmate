@@ -51,3 +51,10 @@ test('near the departure it counts down to leaving, and past it on a booking it 
   expect(late.kind === 'live' && late.next.countdown).toBeNull();
   expect(late.kind === 'live' && late.next.late).toMatch(/^Booked for 12:30 PM, \d+ min past the departure$/);
 });
+
+test('past the departure on a stop that can slip, the box says Now rather than 0 min', () => {
+  const loose = [located('Fort', '9:00 AM', 26.9855, 75.8513), located('Lunch', '12:30 PM', 26.9239, 75.8267)];
+  const g = glanceFor(loose, at(12, 28));
+  expect(g.kind === 'live' && g.next.leave).toBe('Leave now');
+  expect(g.kind === 'live' && g.next.countdown).toEqual({ value: 'Now', unit: '' });
+});

@@ -3,7 +3,15 @@ import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Animated, {
   interpolate,
   runOnJS,
@@ -206,7 +214,7 @@ export default function SharedTripScreen() {
               if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) pick(day + (dx < 0 ? 1 : -1));
             }}>
             <DayHead day={d} index={day} />
-            <Timeline stops={d.stops} sharedBy={trip.sharedBy} onOpen={setOpen} />
+            <Timeline stops={d.stops} onOpen={setOpen} />
             {d.lodging?.name ? (
               <View style={styles.stay}>
                 <SymbolView name={{ ios: 'bed.double.fill', android: 'bed' }} size={15} tintColor={SharedColors.grey} />
@@ -263,7 +271,7 @@ export default function SharedTripScreen() {
         onHeight={setBarHeight}
       />
 
-      <StopSheet stop={open === null ? null : (d.stops[open] ?? null)} index={open ?? 0} day={d} sharedBy={trip.sharedBy} onClose={() => setOpen(null)} />
+      <StopSheet stop={open === null ? null : (d.stops[open] ?? null)} index={open ?? 0} day={d} onClose={() => setOpen(null)} />
     </View>
   );
 }
@@ -340,8 +348,9 @@ const styles = StyleSheet.create({
   endIcon: { width: 60, height: 60, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 6, backgroundColor: 'rgba(120,120,128,0.14)' },
   endTitle: { fontSize: 20, fontWeight: '600', color: '#000', textAlign: 'center' },
   endText: { fontSize: 15, lineHeight: 21, color: SharedColors.grey, textAlign: 'center' },
-  endAction: { marginTop: 10, minHeight: 44, paddingHorizontal: 20, justifyContent: 'center' },
-  endActionText: { fontSize: 16, fontWeight: '600', color: Polar.ember },
+  // The screen's one way on, so a filled pill rather than a link (the app's in-app action shape).
+  endAction: { marginTop: 14, minHeight: 50, paddingHorizontal: 28, borderRadius: 25, justifyContent: 'center', backgroundColor: Polar.signal },
+  endActionText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
 
   skeleton: { flex: 1 },
   skCover: { height: COVER_HEIGHT, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#E5E5EA' },

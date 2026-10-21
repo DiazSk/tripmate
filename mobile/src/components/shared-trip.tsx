@@ -2,7 +2,16 @@ import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop as GradientStop } from 'react-native-svg';
@@ -178,7 +187,7 @@ const MODE: Record<TimelineLeg['mode'], { label: string; icon: SymbolName }> = {
  * as the rail itself between two stops with how long it takes. A leg the plan leaves too little
  * time for says how much there is, in ember.
  */
-export function Timeline({ stops, sharedBy, onOpen }: { stops: Stop[]; sharedBy: string | null; onOpen: (index: number) => void }) {
+export function Timeline({ stops, onOpen }: { stops: Stop[]; onOpen: (index: number) => void }) {
   const rows = timelineRows(stops);
   // One width for the whole day, so the rail runs straight: "9:00 AM" and "11:00 AM" differ, and a
   // column sized per row would kink the line between them.
@@ -193,6 +202,8 @@ export function Timeline({ stops, sharedBy, onOpen }: { stops: Stop[]; sharedBy:
         const first = i === 0;
         const last = i === stops.length - 1;
         const how = leg ? `${leg.minutes} min ${MODE[leg.mode].label}` : '';
+        // A fixed time says a booking exists, not who made it: the payload names no booker, so
+        // neither does this (it used to credit the sender with every one).
         const booked = stop.timeFlexibility === 'FIXED';
         return (
           <Animated.View key={`${stop.name}-${i}`} entering={FadeInDown.duration(320).delay(Math.min(i, 5) * 40)}>
@@ -222,7 +233,7 @@ export function Timeline({ stops, sharedBy, onOpen }: { stops: Stop[]; sharedBy:
                 row.end ? `${row.start} until ${row.end}` : row.start,
                 categoryName[stop.category],
                 stop.cost ? formatMoney(stop.cost) : 'free',
-                booked ? `booked by ${sharedBy ?? 'the sender'}` : null,
+                booked ? 'booked' : null,
               ]
                 .filter(Boolean)
                 .join(', ')}
@@ -246,7 +257,7 @@ export function Timeline({ stops, sharedBy, onOpen }: { stops: Stop[]; sharedBy:
                 {booked ? (
                   <View style={styles.booked}>
                     <SymbolView name={{ ios: 'lock.fill', android: 'lock' }} size={10} tintColor={SharedColors.booked} />
-                    <Text style={styles.bookedText}>{sharedBy ? `${sharedBy} booked` : 'Booked by the sender'}</Text>
+                    <Text style={styles.bookedText}>Booked</Text>
                   </View>
                 ) : null}
               </View>
@@ -349,7 +360,7 @@ export function ThumbBar({
 /* ---------------------------------------------------------------- a stop, opened */
 
 /** The stop's particulars and a way there. Nothing on it edits: the plan is the sender's. */
-export function StopSheet({ stop, index, day, sharedBy, onClose }: { stop: Stop | null; index: number; day: DayPlan | null; sharedBy: string | null; onClose: () => void }) {
+export function StopSheet({ stop, index, day, onClose }: { stop: Stop | null; index: number; day: DayPlan | null; onClose: () => void }) {
   const rows = day ? timelineRows(day.stops) : [];
   const row = rows[index];
   return (
@@ -377,7 +388,7 @@ export function StopSheet({ stop, index, day, sharedBy, onClose }: { stop: Stop 
           <View style={styles.facts}>
             <Fact label="Cost" value={stop.cost ? formatMoney(stop.cost) : 'Free'} />
             {row?.leg ? <Fact label="From the stop before" value={`about ${row.leg.minutes} min ${MODE[row.leg.mode].label}`} /> : null}
-            {stop.timeFlexibility === 'FIXED' ? <Fact label="Booked" value={`${sharedBy ?? 'The sender'} booked this one`} /> : null}
+            {stop.timeFlexibility === 'FIXED' ? <Fact label="Booked" value="At a fixed time" /> : null}
             {stop.note ? <Fact label="Note" value={stop.note} last /> : null}
           </View>
           {stop.why ? <Text style={styles.why}>{stop.why}</Text> : null}

@@ -79,7 +79,9 @@ export function Widget({
 }) {
   const width = useWidgetWidth(size);
   const fixed = size === 'large' ? ROW * 2 + GAP : ROW;
-  const height = fit ? { minHeight: ROW } : { height: fixed };
+  // A floor, not a fixed height: at the larger text sizes the words grow the widget rather than
+  // spilling out of it over the photograph (the grid's rows stretch the pair beside it to match).
+  const height = { minHeight: fit ? ROW : fixed };
   return (
     <Pressable
       onPress={onPress}
@@ -93,7 +95,7 @@ export function Widget({
           <View style={[StyleSheet.absoluteFill, styles.scrim]} />
         </>
       ) : null}
-      <Text style={[styles.label, photo ? styles.labelOnPhoto : labelTone[tone]]}>{label.toUpperCase()}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={[styles.label, photo ? styles.labelOnPhoto : labelTone[tone]]}>{label.toUpperCase()}</Text>
       <View style={styles.body}>{children}</View>
     </Pressable>
   );
@@ -155,7 +157,7 @@ export function TripWidgets({
   return (
     <View style={styles.trip}>
       {cachedAt ? (
-        <Text style={styles.stale}>{`A saved copy from ${clockAt(cachedAt) ?? 'earlier'}. Times and order hold; the forecast may have moved.`}</Text>
+        <Text maxFontSizeMultiplier={1.6} style={styles.stale}>{`A saved copy from ${clockAt(cachedAt) ?? 'earlier'}. Times and order hold; the forecast may have moved.`}</Text>
       ) : null}
 
       {glance?.kind === 'live' ? (
@@ -165,10 +167,10 @@ export function TripWidgets({
       <WidgetGrid>
         {glance?.kind === 'live' && glance.at ? (
           <Widget size="medium" label={clock ? `Now · ${clock}` : 'Now'} onPress={onOpenTrip} accessibilityLabel={`Now at ${glance.at.name}. Open the trip`}>
-            <Text style={widgetText.big} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={1.3} style={widgetText.big} numberOfLines={2}>
               {glance.at.name}
             </Text>
-            <Text style={widgetText.dim} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={1.6} style={widgetText.dim} numberOfLines={1}>
               {[`Since ${glance.at.time}`, glance.at.durationLabel].filter(Boolean).join(' · ')}
             </Text>
           </Widget>
@@ -213,28 +215,28 @@ function LiveNext({
     <View style={styles.live} accessibilityRole="summary">
       <View style={styles.liveTop}>
         <View style={styles.liveDot} />
-        <Text style={styles.liveMeta} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={1.6} style={styles.liveMeta} numberOfLines={1}>
           {`${trip.destination.split(',')[0].trim()} · Day ${dayIndex + 1} of ${trip.itinerary.days.length}`}
         </Text>
-        {clock ? <Text style={styles.liveClock}>{clock}</Text> : null}
+        {clock ? <Text maxFontSizeMultiplier={1.6} style={styles.liveClock}>{clock}</Text> : null}
       </View>
       <View style={styles.liveMain}>
         <View style={styles.liveText}>
-          <Text style={[styles.liveEyebrow, late && styles.liveAlert]}>{next.stop.time ? `NEXT · ${next.stop.time}` : 'NEXT'}</Text>
-          <Text style={styles.liveTitle} numberOfLines={2}>
+          <Text maxFontSizeMultiplier={1.6} style={[styles.liveEyebrow, late && styles.liveAlert]}>{next.stop.time ? `NEXT · ${next.stop.time}` : 'NEXT'}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.liveTitle} numberOfLines={2}>
             {next.stop.name}
           </Text>
           {next.leave || next.leg ? (
-            <Text style={[styles.liveLeave, late && styles.liveAlert]} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={1.6} style={[styles.liveLeave, late && styles.liveAlert]} numberOfLines={2}>
               {[next.leave, next.leg].filter(Boolean).join(' · ')}
             </Text>
           ) : null}
-          {next.late ? <Text style={[styles.liveLeave, styles.liveAlert]}>{next.late}</Text> : null}
+          {next.late ? <Text maxFontSizeMultiplier={1.6} style={[styles.liveLeave, styles.liveAlert]}>{next.late}</Text> : null}
         </View>
         {next.countdown ? (
-          <View style={styles.count} accessibilityLabel={`${next.countdown.value} ${next.countdown.unit}`}>
-            <Text style={styles.countValue}>{next.countdown.value}</Text>
-            <Text style={styles.countUnit}>{next.countdown.unit}</Text>
+          <View style={styles.count} accessibilityLabel={`${next.countdown.value} ${next.countdown.unit}`.trim()}>
+            <Text maxFontSizeMultiplier={1.3} style={styles.countValue}>{next.countdown.value}</Text>
+            {next.countdown.unit ? <Text maxFontSizeMultiplier={1.6} style={styles.countUnit}>{next.countdown.unit}</Text> : null}
           </View>
         ) : null}
       </View>
@@ -246,7 +248,7 @@ function LiveNext({
           accessibilityRole="button"
           style={({ pressed }) => [styles.liveGhost, pressed && styles.pressed, !onAsk && styles.dim]}>
           <SymbolView name="bubble.left" size={15} tintColor={Polar.ice} />
-          <Text style={styles.liveGhostText}>{onAsk ? 'Plans changed?' : 'Needs a connection'}</Text>
+          <Text maxFontSizeMultiplier={1.6} style={styles.liveGhostText}>{onAsk ? 'Plans changed?' : 'Needs a connection'}</Text>
         </Pressable>
       </View>
     </View>
@@ -270,7 +272,7 @@ function Directions({ to }: { to: { lat: number; lng: number } }) {
       accessibilityRole="button"
       style={({ pressed }) => [styles.go, pressed && styles.goPressed]}>
       <SymbolView name="location.north.fill" size={15} tintColor={Polar.ink} />
-      <Text style={styles.goText}>{failed ? 'Can’t open Maps' : 'Directions'}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={styles.goText}>{failed ? 'Can’t open Maps' : 'Directions'}</Text>
     </Pressable>
   );
 }
@@ -281,8 +283,8 @@ function Agenda({ stops }: { stops: Stop[] }) {
     <View style={styles.agenda}>
       {stops.slice(0, 4).map((s, i) => (
         <View key={`${s.name}-${i}`} style={styles.agendaRow}>
-          <Text style={styles.agendaTime}>{s.time}</Text>
-          <Text style={styles.agendaName} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={1.6} style={styles.agendaTime}>{s.time}</Text>
+          <Text maxFontSizeMultiplier={1.6} style={styles.agendaName} numberOfLines={1}>
             {s.name}
           </Text>
         </View>
@@ -312,8 +314,8 @@ function Smalls({ day, stops, glanceStop, saved, destination, onOpenTrip }: { da
         k === 'weather' && w ? (
           <Widget key={k} size={size} label={w.historical ? 'Weather · usual' : 'Weather'} onPress={onOpenTrip} accessibilityLabel={`High ${Math.round(w.tempMaxC)} degrees, low ${Math.round(w.tempMinC)}`}>
             <WidgetIcon name="sun.max.fill" color="#E0A100" />
-            <Text style={widgetText.num}>{`${Math.round(w.tempMaxC)}°`}</Text>
-            <Text style={widgetText.dim} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={1.3} style={widgetText.num}>{`${Math.round(w.tempMaxC)}°`}</Text>
+            <Text maxFontSizeMultiplier={1.6} style={widgetText.dim} numberOfLines={1}>
               {`Low ${Math.round(w.tempMinC)}°${w.precipitationProbability !== null ? ` · ${w.precipitationProbability}% rain` : ''}`}
             </Text>
           </Widget>
@@ -327,10 +329,10 @@ function Smalls({ day, stops, glanceStop, saved, destination, onOpenTrip }: { da
             }}
             accessibilityLabel={`Saved place ${near.place.name}. Directions`}>
             <WidgetIcon name="mappin.and.ellipse" color={Polar.ember} />
-            <Text style={widgetText.title} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={1.6} style={widgetText.title} numberOfLines={2}>
               {near.place.name}
             </Text>
-            {describeDistance(near.metres) ? <Text style={widgetText.dim}>{`${describeDistance(near.metres)} away`}</Text> : null}
+            {describeDistance(near.metres) ? <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>{`${describeDistance(near.metres)} away`}</Text> : null}
           </Widget>
         ) : null,
       )}
@@ -356,7 +358,7 @@ function Attention({ trip, dayIndex, cachedAt, onPress }: { trip: Trip; dayIndex
       {lines.map((line) => (
         <View key={line} style={styles.warnRow}>
           <SymbolView name="exclamationmark.triangle.fill" size={14} tintColor={WidgetColors.warnInk} />
-          <Text style={styles.warnText} numberOfLines={3}>
+          <Text maxFontSizeMultiplier={1.6} style={styles.warnText} numberOfLines={3}>
             {line}
           </Text>
         </View>
@@ -398,17 +400,17 @@ export function TripPhotoWidget({
     <Widget size="large" photo={photo} label={label} onPress={onPress} accessibilityLabel={`${label}: ${trip.destination}${days !== null ? `, in ${days} days` : ''}${note ? `. ${note}` : ''}`}>
       {days !== null && days > 0 ? (
         <View style={styles.daysToGo}>
-          <Text style={styles.daysValue}>{days}</Text>
-          <Text style={styles.daysUnit}>{days === 1 ? 'day to go' : 'days to go'}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.daysValue}>{days}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.daysUnit}>{days === 1 ? 'day to go' : 'days to go'}</Text>
         </View>
       ) : null}
-      <Text style={styles.photoCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+      <Text maxFontSizeMultiplier={1.3} style={styles.photoCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
         {city.toUpperCase()}
       </Text>
-      <Text style={styles.photoMeta} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={1.6} style={styles.photoMeta} numberOfLines={1}>
         {meta}
       </Text>
-      {note ? <Text style={styles.photoNote}>{note}</Text> : null}
+      {note ? <Text maxFontSizeMultiplier={1.6} style={styles.photoNote}>{note}</Text> : null}
     </Widget>
   );
 }
@@ -445,7 +447,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600', letterSpacing: 0.7 },
   labelOnPhoto: { color: 'rgba(255,255,255,0.85)' },
   body: { flex: 1, justifyContent: 'flex-end', gap: 3 },
-  icon: { position: 'absolute', top: 6, left: 0 },
+  // In the flow, pushed to the top by the auto margin, rather than absolute: same place at the
+  // ordinary sizes, and at the large ones the words below push it rather than run under it.
+  icon: { marginTop: 6, marginBottom: 'auto', alignSelf: 'flex-start' },
 
   // In the card's top-right corner on the same margins as the label opposite it: right flush with
   // the padding (less the figures' side bearing), and the top pulled up by their own leading so the
@@ -473,19 +477,21 @@ const styles = StyleSheet.create({
   liveTitle: { fontFamily: PolarFonts.display, fontSize: 26, lineHeight: 28, color: Polar.ice },
   liveLeave: { marginTop: 4, fontSize: 14, lineHeight: 19, color: 'rgba(235,235,245,0.7)' },
   liveAlert: { color: Polar.alertNight },
-  count: { width: 66, paddingVertical: 6, borderRadius: 16, alignItems: 'center', backgroundColor: 'rgba(255,126,21,0.18)' },
+  count: { minWidth: 66, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 16, alignItems: 'center', backgroundColor: 'rgba(255,126,21,0.18)' },
   countValue: { fontFamily: PolarFonts.condensed, fontSize: 32, lineHeight: 36, color: Polar.signal },
   countUnit: { fontSize: 12, color: Polar.signal },
-  liveActions: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  go: { flex: 1, height: 46, borderRadius: 23, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Polar.signal },
+  // Wraps at the large text sizes: Plans changed? takes a line of its own instead of squeezing
+  // Directions down to a word broken in two.
+  liveActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  go: { flexGrow: 1, minHeight: 46, paddingHorizontal: 16, borderRadius: 23, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Polar.signal },
   goPressed: { backgroundColor: Polar.signalPressed },
   goText: { fontSize: 16, fontWeight: '600', color: Polar.ink },
-  liveGhost: { height: 46, paddingHorizontal: 16, borderRadius: 23, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.12)' },
+  liveGhost: { minHeight: 46, paddingHorizontal: 16, borderRadius: 23, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.12)' },
   liveGhostText: { fontSize: 15, fontWeight: '600', color: Polar.ice },
 
   agenda: { gap: 8 },
   agendaRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
-  agendaTime: { width: 70, fontFamily: PolarFonts.condensed, fontSize: 15, color: Polar.ember },
+  agendaTime: { minWidth: 70, fontFamily: PolarFonts.condensed, fontSize: 15, color: Polar.ember },
   agendaName: { flex: 1, fontSize: 15, fontWeight: '600', color: '#000' },
 
   warnRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },

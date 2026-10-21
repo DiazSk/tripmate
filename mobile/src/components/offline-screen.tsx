@@ -1,6 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  AppState,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Text as SvgText } from 'react-native-svg';
 
@@ -123,7 +131,9 @@ export function OfflineScreen({
         <Text style={styles.statusText}>{status}</Text>
       </View>
       <View style={styles.actions}>
-        {!back ? <SignalButton large title={conn === 'checking' ? 'Checking…' : 'Try again'} onPress={tryAgain} disabled={conn === 'checking'} /> : null}
+        {/* A pill, as in-app actions are everywhere else: the square Polar button is the landing's
+            editorial voice, and this screen is the app's, shown in place of a tab or a trip. */}
+        {!back ? <SignalButton large title={conn === 'checking' ? 'Checking…' : 'Try again'} onPress={tryAgain} disabled={conn === 'checking'} style={styles.pill} /> : null}
         {onBack ? <QuietLink light title="Go back" onPress={onBack} /> : null}
       </View>
 
@@ -205,6 +215,7 @@ const styles = StyleSheet.create({
   pip: { width: 8, height: 8, borderRadius: 4, backgroundColor: Polar.stone },
   pipOn: { backgroundColor: Polar.signal },
   statusText: { ...PolarType.bodyS, color: Polar.ice, flexShrink: 1 },
+  pill: { borderRadius: 999 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: PolarSpace.s4, marginTop: PolarSpace.s2 },
   kept: { marginTop: PolarSpace.s6 },
   keptHead: {

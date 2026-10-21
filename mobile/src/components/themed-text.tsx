@@ -1,4 +1,4 @@
-import { StyleSheet, Text, useWindowDimensions, type TextProps } from 'react-native';
+import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { Colors, Fonts, type ThemeColor } from '@/constants/theme';
 
@@ -55,28 +55,17 @@ export function ThemedText({
   const cap = maxFontSizeMultiplier ?? MAX_SCALE[type] ?? 1.6;
 
   /**
-   * **`lineHeight` does not scale with Dynamic Type, and `fontSize` does.**
-   *
-   * React Native applies the system font scale to `fontSize` (capped by
-   * `maxFontSizeMultiplier`) and leaves an explicit `lineHeight` in unscaled units. So at the
-   * accessibility sizes every step in this ramp became larger type inside the same line box, and
-   * the glyphs were clipped by their own leading — measured on the trip screen at AX5, where
-   * `OCT 22 - 28`, the day chips, LIST/MAP, ASK and every section opener were all cut off. It
-   * looked like a dozen separate layout bugs and it is one.
-   *
-   * Scaling the leading by the same factor keeps every step's own multiple intact, which is what
-   * the ramp is built on. Capped identically, so `display` still reflows at 1.3 rather than
-   * running away.
-   *
-   * The leading has to be read from `TYPE` rather than from `styles[type]`: `StyleSheet.create`
-   * is effectively identity today, but the registered type does not promise a readable object.
+   * **No leading rule of our own: React Native already scales `lineHeight`.** On iOS the explicit
+   * `lineHeight` is multiplied by the same effective font multiplier as the size, capped by
+   * `maxFontSizeMultiplier` (`RCTAttributedTextUtils.mm`, `RCTEffectiveFontSizeMultiplier…`), and
+   * Android reads it in sp. This component once multiplied it by `fontScale` again, which at AX3
+   * gave every line ~1.6² its leading. Clipping seen after switching text size on a running sim is
+   * stale layout: relaunch the app before judging Dynamic Type.
    */
-  const leading = TYPE[type].lineHeight * Math.min(useWindowDimensions().fontScale, cap);
-
   return (
     <Text
       maxFontSizeMultiplier={cap}
-      style={[base, { color: Colors[themeColor] }, styles[type], { lineHeight: leading }, style]}
+      style={[base, { color: Colors[themeColor] }, styles[type], style]}
       {...rest}
     />
   );

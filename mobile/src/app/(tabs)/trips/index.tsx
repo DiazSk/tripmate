@@ -4,6 +4,7 @@ import { Link, Stack, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   Platform,
@@ -15,6 +16,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from 'react-native';
 
 import { formatDateRange, formatMoney } from '@shared/format';
@@ -41,6 +43,8 @@ const PAD = 20;
 const GAP = 12;
 const GRID_PREVIEW = 4;
 const GREY = Polar.secondary;
+/** Trips from which the search field stays up at rest: below it, pull-down search is enough. */
+const SEARCH_AT_REST = 4;
 
 /**
  * Trips, as the canvas design "Phone trips · 2 Albums, like Photos": trips are photographs before
@@ -52,8 +56,10 @@ const GREY = Polar.secondary;
  * native navigation bar (`trips/_layout.tsx`); the title alone is set in Cormorant.
  *
  * **Every trip opens on a tap and offers its menu on a press and hold**, with the card as its own
- * preview (`Link.Preview` / `Link.Menu`, UIKit's context menu). Delete is in that menu and asks
- * first with the platform's destructive action sheet; there is no delete control on the cards.
+ * preview (`Link.Preview` / `Link.Menu`, UIKit's context menu). A hold is invisible until somebody
+ * knows it, so each card also carries a ••• that opens the same two actions as an action sheet, and
+ * the footnote says the hold out loud. Delete asks first either way, with the platform's
+ * destructive sheet (`confirmDelete`).
  */
 export default function Trips() {
   const router = useRouter();
@@ -72,6 +78,7 @@ export default function Trips() {
   const [refreshing, setRefreshing] = useState(false);
   // Dark text on the white page; the offline screen is night all over, so it keeps white.
   usePolarStatusBar(fetched !== 'offline');
+  const listed = fetched && fetched !== 'offline' ? fetched.saved.length + fetched.drafts.length : 0;
 
   if (fetched === 'offline') {
     return (
@@ -104,7 +111,9 @@ export default function Trips() {
           headerIconColor: GREY,
           tintColor: Polar.ember,
           barTintColor: 'rgba(118,118,128,0.12)',
-          hideWhenScrolling: true,
+          // Pull-down search hides the one way to find a trip in a long list, so with enough trips
+          // to need it the field is simply there.
+          hideWhenScrolling: listed < SEARCH_AT_REST,
           onChangeText: (e) => setQuery(e.nativeEvent.text),
           onCancelButtonPress: () => setQuery(''),
         },
@@ -159,7 +168,21 @@ export default function Trips() {
     await Share.share(Platform.OS === 'ios' ? { url: result.url } : { message: result.url }).catch(() => {});
   }
 
-  const menu = { onShare: share, onDelete: askDelete };
+  /** The •••: the long-press menu's actions as an action sheet, for anybody who never held a card. */
+  function more(trip: TripSummary) {
+    const draft = trip.status === 'draft';
+    const actions: [string, () => void][] = draft ? [['Discard Draft', () => askDelete(trip)]] : [['Share Link…', () => share(trip)], ['Delete Trip', () => askDelete(trip)]];
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { title: city(trip), options: [...actions.map(([t]) => t), 'Cancel'], destructiveButtonIndex: actions.length - 1, cancelButtonIndex: actions.length },
+        (i) => actions[i]?.[1](),
+      );
+    } else {
+      Alert.alert(city(trip), undefined, [...actions.map(([text, onPress]) => ({ text, onPress })), { text: 'Cancel', style: 'cancel' as const }]);
+    }
+  }
+
+  const menu = { onShare: share, onDelete: askDelete, onMore: more };
   const kept = upcoming.length + past.length;
 
   return (
@@ -227,14 +250,14 @@ export default function Trips() {
             </>
           ) : null}
 
-          <Text style={styles.foot}>Hold a trip for more. Photographs via Wikipedia.</Text>
+          <Text style={styles.foot}>Touch and hold a trip to share or delete it. Photographs via Wikipedia.</Text>
         </>
       )}
     </ScrollView>
   );
 }
 
-type Menu = { onShare: (t: TripSummary) => void; onDelete: (t: TripSummary) => void };
+type Menu = { onShare: (t: TripSummary) => void; onDelete: (t: TripSummary) => void; onMore: (t: TripSummary) => void };
 
 /**
  * A trip as a native link: tap to open, press and hold for the preview and the menu. `children` is
@@ -245,7 +268,7 @@ type Menu = { onShare: (t: TripSummary) => void; onDelete: (t: TripSummary) => v
  * the draft line stopped being a row), and an array throws, so the cards `StyleSheet.flatten`. The press is
  * shown by the system anyway: a touch-down on a menu target dims it, and the hold lifts it.
  */
-function TripLink({ trip, onShare, onDelete, preview, children }: Menu & { trip: TripSummary; preview: ReactNode; children: ReactNode }) {
+function TripLink({ trip, onShare, onDelete, preview, children }: Omit<Menu, 'onMore'> & { trip: TripSummary; preview: ReactNode; children: ReactNode }) {
   const draft = trip.status === 'draft';
   return (
     <Link href={`/trip/${trip.id}`} asChild>
@@ -256,6 +279,25 @@ function TripLink({ trip, onShare, onDelete, preview, children }: Menu & { trip:
         <Link.MenuAction title={draft ? 'Discard Draft' : 'Delete Trip'} icon="trash" destructive onPress={() => onDelete(trip)} />
       </Link.Menu>
     </Link>
+  );
+}
+
+/**
+ * A card's •••, laid over the card as its sibling rather than inside it: inside, it would sit in the
+ * link's trigger (a tap on it racing the card's own) and VoiceOver would fold it into the card's
+ * label. `light` is the draft line's, grey on the grouped grey; the photographs get a dark glass disc.
+ */
+function MoreButton({ trip, onMore, light = false, style }: { trip: TripSummary; onMore: (t: TripSummary) => void; light?: boolean; style: ViewStyle }) {
+  return (
+    <Pressable onPress={() => onMore(trip)} hitSlop={7} accessibilityRole="button" accessibilityLabel={`More for ${city(trip)}`} style={({ pressed }) => [style, pressed && styles.morePressed]}>
+      {light ? (
+        <SymbolView name="ellipsis.circle" size={22} tintColor={GREY} />
+      ) : (
+        <BlurView intensity={30} tint="dark" style={styles.moreGlass}>
+          <SymbolView name="ellipsis" size={15} tintColor={Polar.ice} weight="semibold" />
+        </BlurView>
+      )}
+    </Pressable>
   );
 }
 
@@ -296,53 +338,60 @@ function Carousel({ trips, ...menu }: Menu & { trips: TripSummary[] }) {
   );
 }
 
-function Tall({ trip, width, lead, ...menu }: Menu & { trip: TripSummary; width: number; lead: boolean }) {
+function Tall({ trip, width, lead, onMore, ...menu }: Menu & { trip: TripSummary; width: number; lead: boolean }) {
   const url = photoUrl(usePlacePhoto(trip.destination));
   const line = phaseLine(trip);
   return (
-    <TripLink trip={trip} {...menu} preview={<Preview trip={trip} url={url} />}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Open ${trip.destination}, ${line}`} style={StyleSheet.flatten([styles.tall, { width }])}>
-        <Photo url={url} word={city(trip)} recyclingKey={trip.id} />
-        <Scrim stops={[[0, Polar.night, 0.3], [0.3, Polar.night, 0], [0.5, Polar.night, 0], [1, Polar.night, 0.8]]} />
-        {lead ? (
-          <Text style={[styles.pill, styles.pillLead]}>{line}</Text>
-        ) : (
-          <BlurView intensity={30} tint="light" style={styles.pillGlass}>
-            <Text style={styles.pillGlassText}>{line}</Text>
-          </BlurView>
-        )}
-        <View style={styles.tallCopy}>
-          <Text style={styles.tallCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
-            {city(trip).toUpperCase()}
-          </Text>
-          <Text style={styles.tallMeta}>
-            {formatDateRange(trip.startDate, trip.endDate)} · {tripDays(trip.startDate, trip.endDate)} days
-          </Text>
-        </View>
-      </Pressable>
-    </TripLink>
+    <View style={{ width }}>
+      <TripLink trip={trip} {...menu} preview={<Preview trip={trip} url={url} />}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${trip.destination}, ${line}`} style={StyleSheet.flatten([styles.tall, { width }])}>
+          <Photo url={url} word={city(trip)} recyclingKey={trip.id} />
+          <Scrim stops={[[0, Polar.night, 0.3], [0.3, Polar.night, 0], [0.5, Polar.night, 0], [1, Polar.night, 0.8]]} />
+          {lead ? (
+            <Text style={[styles.pill, styles.pillLead]}>{line}</Text>
+          ) : (
+            <BlurView intensity={30} tint="light" style={styles.pillGlass}>
+              <Text style={styles.pillGlassText}>{line}</Text>
+            </BlurView>
+          )}
+          <View style={styles.tallCopy}>
+            <Text style={styles.tallCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {city(trip).toUpperCase()}
+            </Text>
+            <Text style={styles.tallMeta}>
+              {formatDateRange(trip.startDate, trip.endDate)} · {tripDays(trip.startDate, trip.endDate)} days
+            </Text>
+          </View>
+        </Pressable>
+      </TripLink>
+      <MoreButton trip={trip} onMore={onMore} style={styles.moreTall} />
+    </View>
   );
 }
 
 /** A draft: one line between what is coming and what is remembered, with the days it has left. */
-function DraftLine({ trip, ...menu }: Menu & { trip: TripSummary }) {
+function DraftLine({ trip, onMore, ...menu }: Menu & { trip: TripSummary }) {
   const url = photoUrl(usePlacePhoto(trip.destination));
   const clears = clearsIn(trip);
   return (
-    <TripLink trip={trip} {...menu} preview={<Preview trip={trip} url={url} />}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Open your ${trip.destination} draft`} style={styles.draft}>
-        <View style={styles.draftThumb}>
-          <Photo url={url} word={city(trip)} recyclingKey={trip.id} small />
-        </View>
-        <View style={styles.draftText}>
-          <Text style={styles.draftTitle} numberOfLines={1}>
-            Draft · {city(trip)}
-          </Text>
-          {clears ? <Text style={styles.draftClears}>{clears}</Text> : null}
-        </View>
-        <SymbolView name="chevron.right" size={13} tintColor="rgba(60,60,67,0.3)" weight="semibold" />
-      </Pressable>
-    </TripLink>
+    <View style={styles.draftWrap}>
+      <TripLink trip={trip} {...menu} preview={<Preview trip={trip} url={url} />}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Open your ${trip.destination} draft`} style={styles.draft}>
+          <View style={styles.draftThumb}>
+            <Photo url={url} word={city(trip)} recyclingKey={trip.id} small />
+          </View>
+          <View style={styles.draftText}>
+            <Text style={styles.draftTitle} numberOfLines={1}>
+              Draft · {city(trip)}
+            </Text>
+            {clears ? <Text style={styles.draftClears}>{clears}</Text> : null}
+          </View>
+          {/* Room for the ••• laid over this end of the row. */}
+          <View style={styles.draftMoreRoom} />
+        </Pressable>
+      </TripLink>
+      <MoreButton trip={trip} onMore={onMore} light style={styles.moreDraft} />
+    </View>
   );
 }
 
@@ -363,22 +412,26 @@ function Grid({ trips, ...menu }: Menu & { trips: TripSummary[] }) {
   );
 }
 
-function Square({ trip, side, ...menu }: Menu & { trip: TripSummary; side: number }) {
+function Square({ trip, side, onMore, ...menu }: Menu & { trip: TripSummary; side: number }) {
   const url = photoUrl(usePlacePhoto(trip.destination));
   const draft = trip.status === 'draft';
+  // A fragment: the grid's sized cell is what the ••• is placed in.
   return (
-    <TripLink trip={trip} {...menu} preview={<Preview trip={trip} url={url} />}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Open ${trip.destination}${draft ? ', draft' : ''}`} style={StyleSheet.flatten([styles.square, { width: side, height: side }])}>
-        <Photo url={url} word={city(trip)} recyclingKey={trip.id} />
-        <Scrim stops={[[0, Polar.night, 0], [0.5, Polar.night, 0], [1, Polar.night, 0.7]]} />
-        <View style={styles.squareCopy}>
-          <Text style={styles.squareCity} numberOfLines={1}>
-            {city(trip)}
-          </Text>
-          <Text style={styles.squareYear}>{draft ? 'Draft' : trip.startDate.slice(0, 4)}</Text>
-        </View>
-      </Pressable>
-    </TripLink>
+    <>
+      <TripLink trip={trip} {...menu} preview={<Preview trip={trip} url={url} />}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${trip.destination}${draft ? ', draft' : ''}`} style={StyleSheet.flatten([styles.square, { width: side, height: side }])}>
+          <Photo url={url} word={city(trip)} recyclingKey={trip.id} />
+          <Scrim stops={[[0, Polar.night, 0], [0.5, Polar.night, 0], [1, Polar.night, 0.7]]} />
+          <View style={styles.squareCopy}>
+            <Text style={styles.squareCity} numberOfLines={1}>
+              {city(trip)}
+            </Text>
+            <Text style={styles.squareYear}>{draft ? 'Draft' : trip.startDate.slice(0, 4)}</Text>
+          </View>
+        </Pressable>
+      </TripLink>
+      <MoreButton trip={trip} onMore={onMore} style={styles.moreSquare} />
+    </>
   );
 }
 
@@ -473,7 +526,9 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: 'rgba(60,60,67,0.22)' },
   dotOn: { backgroundColor: Polar.ink },
 
-  draft: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: PAD, marginBottom: 26, padding: 10, paddingRight: 14, borderRadius: 16, backgroundColor: '#F2F2F7' },
+  draftWrap: { marginHorizontal: PAD, marginBottom: 26, justifyContent: 'center' },
+  draft: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, paddingRight: 14, borderRadius: 16, backgroundColor: '#F2F2F7' },
+  draftMoreRoom: { width: 22 },
   draftThumb: { width: 48, height: 48, overflow: 'hidden', borderRadius: 10, backgroundColor: Polar.deep, alignItems: 'center', justifyContent: 'center' },
   draftText: { flex: 1, minWidth: 0, gap: 1 },
   draftTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
@@ -484,6 +539,13 @@ const styles = StyleSheet.create({
   squareCopy: { position: 'absolute', left: 12, right: 12, bottom: 10 },
   squareCity: { fontSize: 16, fontWeight: '600', color: Polar.ice },
   squareYear: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+
+  // 30pt discs and a 22pt glyph, each brought to a 44pt target by the button's hitSlop.
+  moreGlass: { width: 30, height: 30, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  moreTall: { position: 'absolute', top: 12, right: 12 },
+  moreSquare: { position: 'absolute', top: 8, right: 8 },
+  moreDraft: { position: 'absolute', right: 12, padding: 4 },
+  morePressed: { opacity: 0.6 },
 
   initial: { fontFamily: PolarFonts.display, fontSize: 140, lineHeight: 160, color: 'rgba(255,255,255,0.14)' },
   initialSmall: { fontSize: 30, lineHeight: 36 },

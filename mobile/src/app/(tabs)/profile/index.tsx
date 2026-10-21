@@ -153,10 +153,17 @@ export default function Profile() {
       <Group>
         {/* The welcome a first launch shows, kept reachable once it has been seen. */}
         <NavRow icon="sparkles" tint={Polar.signal} label="Take the tour" onPress={() => router.push('/landing')} />
-        <Separator />
-        <ChoiceRow icon="moon.fill" tint={Polar.ink} label="Appearance" value={APPEARANCE} options={APPEARANCES} onChange={(next) => next !== APPEARANCE && setAppearance(next)} />
+        {/* A development switch, not a setting: it reloads the JS and repaints only the screens that
+            read `Colors`. A user build neither shows it nor honours a value chosen before it went
+            (`constants/appearance.ts`). */}
+        {__DEV__ ? (
+          <>
+            <Separator />
+            <ChoiceRow icon="moon.fill" tint={Polar.ink} label="Appearance" value={APPEARANCE} options={APPEARANCES} onChange={(next) => next !== APPEARANCE && setAppearance(next)} />
+          </>
+        ) : null}
       </Group>
-      <Footer>A prototype setting. Switching restarts the app.</Footer>
+      {__DEV__ ? <Footer>Development only. Switching restarts the app.</Footer> : null}
 
       {account ? (
         <Group>

@@ -12,8 +12,15 @@ import { formatMoney } from '@/lib/spend';
 type Face = 'list' | 'map';
 
 /** 44, the HIG minimum, rather than 48: five targets and a two-up switch have to fit a 375pt
- *  phone with the 16pt gutters, and at 48 they come to 362pt against 343 of room. */
+ *  phone, and at 48 they did not. */
 const TOOL = 44;
+
+/**
+ * The labels here do not grow past this. The bar is one row of fixed-width targets with nowhere
+ * to wrap, so at the accessibility sizes the words would push + off the screen — the same reason
+ * the system tab bar keeps its labels fixed. Each target's VoiceOver label carries the full name.
+ */
+const LABEL_SCALE = 1.1;
 
 /**
  * Everything that acts on the trip, at the thumb.
@@ -84,7 +91,10 @@ export function TripToolbar({
                   tintColor={on ? Colors.accentForeground : Colors.foreground}
                   size={14}
                 />
-                <ThemedText type="detail" style={{ color: on ? Colors.accentForeground : Colors.foreground, fontWeight: '600' }}>
+                <ThemedText
+                  type="detail"
+                  maxFontSizeMultiplier={LABEL_SCALE}
+                  style={{ color: on ? Colors.accentForeground : Colors.foreground, fontWeight: '600' }}>
                   {option === 'list' ? 'List' : 'Map'}
                 </ThemedText>
               </Pressable>
@@ -96,8 +106,18 @@ export function TripToolbar({
         <Tool label={`Play this day`} disabled={!canPlay} onPress={onPlay}>
           <SymbolView name={{ ios: 'play.fill', android: 'play_arrow' }} tintColor={canPlay ? Colors.foreground : Colors.muted} size={16} />
         </Tool>
-        <Tool label="Ask for a change" disabled={offline} onPress={onAsk}>
-          <SymbolView name={{ ios: 'sparkles', android: 'auto_awesome' }} tintColor={offline ? Colors.muted : Colors.foreground} size={17} />
+        {/* The one target with a word in it: sparkles is not a learned symbol for "ask for a change",
+            and Play's triangle and the budget's ring are. Room for it came out of the switch's halves
+            and the bar's gaps, so the row is no wider than it was unlabelled (~354pt, under the 359
+            a 375pt phone gives it with 8pt gutters). */}
+        <Tool label="Ask for a change" disabled={offline} onPress={onAsk} wide>
+          <SymbolView name={{ ios: 'sparkles', android: 'auto_awesome' }} tintColor={offline ? Colors.muted : Colors.foreground} size={16} />
+          <ThemedText
+            type="detail"
+            maxFontSizeMultiplier={LABEL_SCALE}
+            style={{ color: offline ? Colors.muted : Colors.foreground, fontWeight: '600' }}>
+            Ask
+          </ThemedText>
         </Tool>
         {budget > 0 ? (
           <Tool label={`Budget: ${formatMoney(spent)} of ${formatMoney(budget)}`} onPress={onBudget}>
@@ -120,12 +140,15 @@ function Tool({
   label,
   disabled = false,
   primary = false,
+  wide = false,
   onPress,
   children,
 }: {
   label: string;
   disabled?: boolean;
   primary?: boolean;
+  /** A pill that fits its icon and word, rather than a 44pt circle. */
+  wide?: boolean;
   onPress: () => void;
   children: React.ReactNode;
 }) {
@@ -138,6 +161,7 @@ function Tool({
       accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.tool,
+        wide && styles.toolWide,
         primary && !disabled && styles.toolPrimary,
         pressed && styles.toolPressed,
       ]}>
@@ -168,7 +192,7 @@ function Ring({ fraction }: { fraction: number }) {
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
-      <ThemedText type="micro" style={styles.ringMark}>
+      <ThemedText type="micro" maxFontSizeMultiplier={LABEL_SCALE} style={styles.ringMark}>
         $
       </ThemedText>
     </View>
@@ -176,11 +200,11 @@ function Ring({ fraction }: { fraction: number }) {
 }
 
 const styles = StyleSheet.create({
-  dock: { position: 'absolute', left: Spacing.read, right: Spacing.read, alignItems: 'center' },
+  dock: { position: 'absolute', left: Spacing.tight, right: Spacing.tight, alignItems: 'center' },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.hair,
     padding: 6,
     borderRadius: Radius.pill,
     overflow: 'hidden',
@@ -198,7 +222,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: Spacing.rows,
+    paddingHorizontal: Spacing.tight,
     borderRadius: Radius.pill,
   },
   halfOn: { backgroundColor: Colors.foreground },
@@ -210,6 +234,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.control,
   },
+  toolWide: { width: 'auto', flexDirection: 'row', gap: 4, paddingHorizontal: 10 },
   toolPrimary: { backgroundColor: Colors.accent },
   toolPressed: { opacity: 0.7 },
   ring: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },

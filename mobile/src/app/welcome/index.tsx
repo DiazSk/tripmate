@@ -2,14 +2,24 @@ import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Fine, SignalCapsule } from '@/components/glass-auth';
+import { Fine, PlainButton, SignalCapsule, leaveSignIn } from '@/components/glass-auth';
 import { Meridian } from '@/components/meridian';
 import { WelcomeFrame } from '@/components/welcome-frame';
 import { Polar } from '@/constants/polar';
+import { useWelcome } from '@/lib/welcomeDraft';
 
 const PROMISES = ['Days paced the way you like them', 'Food that fits how you eat', "More of what you love, less of what you don't"];
 
 export default function WelcomeIntro() {
+  const { complete, busy, guard } = useWelcome();
+  // The page's way out, which it lacked: the questions' Skip marks the welcome done (`complete(true)`)
+  // and so does this, so it is not offered again; then back to whatever sign-up was opened from, or
+  // Home. It does not go on to the travel card as Skip does, since there is nothing on it yet.
+  const notNow = () =>
+    guard(async () => {
+      await complete(true);
+      leaveSignIn();
+    });
   return (
     <WelcomeFrame
       step="welcome"
@@ -17,6 +27,7 @@ export default function WelcomeIntro() {
       cta={
         <>
           <SignalCapsule title="Let's begin" onPress={() => router.push('/welcome/you')} />
+          <PlainButton title="Not now" onPress={notNow} disabled={busy} />
           <Fine>You can change any of this later on your Profile.</Fine>
         </>
       }>

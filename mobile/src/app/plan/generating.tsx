@@ -258,6 +258,7 @@ export default function Generating() {
         facts={facts}
         raw={raw}
         ready={ready}
+        seed={draft.destinationLat !== undefined && draft.destinationLng !== undefined ? { lat: draft.destinationLat, lon: draft.destinationLng } : null}
         onCancel={() => {
           live.current = false;
           abort.current?.abort();

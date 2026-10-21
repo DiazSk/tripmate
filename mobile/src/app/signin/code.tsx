@@ -29,7 +29,7 @@ const RESEND_S = 30;
  * asks for one thing.
  */
 export default function SignInCode() {
-  const { purpose: raw, email = '' } = useLocalSearchParams<{ purpose?: string; email?: string }>();
+  const { purpose: raw, email = '', step: at } = useLocalSearchParams<{ purpose?: string; email?: string; step?: string }>();
   const purpose: Purpose = raw && Object.hasOwn(TITLE, raw) ? (raw as Purpose) : 'sign-in-code';
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
@@ -83,10 +83,14 @@ export default function SignInCode() {
   }
 
   const next = Math.min(code.length, 5);
+  // How far, where the path is known: straight here from the address is the second of two; after a
+  // password or a new account, the third; a reset has its new password still to come.
+  const stepNo = at === '2' ? 2 : 3;
 
   return (
     <GlassStep
-      step={3}
+      step={stepNo}
+      count={purpose === 'reset' ? stepNo + 1 : stepNo}
       title={TITLE[purpose]}
       sub={
         <>
@@ -94,7 +98,8 @@ export default function SignInCode() {
         </>
       }>
       {/* The cells are drawing only; the one TextInput over them is what is typed into. */}
-      <Pressable onPress={() => input.current?.focus()} style={styles.code} accessible={false}>
+      {/* Not an element of its own (`accessible={false}`): VoiceOver lands on the code field inside. */}
+      <Pressable onPress={() => input.current?.focus()} style={styles.code} accessible={false} accessibilityRole="button">
         {Array.from({ length: 6 }, (_, i) => (
           <Glass key={i} style={styles.cell} ring={error ? Polar.alertNight : focused && i === next && !busy ? Polar.signal : null}>
             <Text style={styles.digit}>{code[i] ?? ''}</Text>

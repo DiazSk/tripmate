@@ -43,14 +43,6 @@ export const BEATS: LandingBeat[] = sceneBeats.map((b) => ({ ...b, img: BEAT_PHO
 
 export const FOOT_PHOTO: ImageSource = require('@/assets/images/scenes/wadi-rum-desert.webp');
 
-// The four steps the web's HowItWorks states, in the same words.
-export const STEPS = [
-  { n: '01', title: 'You set the constraints', prose: 'Where, when, how much, and who is going. The budget is a ceiling: the plan stays inside it rather than spending up to it.' },
-  { n: '02', title: 'Real data goes in first', prose: 'Forecast for your actual dates, public holidays, opening hours and travel times, fetched before a single word is written.' },
-  { n: '03', title: 'Written, then critiqued', prose: 'A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with.' },
-  { n: '04', title: 'Every place is checked', prose: 'Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed.' },
-] as const;
-
 export const FACTS = [
   ['Forecast', 'For your actual dates, up to 16 days out'],
   ['Holidays & hours', 'Public holidays and opening times, fetched first'],

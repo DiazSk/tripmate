@@ -64,7 +64,9 @@ export function glanceFor(stops: Stop[], now: number): Glance {
       break;
     case 'imminent':
       leave = state.minutes === 0 ? 'Leave now' : `Leave in ${describeGap(state.minutes)}`;
-      countdown = countdownOf(state.minutes);
+      // Past the departure the box says "Now", not "0 min" — the same fact as "Leave now" beside it,
+      // in the box's own one word.
+      countdown = state.minutes === 0 ? { value: 'Now', unit: '' } : countdownOf(state.minutes);
       break;
     case 'free':
       leave = `Free for about ${describeGap(state.minutes)}`;

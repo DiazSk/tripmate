@@ -29,7 +29,12 @@ function read(): Appearance {
   }
 }
 
-export const APPEARANCE: Appearance = read();
+/**
+ * **Development builds only.** The switch is not in a user build's Profile, so a user build reads
+ * nothing: somebody who chose Light while it was offered would otherwise be held in it with no way
+ * back. They open in Dark, the default every screen was drawn for.
+ */
+export const APPEARANCE: Appearance = __DEV__ ? read() : 'dark';
 
 /**
  * Write the preference and restart the JS bundle.

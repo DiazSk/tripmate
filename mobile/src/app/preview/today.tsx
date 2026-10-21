@@ -98,7 +98,7 @@ const stop = (
     ...extra,
   }) as Stop;
 
-type ScenarioId = 'late' | 'imminent' | 'upcoming' | 'free' | 'first' | 'done';
+type ScenarioId = 'late' | 'now' | 'imminent' | 'upcoming' | 'free' | 'first' | 'done';
 
 const SCENARIOS: { id: ScenarioId; label: string; stops: () => Stop[] }[] = [
   {
@@ -123,6 +123,16 @@ const SCENARIOS: { id: ScenarioId; label: string; stops: () => Stop[] }[] = [
     stops: () => [
       stop('Fushimi Inari Shrine', -70, { lat: 34.9671, lng: 135.7727 }),
       stop('Kiyomizu-dera Temple', 5, KYOTO.kiyomizu, { timeFlexibility: 'FIXED' }),
+      stop('Nishiki Market', 200, KYOTO.nishiki),
+    ],
+  },
+  {
+    id: 'now',
+    label: 'Leave now',
+    // Late's departure, on a stop that can slip: `imminent` at 0, so the box says "Now".
+    stops: () => [
+      stop('Fushimi Inari Shrine', -70, { lat: 34.9671, lng: 135.7727 }),
+      stop('Kiyomizu-dera Temple', 5, KYOTO.kiyomizu),
       stop('Nishiki Market', 200, KYOTO.nishiki),
     ],
   },

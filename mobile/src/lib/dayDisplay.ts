@@ -211,7 +211,9 @@ export function stopParticulars(stop: {
 }): string {
   const hedge = (field: string, value: string | undefined) =>
     value && stop.estimated?.includes(field) ? aboutDuration(value) : value;
-  return [hedge('time', stop.time), hedge('duration', stop.durationLabel), sentence(stop.category)]
+  // "Other" is the absence of a category, not one; printed it reads as filler ("45 minutes · Other").
+  const category = stop.category?.trim().toLowerCase() === 'other' ? undefined : sentence(stop.category);
+  return [hedge('time', stop.time), hedge('duration', stop.durationLabel), category]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join('  ·  ');

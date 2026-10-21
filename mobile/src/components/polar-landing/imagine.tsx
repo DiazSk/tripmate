@@ -490,7 +490,7 @@ export function OpenDaySheet({
   const word = (n: number) => (n === 1 ? 'adult' : 'adults');
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismiss} statusBarTranslucent>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
+      <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
       <Animated.View entering={SlideInDown.duration(450)} exiting={SlideOutDown.duration(300)} style={[styles.sheet, { paddingBottom: insets.bottom + PolarSpace.s3 }]}>
         <View style={styles.grabber} />
         <View style={styles.sheetBody}>
@@ -512,14 +512,22 @@ export function OpenDaySheet({
             ))}
             <View style={styles.dlRow}>
               <Text style={[PolarType.bodyS, { color: Polar.charcoal }]}>Travellers</Text>
-              <View style={styles.stepper} accessibilityRole="adjustable" accessibilityLabel={`Travellers: ${adults} ${word(adults)}`}>
-                <Pressable onPress={() => setAdults((a) => Math.max(1, a - 1))} disabled={adults <= 1} style={[styles.stepBtn, adults <= 1 && styles.disabled]} accessibilityLabel="One fewer adult">
+              {/* One adjustable element for VoiceOver (swipe up and down), the two buttons for touch. */}
+              <View
+                style={styles.stepper}
+                accessible
+                accessibilityRole="adjustable"
+                accessibilityLabel="Travellers"
+                accessibilityValue={{ text: `${adults} ${word(adults)}` }}
+                accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+                onAccessibilityAction={(e) => setAdults((a) => (e.nativeEvent.actionName === 'increment' ? Math.min(8, a + 1) : Math.max(1, a - 1)))}>
+                <Pressable onPress={() => setAdults((a) => Math.max(1, a - 1))} disabled={adults <= 1} hitSlop={6} accessibilityRole="button" style={[styles.stepBtn, adults <= 1 && styles.disabled]} accessibilityLabel="One fewer adult">
                   <Text style={styles.stepSign}>−</Text>
                 </Pressable>
                 <Text style={[PolarType.ui, styles.stepValue]}>
                   {adults} {word(adults)}
                 </Text>
-                <Pressable onPress={() => setAdults((a) => Math.min(8, a + 1))} disabled={adults >= 8} style={[styles.stepBtn, adults >= 8 && styles.disabled]} accessibilityLabel="One more adult">
+                <Pressable onPress={() => setAdults((a) => Math.min(8, a + 1))} disabled={adults >= 8} hitSlop={6} accessibilityRole="button" style={[styles.stepBtn, adults >= 8 && styles.disabled]} accessibilityLabel="One more adult">
                   <Text style={styles.stepSign}>+</Text>
                 </Pressable>
               </View>
@@ -578,7 +586,7 @@ const styles = StyleSheet.create({
   scaleChip: { paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: Polar.frost20, borderRadius: PolarRadius.hairline, backgroundColor: 'rgba(9,11,16,0.5)' },
   scaleText: { fontFamily: PolarFonts.condensed, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', color: Polar.nightText2 },
   coord: { fontFamily: PolarFonts.sans, fontSize: 11, letterSpacing: 0.6, color: Polar.ice, flex: 1 },
-  hudBtn: { height: 32, paddingHorizontal: 12, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.55)', marginLeft: 'auto' },
+  hudBtn: { minHeight: 32, paddingHorizontal: 12, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.55)', marginLeft: 'auto' },
   hudBtnText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
   cityPin: { width: CITY_PIN_W, height: 28, alignItems: 'center', justifyContent: 'center' },
   cityDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Polar.route, borderWidth: 2, borderColor: 'rgba(106,240,255,0.35)' },
@@ -596,7 +604,7 @@ const styles = StyleSheet.create({
   planCard: { marginHorizontal: PolarSpace.pad, marginTop: -PolarSpace.s5, borderRadius: PolarRadius.card, backgroundColor: Polar.ice, overflow: 'hidden' },
   planHead: { padding: PolarSpace.s3, gap: PolarSpace.s3, borderBottomWidth: 1, borderBottomColor: Polar.rule },
   seg: { flexDirection: 'row', padding: 2, gap: 2, borderRadius: 3, backgroundColor: Polar.paper },
-  segBtn: { flex: 1, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: PolarRadius.hairline },
+  segBtn: { flex: 1, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: PolarRadius.hairline },
   segOn: { backgroundColor: Polar.ink },
   segText: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.ink },
   statRow: { flexDirection: 'row', gap: PolarSpace.s2 },
@@ -614,15 +622,15 @@ const styles = StyleSheet.create({
   rowBody: { position: 'absolute', left: 0, right: 0, top: 0, gap: 6, paddingTop: 6 },
   rowCost: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ink, marginTop: 1 },
   planFoot: { flexDirection: 'row', alignItems: 'center', gap: PolarSpace.s2, padding: PolarSpace.s3 },
-  playBtn: { height: 36, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: PolarRadius.hairline, backgroundColor: Polar.ink },
+  playBtn: { minHeight: 36, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: PolarRadius.hairline, backgroundColor: Polar.ink },
   playText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
   note: { color: Polar.nightText2, paddingHorizontal: PolarSpace.pad, paddingTop: PolarSpace.s3 },
 
-  signal: { height: 36, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
+  signal: { minHeight: 36, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
   signalPressed: { backgroundColor: Polar.signalPressed },
-  signalLg: { height: 46, paddingHorizontal: 20 },
+  signalLg: { minHeight: 46, paddingHorizontal: 20 },
   signalText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ink },
-  ghostInk: { height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.ink },
+  ghostInk: { minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.ink },
 
   scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(9,11,16,0.55)' },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: Polar.ice, borderTopLeftRadius: PolarRadius.md, borderTopRightRadius: PolarRadius.md, paddingHorizontal: PolarSpace.pad, paddingTop: PolarSpace.s2 },

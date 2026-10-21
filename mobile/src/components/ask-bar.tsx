@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import type { ChatTurn } from '@/api/types';
 import { Meridian } from '@/components/meridian';
@@ -182,26 +183,7 @@ export function AskBar({
         </Glass>
       ) : null}
 
-      {ideas ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          style={styles.ideasScroll}
-          contentContainerStyle={styles.ideas}>
-          {ideasFor(currentDay).map((idea) => (
-            <Pressable
-              key={idea}
-              onPress={() => onSend(idea)}
-              accessibilityRole="button"
-              style={({ pressed }) => pressed && styles.pressed}>
-              <Glass solid style={styles.idea}>
-                <ThemedText type="detail">{idea}</ThemedText>
-              </Glass>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
+      {ideas ? <Ideas ideas={ideasFor(currentDay)} onSend={onSend} /> : null}
 
       {mode === 'decide' && pending ? (
         <Animated.View entering={FadeIn.duration(Motion.respond)}>
@@ -580,6 +562,56 @@ const ideasFor = (day: number) => [
 
 const LINE = 22;
 
+/**
+ * The suggestions, a row that runs off the right edge — with a fade there while more is to the
+ * right, so the clipped chip reads as "scroll" rather than as a chip cut in half. The fade goes
+ * when the row reaches its end, which is the cue that there is nothing more.
+ */
+function Ideas({ ideas, onSend }: { ideas: string[]; onSend: (text: string) => void }) {
+  const [width, setWidth] = useState(0);
+  const [content, setContent] = useState(0);
+  const [x, setX] = useState(0);
+  const more = content > width && x + width < content - 4;
+  return (
+    <View style={styles.ideasScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={32}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onContentSizeChange={(w) => setContent(w)}
+        onScroll={(e) => setX(e.nativeEvent.contentOffset.x)}
+        contentContainerStyle={styles.ideas}>
+        {ideas.map((idea) => (
+          <Pressable
+            key={idea}
+            onPress={() => onSend(idea)}
+            accessibilityRole="button"
+            style={({ pressed }) => pressed && styles.pressed}>
+            <Glass solid style={styles.idea}>
+              <ThemedText type="detail">{idea}</ThemedText>
+            </Glass>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {more ? (
+        <Svg pointerEvents="none" width={IDEAS_FADE} height="100%" style={styles.ideasFade}>
+          <Defs>
+            <LinearGradient id="ideas-fade" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor={Colors.canvas} stopOpacity={0} />
+              <Stop offset="1" stopColor={Colors.canvas} stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#ideas-fade)" />
+        </Svg>
+      ) : null}
+    </View>
+  );
+}
+
+const IDEAS_FADE = 40;
+
 const styles = StyleSheet.create({
   dock: {
     position: 'absolute',
@@ -608,6 +640,7 @@ const styles = StyleSheet.create({
   // Out to the screen's edges, so a chip scrolls off the side rather than stopping at the gutter.
   ideasScroll: { marginHorizontal: -Spacing.read },
   ideas: { gap: Spacing.tight, paddingHorizontal: Spacing.read },
+  ideasFade: { position: 'absolute', right: 0, top: 0, bottom: 0 },
   idea: {
     paddingHorizontal: 14,
     paddingVertical: 9,

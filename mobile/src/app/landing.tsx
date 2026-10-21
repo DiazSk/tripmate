@@ -2,7 +2,7 @@ import { CormorantGaramond_400Regular, CormorantGaramond_500Medium_Italic } from
 import { InterTight_400Regular, InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight';
 import { Oswald_400Regular } from '@expo-google-fonts/oswald';
 import { useFonts } from 'expo-font';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 
@@ -42,10 +42,6 @@ export default function LandingRoute() {
     Oswald_400Regular,
   });
 
-  return (
-    <>
-      <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
-      {loaded ? <PolarLandingScreen welcome={welcome === '1'} /> : <View style={{ flex: 1, backgroundColor: Polar.night }} />}
-    </>
-  );
+  // Its screen options (no header, a fade) are declared in the root layout, so they hold before this renders.
+  return loaded ? <PolarLandingScreen welcome={welcome === '1'} /> : <View style={{ flex: 1, backgroundColor: Polar.night }} />;
 }

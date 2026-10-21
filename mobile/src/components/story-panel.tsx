@@ -24,8 +24,9 @@ import Svg, { Defs, LinearGradient, Rect, Stop as GradientStop } from 'react-nat
 import type { DayPlan } from '@/api/types';
 import { Meridian } from '@/components/meridian';
 import { PlacePhoto } from '@/components/place-photo';
+import { StopDisc } from '@/components/stop-disc';
 import { Polar, PolarFonts, PolarRadius } from '@/constants/polar';
-import { Curve, Motion } from '@/constants/theme';
+import { Curve, Motion, dayCore } from '@/constants/theme';
 import { filmSubtitle, meriForFilm } from '@/lib/meri';
 import { filmBeatTitle } from '@/lib/storyFilm';
 import type { useStoryFilm } from '@/lib/useStoryFilm';
@@ -167,10 +168,10 @@ export function StoryPanel({
               <Icon name={{ ios: 'xmark', android: 'close' }} size={13} color={Polar.nightText2} label="Hide" />
             </Pressable>
             {loading ? (
-              <Text style={styles.wait}>{`Writing the story of day ${dayIndex + 1}…`}</Text>
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.wait}>{`Writing the story of day ${dayIndex + 1}…`}</Text>
             ) : ended ? (
               <View style={styles.end}>
-                <Text style={[styles.line, styles.lineDone]}>{`Day ${dayIndex + 1} is done.`}</Text>
+                <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.line, styles.lineDone]}>{`Day ${dayIndex + 1} is done.`}</Text>
                 <View style={styles.endActions}>
                   <Pill label="Again" onPress={() => film.seek(0)} />
                   {hasNextDay ? <Pill label={`Day ${dayIndex + 2} ▸`} onPress={onNextDay!} go /> : null}
@@ -181,44 +182,44 @@ export function StoryPanel({
                 <View style={styles.eyebrowRow}>
                   {/* Meri, saying it: its pulse is the voice's words. */}
                   <Meridian state={meriForFilm(state)} size={18} pulse={film.words} />
-                  <Text style={[styles.eyebrow, { fontFamily: condensed }]} numberOfLines={1}>
+                  <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.eyebrow, { fontFamily: condensed }]} numberOfLines={1}>
                     {`${title(beat)}${current?.time ? ` · ${current.time}` : ''}`.toUpperCase()}
                   </Text>
                 </View>
-                <Text
+                <Text maxFontSizeMultiplier={CHROME_CAP}
                   style={styles.line}
                   // Announced only when no voice is reading it, or TalkBack speaks every line twice.
                   accessibilityLiveRegion={state.voiceBroken || state.muted ? 'polite' : 'none'}
                   accessibilityLabel={sentence}>
                   {words.map((word, i) => (
-                    <Text key={`${state.beat}-${place.sentence}-${i}`} style={i < place.spoken ? styles.said : styles.unsaid}>
+                    <Text maxFontSizeMultiplier={CHROME_CAP} key={`${state.beat}-${place.sentence}-${i}`} style={i < place.spoken ? styles.said : styles.unsaid}>
                       {`${word} `}
                     </Text>
                   ))}
                 </Text>
                 {nextBeat ? (
-                  <Text style={styles.next} numberOfLines={1}>
+                  <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.next} numberOfLines={1}>
                     {`Next · ${title(nextBeat)}`}
-                    {stopOf(nextBeat)?.time ? <Text style={[styles.nextTime, { fontFamily: condensed }]}>{`  ${stopOf(nextBeat)!.time}`}</Text> : null}
+                    {stopOf(nextBeat)?.time ? <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.nextTime, { fontFamily: condensed }]}>{`  ${stopOf(nextBeat)!.time}`}</Text> : null}
                   </Text>
                 ) : null}
               </>
             )}
-            {note ? <Text style={styles.note}>{note}</Text> : null}
+            {note ? <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.note}>{note}</Text> : null}
           </View>
         ) : null}
 
         {chapters ? (
           <Animated.View entering={FadeIn.duration(Motion.respond)} exiting={FadeOut.duration(Motion.exit)} style={styles.chapters}>
             <View style={styles.chaptersHead}>
-              <Text style={styles.chaptersTitle}>{`Chapters · Day ${dayIndex + 1}`}</Text>
-              <Text style={styles.chaptersTheme} numberOfLines={1}>
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.chaptersTitle}>{`Chapters · Day ${dayIndex + 1}`}</Text>
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.chaptersTheme} numberOfLines={1}>
                 {day?.title || day?.theme || ''}
               </Text>
               <Control icon={{ ios: 'xmark', android: 'close' }} label="Close chapters" onPress={() => setChapters(false)} />
             </View>
             {loading ? (
-              <Text style={[styles.wait, styles.waitSmall]}>{`Writing the story of day ${dayIndex + 1}…`}</Text>
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.wait, styles.waitSmall]}>{`Writing the story of day ${dayIndex + 1}…`}</Text>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chapterRow}>
                 {beats.map((b, i) => {
@@ -233,11 +234,11 @@ export function StoryPanel({
                       accessibilityState={{ selected: on }}
                       style={({ pressed }) => [styles.chapter, on && styles.chapterOn, (i < state.beat || ended) && styles.chapterPast, pressed && { opacity: 0.7 }]}>
                       <Art beat={b} stopName={stop?.name} dayIndex={dayIndex} wide />
-                      <Text style={[styles.chapterN, on && styles.chapterNOn, { fontFamily: condensed }]}>{String(i + 1).padStart(2, '0')}</Text>
-                      <Text style={styles.chapterName} numberOfLines={1}>
+                      <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.chapterN, on && styles.chapterNOn, { fontFamily: condensed }]}>{String(i + 1).padStart(2, '0')}</Text>
+                      <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.chapterName} numberOfLines={1}>
                         {title(b)}
                       </Text>
-                      <Text style={styles.chapterMeta} numberOfLines={1}>
+                      <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.chapterMeta} numberOfLines={1}>
                         {[stop?.time, clockLabel(durations[i] ?? 0)].filter(Boolean).join(' · ')}
                       </Text>
                     </Pressable>
@@ -245,8 +246,8 @@ export function StoryPanel({
                 })}
                 {hasNextDay ? (
                   <Pressable onPress={onNextDay} accessibilityRole="button" accessibilityLabel={`Play day ${dayIndex + 2}`} style={({ pressed }) => [styles.chapter, styles.chapterDay, pressed && { opacity: 0.7 }]}>
-                    <Text style={[styles.chapterMeta, { fontFamily: condensed, letterSpacing: 1 }]}>THEN</Text>
-                    <Text style={styles.chapterName}>{`Day ${dayIndex + 2} ▸`}</Text>
+                    <Text maxFontSizeMultiplier={TEXT_CAP} style={[styles.chapterMeta, { fontFamily: condensed, letterSpacing: 1 }]}>THEN</Text>
+                    <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.chapterName}>{`Day ${dayIndex + 2} ▸`}</Text>
                   </Pressable>
                 ) : null}
               </ScrollView>
@@ -259,10 +260,12 @@ export function StoryPanel({
           <View style={styles.now}>
             <Art beat={ended ? beats[beats.length - 1] : beat} stopName={current?.name} dayIndex={dayIndex} />
             <View style={styles.nowText}>
-              <Text style={styles.nowTitle} numberOfLines={1}>
+              {/* Two lines, not one: four controls share this row, and at one line a stop's name
+                  was cut at about 17 characters ("Praça do Comér…"). */}
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.nowTitle} numberOfLines={2}>
                 {loading ? `Writing day ${dayIndex + 1}…` : ended ? `Day ${dayIndex + 1} is done` : title(beat)}
               </Text>
-              <Text style={styles.nowSub} numberOfLines={1}>
+              <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.nowSub} numberOfLines={1}>
                 {`${destination.split(',')[0]} · Day ${dayIndex + 1}${day?.title ? ` · ${day.title}` : ''}`}
               </Text>
             </View>
@@ -279,13 +282,16 @@ export function StoryPanel({
               accessibilityRole="button"
               accessibilityLabel="Leave the film and show the plan"
               style={({ pressed }) => [styles.plan, pressed && { opacity: 0.8 }]}>
-              <Text style={styles.planText}>Plan</Text>
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.planText}>Plan</Text>
             </Pressable>
           </View>
 
+          {/* Two equal sides about the play disc, so it stays centred however wide "Day 2 ▸" is. */}
           <View style={styles.transport}>
-            <Control icon={{ ios: 'arrow.counterclockwise', android: 'replay' }} label="Play the day again" onPress={() => film.seek(0)} disabled={loading} />
-            <Control icon={{ ios: 'backward.end.fill', android: 'skip_previous' }} label="Previous place" onPress={film.prev} disabled={loading || state.beat === 0} />
+            <View style={[styles.side, styles.sideStart]}>
+              <Control icon={{ ios: 'arrow.counterclockwise', android: 'replay' }} label="Play the day again" onPress={() => film.seek(0)} disabled={loading} />
+              <Control icon={{ ios: 'backward.end.fill', android: 'skip_previous' }} label="Previous place" onPress={film.prev} disabled={loading || state.beat === 0} />
+            </View>
             {/* The one solid object on the bar: an ice disc, ink glyph. */}
             <Pressable
               onPress={film.toggle}
@@ -296,18 +302,19 @@ export function StoryPanel({
               style={({ pressed }) => [styles.play, loading ? { opacity: 0.4 } : pressed && { transform: [{ scale: 0.96 }] }]}>
               <Icon name={playing ? { ios: 'pause.fill', android: 'pause' } : { ios: 'play.fill', android: 'play_arrow' }} size={18} color={Polar.ink} label={playing ? 'Pause' : 'Play'} />
             </Pressable>
-            <Control icon={{ ios: 'forward.end.fill', android: 'skip_next' }} label="Next place" onPress={film.next} disabled={loading} />
-            {hasNextDay ? (
-              <Pressable onPress={onNextDay} accessibilityRole="button" accessibilityLabel={`Play day ${dayIndex + 2}`} style={({ pressed }) => [styles.control, pressed && { opacity: 0.6 }]}>
-                <Text style={[styles.nextDay, { fontFamily: condensed }]}>{`D${dayIndex + 2}`}</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.control} />
-            )}
+            <View style={styles.side}>
+              <Control icon={{ ios: 'forward.end.fill', android: 'skip_next' }} label="Next place" onPress={film.next} disabled={loading} />
+              {hasNextDay ? (
+                <Pressable onPress={onNextDay} accessibilityRole="button" accessibilityLabel={`Play day ${dayIndex + 2}`} style={({ pressed }) => [styles.control, pressed && { opacity: 0.6 }]}>
+                  {/* The words the chapters strip uses for the same press, not a "D2" code. */}
+                  <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.nextDay} numberOfLines={1}>{`Day ${dayIndex + 2} ▸`}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.scrub}>
-            <Text style={[styles.time, { fontFamily: condensed }]}>{clockLabel(elapsed)}</Text>
+            <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.time, { fontFamily: condensed }]}>{clockLabel(elapsed)}</Text>
             <Pressable
               style={styles.track}
               onLayout={(event) => setTrackW(event.nativeEvent.layout.width)}
@@ -324,7 +331,7 @@ export function StoryPanel({
                 return <View key={i} style={[styles.tick, { left: `${at * 100}%` }]} />;
               })}
             </Pressable>
-            <Text style={[styles.time, { fontFamily: condensed }]}>{loading ? '…' : clockLabel(total)}</Text>
+            <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.time, { fontFamily: condensed }]}>{loading ? '…' : clockLabel(total)}</Text>
           </View>
         </View>
       </Animated.View>
@@ -337,9 +344,12 @@ export function StoryPanel({
 function Art({ beat, stopName, dayIndex, wide = false }: { beat?: StoryBeat; stopName?: string; dayIndex: number; wide?: boolean }) {
   const box = wide ? styles.artWide : styles.art;
   if (beat?.kind === 'stop' && stopName) {
+    // The stop's disc is the ground, and the photograph paints over it when there is one — so a
+    // stop with no photograph (or one still loading) shows its number, never an empty square.
     return (
-      <View style={box}>
-        <PlacePhoto name={stopName} aspectRatio={wide ? 16 / 9 : 1} radius={PolarRadius.sm} />
+      <View style={[box, styles.artGround]}>
+        {typeof beat.stopIndex === 'number' ? <StopDisc ordinal={beat.stopIndex + 1} color={dayCore(dayIndex)} /> : null}
+        <PlacePhoto name={stopName} aspectRatio={wide ? 16 / 9 : 1} radius={PolarRadius.sm} style={styles.artPhoto} />
       </View>
     );
   }
@@ -348,7 +358,7 @@ function Art({ beat, stopName, dayIndex, wide = false }: { beat?: StoryBeat; sto
       {beat?.kind === 'travel' ? (
         <Icon name={{ ios: 'figure.walk', android: 'directions_walk' }} size={wide ? 20 : 16} color={Polar.nightText2} label="" />
       ) : (
-        <Text style={styles.artMark}>{beat?.kind === 'closing' ? '★' : String(dayIndex + 1)}</Text>
+        <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.artMark}>{beat?.kind === 'closing' ? '★' : String(dayIndex + 1)}</Text>
       )}
     </View>
   );
@@ -357,7 +367,7 @@ function Art({ beat, stopName, dayIndex, wide = false }: { beat?: StoryBeat; sto
 function Pill({ label, onPress, go = false }: { label: string; onPress: () => void; go?: boolean }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [styles.pill, go && styles.pillGo, pressed && { opacity: 0.8 }]}>
-      <Text style={[styles.pillText, go && { color: Polar.ink }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={CHROME_CAP} style={[styles.pillText, go && { color: Polar.ink }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -392,8 +402,18 @@ function Control({
 
 function Icon({ name, size, color, label }: { name: React.ComponentProps<typeof SymbolView>['name']; size: number; color: string; label: string }) {
   // Object form, never a bare SF string: the Android path renders nothing given one.
-  return <SymbolView name={name} tintColor={color} size={size} fallback={<Text style={{ color }}>{label}</Text>} />;
+  return <SymbolView name={name} tintColor={color} size={size} fallback={<Text maxFontSizeMultiplier={CHROME_CAP} style={{ color }}>{label}</Text>} />;
 }
+
+/**
+ * How far the film's type follows Dynamic Type. The player is fixed chrome over a moving picture —
+ * one row of targets, a subtitle with a fixed room so the camera holds still — so, like the system's
+ * own media controls, it grows only so far: the subtitle and the bar's names to 1.3x, the small
+ * captions under them to 1.6x (ThemedText's cap). Uncapped at AX3 the subtitle ran off the top of the
+ * screen and the bar's clock wrapped to two lines.
+ */
+const CHROME_CAP = 1.3;
+const TEXT_CAP = 1.6;
 
 const NIGHT_BAR = 'rgba(9,11,16,0.96)';
 const HAIRLINE = 'rgba(255,255,255,0.08)';
@@ -438,24 +458,29 @@ const styles = StyleSheet.create({
   chapterMeta: { fontFamily: PolarFonts.sans, fontSize: 11, color: Polar.nightText2 },
 
   bar: { backgroundColor: NIGHT_BAR, borderTopWidth: 1, borderTopColor: HAIRLINE, paddingTop: 10, paddingHorizontal: 12, gap: 4 },
-  now: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  // Room for a two-line title whether or not this beat's needs it, so the bar keeps one height
+  // through the film and the map's inset holds still.
+  now: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 50 },
   nowText: { flex: 1, minWidth: 0, marginLeft: 8, gap: 1 },
   nowTitle: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: '#FFFFFF' },
   nowSub: { fontFamily: PolarFonts.sans, fontSize: 11, color: Polar.nightText2 },
   art: { width: 44, height: 44, borderRadius: PolarRadius.sm, overflow: 'hidden' },
   artWide: { width: '100%', aspectRatio: 16 / 9, borderRadius: PolarRadius.sm, overflow: 'hidden', marginBottom: 3 },
   artGround: { backgroundColor: Polar.deep, alignItems: 'center', justifyContent: 'center' },
+  artPhoto: { position: 'absolute', top: 0, left: 0, backgroundColor: 'transparent' },
   // Inter, not Cormorant: Cormorant's old-style 1 reads as a capital I at this size.
   artMark: { fontFamily: PolarFonts.sansSemi, fontSize: 17, color: 'rgba(255,255,255,0.55)' },
   plan: { minHeight: 36, paddingHorizontal: 14, marginLeft: 4, borderRadius: PolarRadius.hairline, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   planText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ink },
-  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14 },
+  transport: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  side: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  sideStart: { justifyContent: 'flex-end' },
   play: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   control: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   onDot: { position: 'absolute', bottom: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: Polar.signal },
-  nextDay: { fontSize: 13, letterSpacing: 0.8, color: Polar.nightText2 },
+  nextDay: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.nightText2 },
   scrub: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  time: { width: 36, textAlign: 'center', fontSize: 12, color: Polar.nightText2 },
+  time: { minWidth: 36, textAlign: 'center', fontSize: 12, color: Polar.nightText2 },
   track: { flex: 1, height: 28, justifyContent: 'center' },
   trackLine: { position: 'absolute', left: 0, right: 0, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
   trackFill: { position: 'absolute', left: 0, height: 3, borderRadius: 2, backgroundColor: '#FFFFFF' },

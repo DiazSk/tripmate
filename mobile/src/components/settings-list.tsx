@@ -15,6 +15,10 @@ import { Polar } from '@/constants/polar';
  * style in the row's value, so a tap opens the system's pull-down with a check against the answer
  * where the value is. Its `Host` is pinned to the light scheme: the app runs in dark appearance,
  * and this page is light. Android has no SwiftUI, so there the value opens a plain list instead.
+ *
+ * **The value is grey, with the menu's up-down chevron, as in iOS Settings.** It was ember, which
+ * made a value look like the actions and links that colour means everywhere else (DESIGN.md's One
+ * Meaning Rule). The menu style draws its own chevron in the picker's tint.
  */
 
 export const SettingsColors = {
@@ -102,7 +106,7 @@ export function ChoiceRow<T extends string>({
       </Text>
       {Platform.OS === 'ios' ? (
         <Host matchContents colorScheme="light">
-          <Picker selection={value} onSelectionChange={(v) => onChange(v as T)} label={label} modifiers={[pickerStyle('menu'), tint(Polar.ember)]}>
+          <Picker selection={value} onSelectionChange={(v) => onChange(v as T)} label={label} modifiers={[pickerStyle('menu'), tint(SettingsColors.grey)]}>
             {options.map((o) => (
               <SwiftText key={o.value} modifiers={[tag(o.value)]}>
                 {o.label}
@@ -123,11 +127,15 @@ function ListPicker<T extends string>({ label, value, options, onChange }: { lab
   const current = options.find((o) => o.value === value)?.label ?? value;
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${label}, ${current}`} hitSlop={8}>
+      <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${label}, ${current}`} hitSlop={8} style={styles.choiceRow}>
         <Text style={styles.choice}>{current}</Text>
+        <SymbolView name={{ ios: 'chevron.up.chevron.down', android: 'unfold_more' }} size={13} tintColor={SettingsColors.grey} weight="semibold" />
       </Pressable>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.scrim} onPress={() => setOpen(false)}>
+        {/* The backdrop is the sheet's sibling, not its parent: a pressable parent is one element to
+            a screen reader, and it swallowed the options inside it. */}
+        <View style={styles.scrim}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close" />
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>{label}</Text>
             {options.map((o) => (
@@ -141,11 +149,11 @@ function ListPicker<T extends string>({ label, value, options, onChange }: { lab
                 }}
                 style={({ pressed }) => [styles.sheetRow, pressed && styles.pressed]}>
                 <Text style={styles.sheetText}>{o.label}</Text>
-                {o.value === value ? <Text style={styles.choice}>✓</Text> : null}
+                {o.value === value ? <Text style={styles.check}>✓</Text> : null}
               </Pressable>
             ))}
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </>
   );
@@ -198,7 +206,9 @@ const styles = StyleSheet.create({
   label: { flex: 1, fontSize: 17, color: '#000' },
   value: { maxWidth: '55%', fontSize: 17, color: SettingsColors.grey },
   valueWide: { maxWidth: '68%' },
-  choice: { fontSize: 17, color: Polar.ember },
+  choiceRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  choice: { fontSize: 17, color: SettingsColors.grey },
+  check: { fontSize: 17, color: Polar.ember },
   checkMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },
   tick: { width: 22, alignItems: 'center' },
   destructive: { fontSize: 17, color: SettingsColors.destructive },

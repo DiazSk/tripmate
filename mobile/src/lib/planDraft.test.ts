@@ -9,6 +9,7 @@ import {
   toTravelerProfile,
   toUserAnswers,
   cycleInterest,
+  groupForParty,
   partyForGroup,
   toggleTag,
 } from './planDraft';
@@ -242,4 +243,19 @@ describe('prefillPatch', () => {
       budget: 2400,
     });
   });
+});
+
+test('a counter changed by hand moves the preset with it', () => {
+  const party = (adults: number, children = 0, infants = 0) => ({ adults, children, infants });
+  expect(groupForParty(party(3), 'solo')).toBe('other');
+  expect(groupForParty(party(1), 'couple')).toBe('solo');
+  expect(groupForParty(party(2), 'solo')).toBe('couple');
+  // Two friends are not a couple.
+  expect(groupForParty(party(2), 'other')).toBe('other');
+  expect(groupForParty(party(2, 0, 1), 'couple')).toBe('family_with_kids');
+  expect(groupForParty(party(2), 'family_with_kids')).toBe('couple');
+  // Every preset's own counters round-trip to it.
+  for (const group of ['solo', 'couple', 'family_with_kids'] as const) {
+    expect(groupForParty(partyForGroup(group)!, group)).toBe(group);
+  }
 });

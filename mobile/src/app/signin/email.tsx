@@ -34,7 +34,7 @@ export default function SignInEmail() {
     else if (where === 'create') router.push({ pathname: '/signin/create', params: { email: address } });
     else if (where === 'password') router.push({ pathname: '/signin/password', params: { email: address } });
     else if (where === 'code') {
-      if (await step(() => signIn.emailCode.sendCode())) router.push({ pathname: '/signin/code', params: { purpose: 'sign-in-code', email: address } });
+      if (await step(() => signIn.emailCode.sendCode())) router.push({ pathname: '/signin/code', params: { purpose: 'sign-in-code', email: address, step: '2' } });
     } else if (where === 'social-only') setError('This email signs in with Apple or Google. Go back and use that button.');
     setBusy(false);
   }

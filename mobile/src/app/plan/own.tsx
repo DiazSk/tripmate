@@ -155,7 +155,9 @@ export default function OwnPlan() {
   const header = (
     <Stack.Screen
       options={{
-        title: 'Your plan',
+        // No bar title: the page's own large heading names it, and two stacked titles read as one
+        // said twice. The bar keeps only its controls.
+        title: '',
         headerRight: plan
           ? () => (
               <Pressable onPress={startOver} accessibilityRole="button" hitSlop={10}>

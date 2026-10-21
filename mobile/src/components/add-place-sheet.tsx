@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory } from '@/api/types';
 import { SheetDone } from '@/components/sheet-done';
-import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
+import { FieldTrough, PillButton, PrimaryButton } from '@/components/form';
 import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import {
   addPlaceToDay,
   describePlace,
@@ -204,16 +205,24 @@ function SheetBody({
         })}
       </ScrollView>
 
-      <FieldTrough>
-        <TextField
-          label="Find"
+      {/* A search field as iOS draws one — magnifier, placeholder from the left, clear button —
+          rather than the form's label-and-value row, which read as a setting to fill in. */}
+      <View style={styles.search}>
+        <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} tintColor={Colors.muted} size={16} />
+        <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="A name, or leave blank"
+          placeholder="Search by name"
+          placeholderTextColor={Colors.muted}
+          selectionColor={Colors.accent}
+          maxFontSizeMultiplier={1.6}
           autoCorrect={false}
           returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search by name"
+          style={styles.searchInput}
         />
-      </FieldTrough>
+      </View>
 
       {/* Which day these results would join. The card that follows can move it, but a list of
           places with no stated destination is the thing that made this screen read as ordinary
@@ -225,7 +234,7 @@ function SheetBody({
       {!origin ? (
         <Notice>This day has nowhere to search around yet.</Notice>
       ) : searching ? (
-        <Loading />
+        <Loading label={searchingLine(category, query, at?.name ?? `Day ${dayIndex + 1}`)} />
       ) : !answer?.available ? (
         <Notice>Search is busy. Try again in a moment.</Notice>
       ) : places.length === 0 ? (
@@ -273,6 +282,12 @@ function SheetBody({
       )}
     </ScrollView>
   );
+}
+
+/** "Finding cafes near Day 1…", "Finding “Pastéis” near Belém Tower…". */
+function searchingLine(category: PlaceCategory | null, query: string, near: string): string {
+  const what = query.trim() ? `\u201c${query.trim()}\u201d` : category ? (LABELS[category] ?? category).toLowerCase() : 'places';
+  return `Finding ${what} near ${near}\u2026`;
 }
 
 /**
@@ -534,6 +549,16 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
   },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: Radius.surface,
+    backgroundColor: Colors.control,
+  },
+  searchInput: { flex: 1, paddingVertical: Spacing.tight, fontFamily: Fonts.sans, fontSize: 16, color: Colors.foreground },
   results: {
     backgroundColor: Colors.panel,
     borderRadius: Radius.surface,

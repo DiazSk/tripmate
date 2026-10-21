@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Svg, { Defs, Path, Pattern, Rect } from 'react-native-svg';
 
 import type { DayPlan } from '@/api/types';
 import { SheetDone } from '@/components/sheet-done';
@@ -172,7 +173,9 @@ function TripTab({
       </View>
       <View style={styles.certainty} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {order.map((key, i) => (
-          <View key={key} style={[styles.span, { width: `${(split[key] / scale) * 100}%` }, CERTAINTY[key], i > 0 && styles.spanRuled]} />
+          <View key={key} style={[styles.span, { width: `${(split[key] / scale) * 100}%` }, CERTAINTY[key], i > 0 && styles.spanRuled]}>
+            {key === 'estimate' ? <Hatch id="hatch-bar" /> : null}
+          </View>
         ))}
       </View>
       {budget > 0 ? (
@@ -184,7 +187,7 @@ function TripTab({
       <View style={styles.group}>
         {order.map((key, i) => (
           <View key={key} style={[styles.row, i > 0 && styles.rowRuled]}>
-            <View style={[styles.swatch, CERTAINTY[key]]} />
+            <View style={[styles.swatch, CERTAINTY[key]]}>{key === 'estimate' ? <Hatch id={`hatch-${key}`} /> : null}</View>
             <ThemedText type="body" style={styles.grow}>
               {SURENESS_LABEL[key]}
             </ThemedText>
@@ -323,12 +326,32 @@ function Heading({ children }: { children: string }) {
   );
 }
 
-/** Paid is solid, Booked a step down, Estimate fainter still: certainty as weight, not as hue. */
+/**
+ * Paid is solid, Booked a step down, Estimate hatched: certainty as weight, not as hue. Estimate
+ * was a fainter solid, and a 25% white on night is the one segment that fails non-text contrast
+ * (WCAG 1.4.11) while differing from the others by lightness alone. Full-ink stripes keep the
+ * contrast and give it a texture of its own, in the bar and in its legend swatch alike.
+ */
 const CERTAINTY: Record<Sureness, { backgroundColor: string }> = {
   paid: { backgroundColor: Colors.money },
   booked: { backgroundColor: `${Colors.money}9E` },
-  estimate: { backgroundColor: `${Colors.money}40` },
+  estimate: { backgroundColor: `${Colors.money}26` },
 };
+
+function Hatch({ id }: { id: string }) {
+  return (
+    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+      <Defs>
+        {/* A 45° stripe drawn into the tile, corners included so tiles join; patternTransform
+            rendered as a dot grid on iOS. */}
+        <Pattern id={id} width={5} height={5} patternUnits="userSpaceOnUse">
+          <Path d="M0,5 L5,0 M-1,1 L1,-1 M4,6 L6,4" stroke={Colors.money} strokeWidth={1.4} />
+        </Pattern>
+      </Defs>
+      <Rect width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
+  );
+}
 const CHIP: Record<Sureness, { backgroundColor: string }> = {
   paid: { backgroundColor: Colors.foreground },
   booked: { backgroundColor: `${Colors.foreground}B8` },
@@ -373,7 +396,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.control,
     overflow: 'hidden',
   },
-  span: { height: '100%' },
+  span: { height: '100%', overflow: 'hidden' },
   // Inside the span's own width, so the separators cost the band nothing.
   spanRuled: { borderLeftWidth: 1, borderLeftColor: Colors.canvas },
   heading: { marginTop: Spacing.regular, marginBottom: Spacing.hair },
@@ -396,7 +419,7 @@ const styles = StyleSheet.create({
   rowRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
   pressed: { backgroundColor: Colors.pressed },
   grow: { flex: 1 },
-  swatch: { width: 12, height: 12, borderRadius: 3 },
+  swatch: { width: 12, height: 12, borderRadius: 3, overflow: 'hidden' },
   // Fixed columns, so every row's chip and figure line up under the row above.
   percent: { minWidth: 40, textAlign: 'right' },
   amount: { minWidth: 56, textAlign: 'right' },

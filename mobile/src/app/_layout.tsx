@@ -35,9 +35,11 @@ SplashScreen.preventAutoHideAsync();
  */
 export const unstable_settings = { anchor: '(tabs)' };
 
+type ScreenOptions = React.ComponentProps<typeof Stack.Screen>['options'];
+
 const TRIP_SHEETS = ['budget', 'add', 'chat'] as const;
 
-const TRIP_SHEET_OPTIONS: React.ComponentProps<typeof Stack.Screen>['options'] = {
+const TRIP_SHEET_OPTIONS: ScreenOptions = {
   presentation: 'formSheet',
   sheetAllowedDetents: [0.55, 1],
   sheetGrabberVisible: true,
@@ -45,6 +47,15 @@ const TRIP_SHEET_OPTIONS: React.ComponentProps<typeof Stack.Screen>['options'] =
   headerShown: false,
   contentStyle: { backgroundColor: Colors.canvas },
 };
+
+/** The dev previews (`__DEV__` only, each returns null in a release bundle), with what each draws. */
+const PREVIEWS: [string, ScreenOptions][] = [
+  ['offline', { headerShown: false }],
+  ['share', { headerShown: false }],
+  ['writing', { headerShown: false }],
+  ['ask', { title: '' }],
+  ['today', { title: 'Today: preview' }],
+];
 
 // A Stack root, not the tab navigator directly: NativeTabs only ever mounts screens matching
 // one of its own <NativeTabs.Trigger> names (expo-router/build/native-tabs/NativeBottomTabsNavigator.js
@@ -86,10 +97,24 @@ export default function RootLayout() {
             headerTintColor: Colors.foreground,
             headerTitleStyle: { color: Colors.foreground },
             headerShadowVisible: false,
+            // A chevron, never the previous screen's title: a screen without one (a preview, a
+            // route mid-load) otherwise lends its raw route name to the back button.
+            headerBackButtonDisplayMode: 'minimal',
           }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          {/* The plan flow has its own Stack, which draws the per-step headers. */}
-          <Stack.Screen name="plan" options={{ headerShown: false }} />
+          {/* **Every route is declared here, with options that stand on their own.** A route
+              that only sets its options from inside its own render has none until that render runs,
+              and pushed in a modal's context (the landing deep-linked while sign-in was up) it drew
+              the default header: the raw route name, "landing", over the photograph. */}
+          <Stack.Screen name="landing" options={{ headerShown: false, animation: 'fade' }} />
+          {/* The trip names its own title once the trip is loaded; until then, an empty bar. */}
+          <Stack.Screen name="trip/[id]" options={{ title: '' }} />
+          {PREVIEWS.map(([name, options]) => (
+            <Stack.Screen key={name} name={`preview/${name}`} options={options} />
+          ))}
+          {/* The plan flow has its own Stack, which draws the per-step headers. It rises as a
+              full-screen modal, like sign-in and the welcome, because it closes with an ×. */}
+          <Stack.Screen name="plan" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
           {/* Share to TripMate: a form sheet at about half height over wherever it landed, so getting
               back to what you were doing is one swipe; it rises when there are many places. */}
           <Stack.Screen

@@ -48,8 +48,17 @@ export function Invitation({ title, body, note }: { title: string; body?: string
 }
 
 /** Jade, because loading is the one moment the screen is genuinely doing something. */
-export function Loading() {
-  return <ActivityIndicator color={Colors.accentText} style={styles.loading} />;
+export function Loading({ label }: { label?: string } = {}) {
+  if (!label) return <ActivityIndicator color={Colors.accentText} style={styles.loading} />;
+  // A wait that names what it is waiting for: a bare spinner says only that something is slow.
+  return (
+    <View style={styles.loadingRow} accessible accessibilityRole="progressbar" accessibilityLabel={label}>
+      <ActivityIndicator color={Colors.accentText} />
+      <ThemedText type="detail" themeColor="muted" style={styles.loadingLabel}>
+        {label}
+      </ThemedText>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -73,4 +82,11 @@ const styles = StyleSheet.create({
   loading: {
     marginTop: Spacing.regular,
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight,
+    marginTop: Spacing.rows,
+  },
+  loadingLabel: { flexShrink: 1 },
 });

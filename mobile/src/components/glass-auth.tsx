@@ -139,8 +139,9 @@ export function RoundButton({ icon, label, onPress }: { icon: SymbolName; label:
   );
 }
 
-/** Sign-in is three steps at most (the address, then the password or the account, then a code); the
- *  welcome is five questions. */
+/** Sign-in is two to four steps (the address; then a code, or the password or the account and then a
+ *  code; a reset adds its new password), and each screen passes the count where its path is known.
+ *  The welcome is five questions. */
 function Dots({ step, count }: { step: number; count: number }) {
   return (
     <Glass style={styles.dots}>
