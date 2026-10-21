@@ -38,11 +38,11 @@ import { clerkMessage } from '@/lib/clerkError';
 
 const LIQUID = isLiquidGlassAvailable();
 
-/** Out, without a cost: back if there is a back, Trips if there is not (a cold start can open
- *  here with nothing behind it, since `+native-intent` launches straight onto sign-in). */
+/** Out, without a cost: back if there is a back, Home if there is not (a link can open sign-in
+ *  with nothing behind it). */
 export function leaveSignIn() {
   if (router.canGoBack()) router.back();
-  else router.replace('/(tabs)/trips');
+  else router.replace('/(tabs)');
 }
 
 /**

@@ -9,6 +9,9 @@ const OWNER_HEADER = "X-TripMate-Owner";
 /** Written when Clerk reports a session, cleared when it reports none. Read only by the launch gate. */
 const SIGNED_IN_KEY = "tripmate.signedIn";
 
+/** Written the first time the landing is shown, so a bare launch shows it once. Read only by the launch gate. */
+const WELCOME_SEEN_KEY = "tripmate.welcomeSeen";
+
 /**
  * Sent on every request. The app's own scheme, so a request is identifiable as coming from the
  * native app whether or not the platform's cookie store attaches cookies the client never set (see
@@ -21,6 +24,7 @@ const ORIGIN = "tripmate://";
 // in-memory variable is fine since losing it on reload costs nothing real.
 let webOwner: string | null = null;
 let webSignedIn = false;
+let webWelcomeSeen = false;
 /** Resolved once per process, so concurrent first requests cannot mint two different owners. */
 let ownerPromise: Promise<string> | null = null;
 
@@ -92,6 +96,21 @@ export async function writeSignedInFlag(on: boolean): Promise<void> {
   }
   if (on) await SecureStore.setItemAsync(SIGNED_IN_KEY, "1");
   else await SecureStore.deleteItemAsync(SIGNED_IN_KEY);
+}
+
+export async function readWelcomeSeen(): Promise<boolean> {
+  if (Platform.OS === "web") return webWelcomeSeen;
+  return (await SecureStore.getItemAsync(WELCOME_SEEN_KEY)) === "1";
+}
+
+/** `false` clears it, which nothing in the app does; it is there so the welcome can be re-tested. */
+export async function writeWelcomeSeen(seen: boolean): Promise<void> {
+  if (Platform.OS === "web") {
+    webWelcomeSeen = seen;
+    return;
+  }
+  if (seen) await SecureStore.setItemAsync(WELCOME_SEEN_KEY, "1");
+  else await SecureStore.deleteItemAsync(WELCOME_SEEN_KEY);
 }
 
 export function subscribeToSession(listener: () => void): () => void {

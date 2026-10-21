@@ -45,7 +45,12 @@ import { Scrim } from './scrim';
 
 /**
  * The Polar Interior landing, for the phone — the "TripMate — Polar Landing (Mobile)" design on the
- * MagicPath canvas, and what a signed-out launch opens on (`launchTarget` in `lib/authGate.ts`).
+ * MagicPath canvas: the welcome a signed-out phone opens on once (`launchTarget` in
+ * `lib/authGate.ts`), and the tour Profile opens later.
+ *
+ * **On the welcome there is nothing under it yet but Home**, so it offers Skip into the app, and
+ * the plan and sign-in it leads to *replace* it: closing either lands on Home, not back here. As the
+ * tour, it is pushed over Profile, so it offers Close and the hand-offs push as before.
  *
  * **It hands off rather than mocks.** Every "plan" here opens the real wizard at `/plan/basics`,
  * prefilled through route params where it knows what to say (`draftFromPrefill`): a sample plan's
@@ -76,8 +81,8 @@ function sampleLabel(iso: string) {
 }
 
 /** Into the wizard, with whatever this landing can honestly fill in. Absent is not zero. */
-function openWizard(prefill: PlanPrefill) {
-  router.push({
+function openWizard(prefill: PlanPrefill, welcome: boolean) {
+  (welcome ? router.replace : router.push)({
     pathname: '/plan/basics',
     params: {
       destination: prefill.destination,
@@ -124,7 +129,13 @@ function Rise({ at, distance = 40, style, children }: { at: Section; distance?: 
   );
 }
 
-export function PolarLandingScreen() {
+/** Out of the landing into the app: Home on the welcome, wherever it was opened from otherwise. */
+function leave(welcome: boolean) {
+  if (welcome || !router.canGoBack()) router.dismissTo('/(tabs)');
+  else router.back();
+}
+
+export function PolarLandingScreen({ welcome = false }: { welcome?: boolean }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scroll = useAnimatedRef<Animated.ScrollView>();
@@ -178,11 +189,14 @@ export function PolarLandingScreen() {
     },
     [insets.top, scroll],
   );
-  const startPlan = useCallback((prefill: PlanPrefill) => {
-    setSheet(false);
-    openWizard(prefill);
-  }, []);
-  const signIn = useCallback(() => router.push('/signin'), []);
+  const startPlan = useCallback(
+    (prefill: PlanPrefill) => {
+      setSheet(false);
+      openWizard(prefill, welcome);
+    },
+    [welcome],
+  );
+  const signIn = useCallback(() => (welcome ? router.replace('/signin') : router.push('/signin')), [welcome]);
   const openStop = (id: string) => {
     setLens('slow');
     setHot(id);
@@ -224,7 +238,7 @@ export function PolarLandingScreen() {
       <TickContext.Provider value={tick}>
         <View style={styles.screen}>
           <Animated.ScrollView ref={scroll} style={styles.flex} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="never" automaticallyAdjustKeyboardInsets>
-            <Hero height={height} width={width} onMenu={() => setMenu(true)} onPlan={() => go('plan')} onWatch={() => go('day')} />
+            <Hero height={height} width={width} welcome={welcome} onLeave={() => leave(welcome)} onMenu={() => setMenu(true)} onPlan={() => go('plan')} onWatch={() => go('day')} />
             <View onLayout={(e) => record('day', e)}>
               <DayStory top={day} width={width} onOpenStop={openStop} onWays={() => go('ways')} />
             </View>
@@ -344,7 +358,23 @@ export function PolarLandingScreen() {
 
 /* ───────────────────────── Hero ───────────────────────── */
 
-function Hero({ height, width, onMenu, onPlan, onWatch }: { height: number; width: number; onMenu: () => void; onPlan: () => void; onWatch: () => void }) {
+function Hero({
+  height,
+  width,
+  welcome,
+  onLeave,
+  onMenu,
+  onPlan,
+  onWatch,
+}: {
+  height: number;
+  width: number;
+  welcome: boolean;
+  onLeave: () => void;
+  onMenu: () => void;
+  onPlan: () => void;
+  onWatch: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const [destId, setDestId] = useState('petra');
   // Bumped by every tap, so picking the place already showing still restarts its clock.
@@ -399,6 +429,11 @@ function Hero({ height, width, onMenu, onPlan, onWatch }: { height: number; widt
       <View style={[styles.nav, { paddingTop: insets.top + PolarSpace.s2 }]}>
         <Wordmark light />
         <View style={styles.row}>
+          {/* The way into the app, as iOS onboarding puts it: plain text in the top bar, quieter than
+              the two buttons beside it. Skip on the welcome, Close on the tour. */}
+          <Pressable onPress={onLeave} hitSlop={8} style={({ pressed }) => [styles.leave, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel={welcome ? 'Skip to the app' : 'Close'}>
+            <Text style={styles.leaveText}>{welcome ? 'Skip' : 'Close'}</Text>
+          </Pressable>
           <Pressable onPress={onMenu} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Open menu">
             <Text style={styles.glassText}>Menu</Text>
           </Pressable>
@@ -765,6 +800,8 @@ const styles = StyleSheet.create({
 
   glass: { height: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil20, borderWidth: 1, borderColor: Polar.frost20 },
   glassText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ice },
+  leave: { height: 36, paddingHorizontal: 8, justifyContent: 'center' },
+  leaveText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.frost68 },
   signal: { height: 36, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
   signalPressed: { backgroundColor: Polar.signalPressed },
   signalLg: { height: 46, paddingHorizontal: 22 },

@@ -24,13 +24,14 @@ SplashScreen.preventAutoHideAsync();
  * The root layout had none: `getRoutesCore` derives one from the first child group matching the
  * layout's own route name, and the root's route is `''`, so nothing matched and every cold-start
  * deep link landed as a single-entry stack with `canGoBack() === false`. That was survivable while
- * the app always opened on Home. It is not now that `+native-intent` can open on `signin`: the
- * escape out of that screen is a `back()`, and it needs somewhere to go.
+ * the app always opened on Home. It is not now that `+native-intent` can open somewhere else: a
+ * first signed-out launch opens on the welcome (`/landing?welcome=1`), and the escapes out of it and
+ * out of sign-in need somewhere to go.
  *
- * So the gated launch resolves to `[(tabs), signin]`. Home is mounted and visible behind the sheet,
- * "Keep planning without an account" has a target, and the sheet's own swipe-down dismiss *becomes*
- * that same escape for free. Cold-start `/trip/[id]` and `/share` get the same treatment, which is
- * why `share.tsx` can now `back()` out of itself instead of replacing the route under it.
+ * So the welcome launch resolves to `[(tabs), landing]`: Skip has a Home to dismiss to, and the
+ * planner or sign-in that replaces the landing closes onto Home. Cold-start `/trip/[id]` and
+ * `/share` get the same treatment, which is why `share.tsx` can `back()` out of itself instead of
+ * replacing the route under it.
  */
 export const unstable_settings = { anchor: '(tabs)' };
 

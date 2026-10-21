@@ -151,6 +151,9 @@ export default function Profile() {
 
       <Header>App</Header>
       <Group>
+        {/* The welcome a first launch shows, kept reachable once it has been seen. */}
+        <NavRow icon="sparkles" tint={Polar.signal} label="Take the tour" onPress={() => router.push('/landing')} />
+        <Separator />
         <ChoiceRow icon="moon.fill" tint={Polar.ink} label="Appearance" value={APPEARANCE} options={APPEARANCES} onChange={(next) => next !== APPEARANCE && setAppearance(next)} />
       </Group>
       <Footer>A prototype setting. Switching restarts the app.</Footer>

@@ -1,4 +1,4 @@
-import { readSignedInFlag } from '@/api/session';
+import { readSignedInFlag, readWelcomeSeen } from '@/api/session';
 import { launchTarget } from '@/lib/authGate';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
@@ -35,5 +35,16 @@ export async function redirectSystemPath({ path, initial }: { path: string; init
     // Left as `true`.
   }
 
-  return launchTarget({ path, initial, signedIn }) ?? path;
+  // Fail open the same way: a welcome flag that cannot be read counts as seen, so a broken keychain
+  // opens on Home rather than showing the welcome on every launch. Only read when it can matter.
+  let seenWelcome = true;
+  if (!signedIn) {
+    try {
+      seenWelcome = await readWelcomeSeen();
+    } catch {
+      // Left as `true`.
+    }
+  }
+
+  return launchTarget({ path, initial, signedIn, seenWelcome }) ?? path;
 }
