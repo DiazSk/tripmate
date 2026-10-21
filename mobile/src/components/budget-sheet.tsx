@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Path, Pattern, Rect } from 'react-native-svg';
@@ -275,7 +276,7 @@ function DayTab({
                 {stop.name}
               </ThemedText>
               <Pressable
-                onPress={() => onSureness(dayIndex, i, NEXT[sureness])}
+                onPress={() => { void Haptics.selectionAsync(); onSureness(dayIndex, i, NEXT[sureness]); }}
                 disabled={offline}
                 accessibilityRole="button"
                 accessibilityLabel={`${stop.name}: ${SURENESS_LABEL[sureness]}. Tap to change.`}

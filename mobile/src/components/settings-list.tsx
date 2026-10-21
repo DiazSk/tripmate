@@ -1,5 +1,6 @@
 import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
 import { pickerStyle, tag, tint } from '@expo/ui/swift-ui/modifiers';
+import * as Haptics from 'expo-haptics';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -106,7 +107,7 @@ export function ChoiceRow<T extends string>({
       </Text>
       {Platform.OS === 'ios' ? (
         <Host matchContents colorScheme="light">
-          <Picker selection={value} onSelectionChange={(v) => onChange(v as T)} label={label} modifiers={[pickerStyle('menu'), tint(SettingsColors.grey)]}>
+          <Picker selection={value} onSelectionChange={(v) => { void Haptics.selectionAsync(); onChange(v as T); }} label={label} modifiers={[pickerStyle('menu'), tint(SettingsColors.grey)]}>
             {options.map((o) => (
               <SwiftText key={o.value} modifiers={[tag(o.value)]}>
                 {o.label}

@@ -1,6 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import {
   ActivityIndicator,
@@ -996,6 +997,7 @@ function useChat(
     const previous = trip.itinerary;
     try {
       setTrip({ ...trip, itinerary: proposal.itinerary });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setUndoable({ itinerary: previous, days: proposal.diff.days });
       setPending(null);
       // Folds back into the toolbar, with Undo just above it.
@@ -1236,7 +1238,7 @@ function DayStrip({
         return (
           <Pressable
             key={index}
-            onPress={() => onSelect(index)}
+            onPress={() => { if (!active) void Haptics.selectionAsync(); onSelect(index); }}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             // The chip shows a date; the label still says which day of how many, because that
@@ -1323,7 +1325,10 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
     setBusy(null);
     // The returned endDate is recomputed from the itinerary server-side, so it is the one to
     // keep — not whatever was sent.
-    if (update) onKept(update.endDate);
+    if (update) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onKept(update.endDate);
+    }
     else setFailed(true);
   }
 

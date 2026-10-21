@@ -1,4 +1,5 @@
 import NativeDatePicker from '@expo/ui/community/datetime-picker';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 import { Children, Fragment, type ReactNode, type Ref } from 'react';
@@ -194,9 +195,9 @@ export function StepperRow({
         {value}
       </Text>
       <View style={styles.stepper}>
-        <Step sign="minus" label={`Fewer ${label.toLowerCase()}`} disabled={value <= min} onPress={() => onChange(value - 1)} />
+        <Step sign="minus" label={`Fewer ${label.toLowerCase()}`} disabled={value <= min} onPress={() => { void Haptics.selectionAsync(); onChange(value - 1); }} />
         <View style={styles.stepRule} />
-        <Step sign="plus" label={`More ${label.toLowerCase()}`} disabled={value >= max} onPress={() => onChange(value + 1)} />
+        <Step sign="plus" label={`More ${label.toLowerCase()}`} disabled={value >= max} onPress={() => { void Haptics.selectionAsync(); onChange(value + 1); }} />
       </View>
     </View>
   );

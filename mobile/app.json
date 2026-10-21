@@ -76,6 +76,7 @@
         }
       ],
       "./plugins/withSceneLifecycle",
+      "./plugins/withRandomPodUuids",
       [
         "expo-audio",
         {

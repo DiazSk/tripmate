@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
@@ -168,6 +169,7 @@ export default function SharedTripScreen() {
     setSave('saving');
     const id = await copySharedTrip(token);
     if (id) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCopyId(id);
       setSave('saved');
     } else setSave('failed');

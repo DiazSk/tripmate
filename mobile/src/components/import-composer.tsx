@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { SymbolView } from 'expo-symbols';
@@ -109,6 +110,10 @@ export function ImportComposer({
   }
 
   const box = useRef<TextInput>(null);
+  /** The pasted text goes after whatever is already in the box, on its own line. */
+  const paste = (pasted: string) => {
+    if (pasted.trim()) setText((prev) => (prev.trim() ? `${prev.trimEnd()}\n${pasted}` : pasted));
+  };
   const hasContent = hasImportContent(text, images.length);
 
   async function submit() {
@@ -147,32 +152,58 @@ export function ImportComposer({
           style={[styles.composerInput, light && styles.inkLight, docked && styles.inputDocked]}
         />
         <View style={[styles.composerFooter, light && styles.footerLight]}>
-          <Pressable
-            onPress={() => void pickScreenshots()}
-            accessibilityRole="button"
-            accessibilityLabel={
-              images.length > 0 ? `Screenshots, ${images.length} added` : 'Add screenshots'
-            }
-            style={styles.attach}>
-            <SymbolView
-              // Object form, never a bare SF string — the Android path renders nothing at all
-              // given one, silently.
-              name={{ ios: 'photo.on.rectangle', android: 'image' }}
-              tintColor={light ? Polar.ember : images.length > 0 ? Colors.foreground : Colors.muted}
-              size={16}
-              fallback={
-                <ThemedText type="detail" themeColor="muted">
-                  +
-                </ThemedText>
+          <View style={styles.feeds}>
+            <Pressable
+              onPress={() => void pickScreenshots()}
+              accessibilityRole="button"
+              accessibilityLabel={
+                images.length > 0 ? `Screenshots, ${images.length} added` : 'Add screenshots'
               }
-            />
-            <ThemedText
-              type="detail"
-              themeColor={images.length > 0 ? 'foreground' : 'muted'}
-              style={light ? styles.attachLight : undefined}>
-              {images.length > 0 ? `Screenshots (${images.length})` : 'Screenshots'}
-            </ThemedText>
-          </Pressable>
+              style={styles.attach}>
+              <SymbolView
+                // Object form, never a bare SF string — the Android path renders nothing at all
+                // given one, silently.
+                name={{ ios: 'photo.on.rectangle', android: 'image' }}
+                tintColor={light ? Polar.ember : images.length > 0 ? Colors.foreground : Colors.muted}
+                size={16}
+                fallback={
+                  <ThemedText type="detail" themeColor="muted">
+                    +
+                  </ThemedText>
+                }
+              />
+              <ThemedText
+                type="detail"
+                themeColor={images.length > 0 ? 'foreground' : 'muted'}
+                style={light ? styles.attachLight : undefined}>
+                {images.length > 0 ? `Screenshots (${images.length})` : 'Screenshots'}
+              </ThemedText>
+            </Pressable>
+            {/* **Apple's own Paste control on iOS, not a button that reads the clipboard.** Reading
+                it from code asks "Allow Paste?" every time; `UIPasteControl` is the system's proof
+                that the person pressed it, so it never asks. Text only: screenshots come through
+                the picker beside it, which shrinks them. Android has no such control and no prompt. */}
+            {Clipboard.isPasteButtonAvailable ? (
+              <Clipboard.ClipboardPasteButton
+                onPress={(data) => data.type === 'text' && paste(data.text)}
+                acceptedContentTypes={['plain-text']}
+                displayMode="iconAndLabel"
+                cornerStyle="capsule"
+                foregroundColor={light ? Polar.ember : Colors.foreground}
+                // Opaque: the control drops a colour's alpha, so the action capsule's 12% grey came
+                // out a heavy grey. #EFEFF0 is that grey composited over the white box. Night
+                // keeps the system's own fill.
+                backgroundColor={light ? '#EFEFF0' : undefined}
+                style={styles.paste}
+              />
+            ) : (
+              <Pressable onPress={() => void Clipboard.getStringAsync().then(paste)} accessibilityRole="button" style={styles.attach}>
+                <ThemedText type="detail" themeColor="muted" style={light ? styles.attachLight : undefined}>
+                  Paste
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
           {/* No `disabled`: an empty box is incomplete, not unavailable. Pressing it puts the
               cursor in the box and says nothing — the gap is two centimetres away and a cursor
               arriving explains itself, where a field three rows up does not. */}
@@ -261,6 +292,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: Spacing.tight,
   },
+  feeds: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: Spacing.hair },
+  // UIPasteControl draws nothing without a size; 34pt tall like the action capsule beside it.
+  paste: { width: 96, height: 34 },
   importUnread: { gap: Spacing.hair },
   composerLight: { backgroundColor: '#fff', borderColor: 'transparent', borderRadius: 12 },
   inkLight: { color: '#000', fontSize: 17, lineHeight: 22 },
