@@ -1,13 +1,13 @@
-import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { clearsIn } from '@shared/memories';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView } from '@/components/symbol';
 import { useAccount } from '@/api/auth';
 import { usePlacePhoto } from '@/api/placePhotos';
 import { lastRequestReachedServer } from '@/api/session';

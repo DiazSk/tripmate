@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
-import MapView, { Marker, Polyline, type MapType } from 'react-native-maps';
+import { Marker, Polyline, type MapType } from 'react-native-maps';
 
+import MapView, { MAPS_AVAILABLE, type MapViewRef } from '@/components/map-view';
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
 import {
@@ -105,7 +106,7 @@ export function DayMap({
    */
   lift?: number;
 }) {
-  const map = useRef<MapView>(null);
+  const map = useRef<MapViewRef>(null);
   const reduceMotion = useReducedMotion();
   const { here } = useHere();
   const heading = useHeading();
@@ -596,7 +597,9 @@ export function DayMap({
         />
       ) : null}
 
-      {film ? null : (
+      {/* No controls without a map to control: 3D, style and north are camera calls the stand-in
+          ignores (`MAPS_AVAILABLE`, `map-view.tsx`). */}
+      {film || !MAPS_AVAILABLE ? null : (
         <MapControls
           pitched={pitched}
           onToggle3D={toggle3D}

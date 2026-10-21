@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import { CheckRow, Footer, Group, Separator, SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { INTERESTS, MAX_STARRED, toggleTag } from '@/lib/planDraft';

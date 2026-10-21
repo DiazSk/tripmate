@@ -4,7 +4,6 @@ import { Oswald_400Regular } from '@expo-google-fonts/oswald';
 import { useFonts } from 'expo-font';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useFocusEffect } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { forwardRef, useCallback, useState } from 'react';
 import {
@@ -21,6 +20,7 @@ import {
 
 import { monumentEms } from '@shared/monumentFit';
 
+import { SymbolView } from '@/components/symbol';
 import { APPEARANCE } from '@/constants/appearance';
 import { Polar, PolarFonts, PolarRadius, PolarSpace } from '@/constants/polar';
 

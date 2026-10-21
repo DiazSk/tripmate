@@ -1,9 +1,9 @@
 import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useRef, useState, type ReactNode } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import type { DayPlan, Stop } from '@/api/types';
 import { MoneyBand } from '@/components/budget-sheet';
 import { PlacePhoto } from '@/components/place-photo';

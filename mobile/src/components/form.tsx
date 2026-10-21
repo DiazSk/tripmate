@@ -1,5 +1,5 @@
 // Renamed off the package's own exported name, which ESLint reads as a shadowing mistake.
-import NativeDatePicker from '@expo/ui/community/datetime-picker';
+
 import {
   ActivityIndicator,
   Platform,
@@ -15,6 +15,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { DatePicker } from '@/components/date-picker';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { MAX_FONT_SCALE, prefixedWidth } from '@/lib/fieldWidth';
@@ -177,7 +178,7 @@ export function DateField({
         {/* An explicit size, because a native view does not report a usable intrinsic one to
             yoga: left to size itself the chip overflows the row and the trough's `overflow:
             hidden` shears its right edge off mid-year. */}
-        <NativeDatePicker
+        <DatePicker
           style={wide ? [styles.datePickerWide, { height: Math.round(36 * fontScale) }] : styles.datePicker}
           value={toDate(value)}
           minimumDate={minimumDate ? toDate(minimumDate) : undefined}
@@ -252,7 +253,7 @@ export function TimeField({
           onPress={() => onChange('')}
         />
         <View style={[styles.dateWrap, wide && styles.dateWrapWide]}>
-          <NativeDatePicker
+          <DatePicker
             style={
               wide
                 ? [styles.datePickerWide, { height: Math.round(36 * fontScale) }]

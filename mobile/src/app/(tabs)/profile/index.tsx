@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { formatDateRange } from '@shared/format';
 import { city } from '@shared/memories';
@@ -46,9 +46,14 @@ export default function Profile() {
       options={{
         title: 'Profile',
         headerLargeTitle: true,
-        headerTransparent: true,
+        // iOS only: a transparent bar is how the large title floats over the page, and only iOS insets
+        // the scroll content under it (`contentInsetAdjustmentBehavior`). Android ignores that prop,
+        // so a transparent bar there let the page start under the status bar and the title (measured
+        // on a OnePlus 9R: the passport card under the clock, "Profile" drawn over it). Android gets
+        // an ordinary opaque bar in the page's own ground.
+        headerTransparent: Platform.OS === 'ios',
         headerLargeTitleShadowVisible: false,
-        headerStyle: { backgroundColor: 'transparent' },
+        headerStyle: { backgroundColor: Platform.OS === 'ios' ? 'transparent' : SettingsColors.ground },
         headerLargeTitleStyle: fonts ? { fontFamily: PolarFonts.display, fontSize: 40, color: Polar.ink } : { color: Polar.ink },
         // Only while there is something to say: iOS 26 draws a glass bubble for any bar item, empty or not.
         headerRight: status === 'idle' ? undefined : () => <SaveLine status={status} />,

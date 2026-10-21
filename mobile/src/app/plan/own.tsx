@@ -1,9 +1,9 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SymbolView } from '@/components/symbol';
 import { completePlan, readPlan } from '@/api/tripMateApi';
 import type { ImportedPlan, ImportItem } from '@/api/types';
 import { ImportComposer } from '@/components/import-composer';

@@ -1,7 +1,7 @@
-import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
+import { BlurView } from '@/components/blur';
 import { Polar } from '@/constants/polar';
 import { Colors } from '@/constants/theme';
 

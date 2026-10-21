@@ -2,7 +2,6 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +27,7 @@ import {
   unshareTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
+import { SymbolView } from '@/components/symbol';
 import type { ChatTurn, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
 import { lastRequestReachedServer } from '@/api/session';
 import { AnchorReceipt } from '@/components/anchor-receipt';

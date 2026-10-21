@@ -1,4 +1,5 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { Platform } from 'react-native';
 
 import { Polar } from '@/constants/polar';
 
@@ -21,7 +22,11 @@ export default function AppTabs() {
     <NativeTabs
       labelStyle={{ default: { color: Polar.secondary }, selected: { color: Polar.ink } }}
       iconColor={{ default: Polar.secondary, selected: Polar.ink }}
-      tintColor={Polar.ink}>
+      tintColor={Polar.ink}
+      // Android's Material bar otherwise generates its own colours from the accent: measured on a
+      // OnePlus 9R, a pink bar with a peach pill under paper pages. Said outright, as the paper
+      // pages' own white and a quiet ink pill; iOS 26 draws glass and ignores both.
+      {...(Platform.OS === 'android' ? { backgroundColor: '#FFFFFF', indicatorColor: Polar.veil20, rippleColor: Polar.veil05 } : null)}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />

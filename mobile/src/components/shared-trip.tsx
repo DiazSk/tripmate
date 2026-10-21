@@ -1,7 +1,5 @@
-import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Image } from 'expo-image';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import {
   Linking,
   Modal,
@@ -16,6 +14,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop as GradientStop } from 'react-native-svg';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { usePlacePhoto } from '@/api/placePhotos';
 import type { DayPlan, SharedTrip, Stop } from '@/api/types';
 import { RoundButton } from '@/components/glass-auth';

@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import { importPlaces, listSavedPlaces } from '@/api/tripMateApi';
 import type { Anchor, ImportItem, SavedPlace } from '@/api/types';
 import { ImportComposer } from '@/components/import-composer';

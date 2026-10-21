@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import type { SavedPlace, Stop, Trip } from '@/api/types';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { clockAt, formatRange } from '@/lib/dayDisplay';

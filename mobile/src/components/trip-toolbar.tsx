@@ -1,10 +1,10 @@
-import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView } from '@/components/symbol';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, ControlShadow, Radius, Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/spend';

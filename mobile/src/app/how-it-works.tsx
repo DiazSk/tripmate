@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { SettingsColors } from '@/components/settings-list';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { METHOD } from '@/lib/method';

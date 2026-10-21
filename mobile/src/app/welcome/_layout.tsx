@@ -52,8 +52,12 @@ export default function WelcomeLayout() {
     <WelcomeDraftProvider>
       <View style={styles.root}>
         <Image source={SCENES[step] ?? wadiRum} style={StyleSheet.absoluteFill} contentFit="cover" transition={600} accessibilityIgnoresInvertColors />
-        {/* Sign-in's scrim, a shade deeper at the foot where the answers gather. */}
-        <Scrim stops={[[0, Polar.night, 0.6], [0.28, Polar.night, 0.12], [0.5, Polar.night, 0.4], [0.78, Polar.night, 0.9], [1, Polar.night, 0.96]]} />
+        {/* Sign-in's scrim, held at 62% through everything the pages write straight on the photograph
+            and deeper at the foot where the answers gather. Sign-in's own thins to 12% a quarter of
+            the way down, which is where these pages put their question: over Graubünden's snow and
+            Tuscany's sky that measured 1.6:1 for the line and 2.2:1 for the heading. Modelled on the
+            brightest 10% of each photograph, 62% gives the heading 5.4:1 and a frost88 line 4.6:1. */}
+        <Scrim stops={[[0, Polar.night, 0.68], [0.3, Polar.night, 0.62], [0.6, Polar.night, 0.62], [0.78, Polar.night, 0.9], [1, Polar.night, 0.96]]} />
         <ThemeProvider value={{ ...theme, colors: { ...theme.colors, background: 'transparent' } }}>
           {fonts ? (
             <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: 'transparent' } }}>

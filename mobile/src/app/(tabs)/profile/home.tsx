@@ -1,6 +1,6 @@
-import { SymbolView } from 'expo-symbols';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import { HomeCitySearch } from '@/components/home-city-search';
 import { Footer, Group, RowIcon } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';

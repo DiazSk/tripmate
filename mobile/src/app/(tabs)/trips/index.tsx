@@ -1,7 +1,5 @@
-import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Link, Stack, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import {
   ActionSheetIOS,
@@ -22,6 +20,8 @@ import {
 import { formatDateRange, formatMoney } from '@shared/format';
 import { city, clearsIn, country, phaseLine } from '@shared/memories';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView } from '@/components/symbol';
 import { useAccount } from '@/api/auth';
 import { usePlacePhoto } from '@/api/placePhotos';
 import { lastRequestReachedServer } from '@/api/session';
@@ -97,7 +97,13 @@ export default function Trips() {
       options={{
         title: 'Trips',
         headerLargeTitle: true,
-        headerTransparent: true,
+        // iOS only: a transparent bar is how the large title floats over the page, and only iOS insets
+        // the scroll content under it (`contentInsetAdjustmentBehavior`). Android ignores that prop,
+        // so a transparent bar there let the page start under the status bar and the title (measured
+        // on a OnePlus 9R: the passport card under the clock, the cards under "Trips"). Android gets
+        // an ordinary opaque bar in the page's own ground.
+        headerTransparent: Platform.OS === 'ios',
+        ...(Platform.OS === 'ios' ? null : { headerStyle: { backgroundColor: styles.screen.backgroundColor } }),
         headerShadowVisible: false,
         headerLargeTitleShadowVisible: false,
         headerLargeTitleStyle: fonts ? { fontFamily: PolarFonts.display, fontSize: 40, color: Polar.ink } : { color: Polar.ink },

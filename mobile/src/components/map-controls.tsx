@@ -1,5 +1,3 @@
-import { BlurView } from 'expo-blur';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -20,8 +18,11 @@ import Animated, {
   withTiming,
   type AnimatedStyle,
 } from 'react-native-reanimated';
-import MapView, { type MapType, type Region } from 'react-native-maps';
+import { type MapType, type Region } from 'react-native-maps';
 
+import { BlurView } from '@/components/blur';
+import MapView from '@/components/map-view';
+import { SymbolView } from '@/components/symbol';
 import { ToggleRow } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
@@ -131,10 +132,7 @@ export const IMAGERY: MapType[] = ['satellite', 'hybrid', 'satelliteFlyover', 'h
  * `userInterfaceStyle: "dark"`: the bare one follows the *system* and would render dark chrome
  * inside our light appearance. Same named gap as the keyboard and the tab bar.
  *
- * ponytail: on Android `expo-blur` draws a semi-transparent view rather than a true blur unless
- * `experimentalBlurMethod` is set, which is documented as experimental. The fallback is the
- * material minus the blur, which is what this screen already shipped — acceptable until somebody
- * is looking at an Android build.
+ * On Android there is no blur: `components/blur.tsx` draws the material as a near-opaque fill there.
  */
 export function chrome(mapType: MapType) {
   const overImagery = IMAGERY.includes(mapType);

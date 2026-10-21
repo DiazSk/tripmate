@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { avatarTint, initialsFor } from '@shared/avatar';
 
+import { SymbolView } from '@/components/symbol';
 import { removeAvatar, uploadAvatar, type Account } from '@/api/auth';
 import { Colors } from '@/constants/theme';
 import { squareJpegBase64 } from '@/lib/avatarImage';

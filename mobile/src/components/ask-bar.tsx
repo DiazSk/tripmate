@@ -1,6 +1,4 @@
-import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
@@ -20,6 +18,8 @@ import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView } from '@/components/symbol';
 import type { ChatTurn } from '@/api/types';
 import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';

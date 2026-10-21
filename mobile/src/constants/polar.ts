@@ -40,6 +40,9 @@ export const Polar = {
   frost20: 'rgba(255,255,255,0.20)',
   /** Secondary text on glass over a photograph. */
   frost68: 'rgba(255,255,255,0.68)',
+  /** Secondary text straight on a photograph, under a scrim rather than glass. 68% white measured
+   *  1.6:1 over the welcome's snow and sky; 88% over a 62% night scrim clears 4.6:1 on the brightest. */
+  frost88: 'rgba(255,255,255,0.88)',
   rule: 'rgba(31,42,68,0.12)',
 } as const;
 

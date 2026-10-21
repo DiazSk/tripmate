@@ -1,10 +1,10 @@
 import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
 import { pickerStyle, tag, tint } from '@expo/ui/swift-ui/modifiers';
 import * as Haptics from 'expo-haptics';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { Polar } from '@/constants/polar';
 
 /**

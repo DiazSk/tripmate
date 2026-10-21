@@ -1,4 +1,3 @@
-import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { setStatusBarStyle } from 'expo-status-bar';
@@ -35,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LENSES, petraPrefill, petraSampleDate, type LensId } from '@shared/petraDay';
 import { toPrefill, type PlanPrefill } from '@shared/planExamples';
+import { BlurView } from '@/components/blur';
 import { DateField } from '@/components/form';
 import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
 import { crossFieldProblem } from '@/lib/formGap';

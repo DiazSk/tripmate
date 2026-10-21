@@ -1,13 +1,13 @@
-import { BlurView } from 'expo-blur';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView } from '@/components/symbol';
 import { geocode } from '@/api/tripMateApi';
 import { PlacePhoto } from '@/components/place-photo';
 import { DateRow, PlanColors, SegmentRow, Section, StepperRow, TextRow } from '@/components/plan-ui';

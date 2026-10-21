@@ -1,7 +1,5 @@
-import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { router } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { forwardRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +17,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { clerkMessage } from '@/lib/clerkError';
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { SymbolView } from 'expo-symbols';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory } from '@/api/types';
 import { SheetDone } from '@/components/sheet-done';

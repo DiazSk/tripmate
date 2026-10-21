@@ -1,10 +1,10 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { STEP_LINES, readyLine, type WelcomeStep } from '@shared/travelCard';
 
+import { SymbolView } from '@/components/symbol';
 import { Glass, GlassStep } from '@/components/glass-auth';
 import { Meridian } from '@/components/meridian';
 import { Polar } from '@/constants/polar';
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   skip: { height: 44, paddingHorizontal: 16, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   skipText: { fontSize: 15, fontWeight: '600', color: Polar.ice },
   host: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  line: { flex: 1, fontSize: 15, lineHeight: 21, color: Polar.frost68 },
+  line: { flex: 1, fontSize: 15, lineHeight: 21, color: Polar.frost88 },
   lineSaid: { color: Polar.ice },
   cta: { gap: 10, marginTop: 8 },
   // Two to a line: the gap is 8, so each takes half less four.
@@ -168,5 +168,5 @@ const styles = StyleSheet.create({
   segmentRow: { flexDirection: 'row', gap: 2 },
   segmentHalf: { flex: 1, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   segmentText: { fontSize: 14, fontWeight: '600', color: Polar.ice },
-  heading: { marginTop: 6, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', color: Polar.frost68 },
+  heading: { marginTop: 6, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', color: Polar.frost88 },
 });

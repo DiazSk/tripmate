@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, type DimensionValue } from 'react-native';
-import MapView, { Marker, Polyline, type Camera, type Region } from 'react-native-maps';
+import { Marker, Polyline, type Camera, type Region } from 'react-native-maps';
 import Animated, { SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { dayCost, fmtCost, fmtDur, LENS_ORDER, LENSES, PETRA_BEATS, routeAlongTrail, toMin, TRAIL, type LensId, type LngLat, type Stop } from '@shared/petraDay';
 import { legBearingRad } from '@shared/tourPacing';
+import MapView, { type MapViewRef } from '@/components/map-view';
 import { DIVE_ALTITUDE_M, PITCH_3D } from '@/components/map-controls';
 import { Polar, PolarFonts, PolarMotion, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
 import { altitudeForRegion, regionForStops } from '@/lib/mapRegion';
@@ -204,7 +205,7 @@ export function PlanMap({
   dateLabel: string;
   onOpen: () => void;
 }) {
-  const map = useRef<MapView>(null);
+  const map = useRef<MapViewRef>(null);
   const reduce = useReducedMotion();
   const height = Math.round(width * 1.05);
   const stops = LENSES[lens].stops;

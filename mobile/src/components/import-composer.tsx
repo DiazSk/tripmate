@@ -1,10 +1,10 @@
 import * as Clipboard from 'expo-clipboard';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import type { ImportItem } from '@/api/types';
 import { PillButton } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';

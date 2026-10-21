@@ -1,8 +1,8 @@
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { MapType } from 'react-native-maps';
 import { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
+import { SymbolView } from '@/components/symbol';
 import type { Stop } from '@/api/types';
 import { Group, MAP_FLOOR, chrome } from '@/components/map-controls';
 import { StopDisc } from '@/components/stop-disc';

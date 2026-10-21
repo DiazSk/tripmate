@@ -3,7 +3,6 @@ import { splitForSpeech, estimateDurationMs } from '@shared/storyPacing';
 import { beatAt, beatDurations, clockLabel } from '@shared/storyTimeline';
 import type { StoryBeat } from '@shared/storyScript';
 import { useFonts } from 'expo-font';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -21,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import Svg, { Defs, LinearGradient, Rect, Stop as GradientStop } from 'react-native-svg';
 
+import { SymbolView } from '@/components/symbol';
 import type { DayPlan } from '@/api/types';
 import { Meridian } from '@/components/meridian';
 import { PlacePhoto } from '@/components/place-photo';

@@ -1,8 +1,8 @@
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { Group, Separator, SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 

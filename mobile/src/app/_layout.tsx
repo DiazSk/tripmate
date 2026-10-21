@@ -3,8 +3,8 @@ import { tokenCache } from '@clerk/expo/token-cache';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
 import { ShareIntentProvider } from 'expo-share-intent';
+import { StatusBar } from 'react-native';
 
 import { CormorantGaramond_400Regular } from '@expo-google-fonts/cormorant-garamond';
 import { InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight';
@@ -63,6 +63,19 @@ const PREVIEWS: [string, ScreenOptions][] = [
 // trip/[id] would have no screen slot anywhere in the tree if NativeTabs were the root layout —
 // router.push('/trip/...') would silently no-op. The (tabs) group keeps that filtering scoped to
 // just index/trips/profile, while trip/[id] mounts as an ordinary sibling Stack screen.
+/**
+ * The app's default status bar, set once, before anything renders.
+ *
+ * Without it Android's forced edge-to-edge draws dark system icons over the near-black canvas and
+ * the clock and battery disappear into it. **Imperative, not a mounted `<StatusBar>`:** a mounted
+ * one re-applies its style whenever it mounts or re-renders, which raced every screen's own
+ * focus-scoped call (`usePolarStatusBar`): measured on a OnePlus 9R, Home opened on a cold start
+ * with a white clock on paper (the root mounted after Home's effect), and expo-status-bar's version
+ * re-rendered on the tabs' `Appearance.setColorScheme('light')` and did the same to Trips and
+ * Profile. iOS 26 ignores the style and follows the content, which is why none of it showed there.
+ */
+StatusBar.setBarStyle(APPEARANCE === 'light' ? 'dark-content' : 'light-content');
+
 export default function RootLayout() {
   // Polar's faces, one static cut per family name as @expo-google-fonts registers them. The keys
   // here ARE the family names RN resolves, so they must match `Fonts` in constants/theme.
@@ -86,9 +99,6 @@ export default function RootLayout() {
   const tree = (
     <ShareIntentProvider>
       <ThemeProvider value={light ? DefaultTheme : DarkTheme}>
-        {/* Without this, Android's forced edge-to-edge draws dark system icons over the near-black
-            canvas and the clock and battery disappear into it — and the inverse under paper. */}
-        <StatusBar style={light ? 'dark' : 'light'} />
         <AnimatedSplashOverlay />
         <Stack
           screenOptions={{

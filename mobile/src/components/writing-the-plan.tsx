@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
+import { Marker, Polygon, Polyline } from 'react-native-maps';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import MapView, { type MapViewRef } from '@/components/map-view';
 import { Meridian } from '@/components/meridian';
 import { Wordmark } from '@/components/polar-landing/landing-screen';
 import { Scrim } from '@/components/polar-landing/scrim';
@@ -91,7 +92,7 @@ export function WritingThePlan({
 }) {
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
-  const map = useRef<MapView>(null);
+  const map = useRef<MapViewRef>(null);
   const [mapReady, setMapReady] = useState(false);
   const [ledeBottom, setLedeBottom] = useState(300);
   const [cardH, setCardH] = useState(200);

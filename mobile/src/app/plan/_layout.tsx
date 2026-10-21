@@ -1,7 +1,7 @@
 import { Stack, useGlobalSearchParams, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import { SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { Colors } from '@/constants/theme';

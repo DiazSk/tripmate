@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { SymbolView } from '@/components/symbol';
 import { Fine, PlainButton, SignalCapsule, leaveSignIn } from '@/components/glass-auth';
 import { Meridian } from '@/components/meridian';
 import { WelcomeFrame } from '@/components/welcome-frame';

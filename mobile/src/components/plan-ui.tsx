@@ -1,10 +1,10 @@
-import NativeDatePicker from '@expo/ui/community/datetime-picker';
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 import { Children, Fragment, type ReactNode, type Ref } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
 
+import { DatePicker } from '@/components/date-picker';
+import { SymbolView } from '@/components/symbol';
 import { Header, Separator, SettingsColors } from '@/components/settings-list';
 import { SheetDone } from '@/components/sheet-done';
 import { nowTime, toClock, toDate, toIso, toTimeDate } from '@/components/form';
@@ -113,7 +113,7 @@ export function DateRow({
           format on some passes and the spelled-out one on others. It cannot be replaced by a label
           with the picker hidden over it: the calendar it opens inherits the picker's opacity. */}
       <View style={styles.dateWrap}>
-        <NativeDatePicker
+        <DatePicker
           style={styles.datePicker}
           value={toDate(value)}
           minimumDate={minimumDate ? toDate(minimumDate) : undefined}
@@ -151,7 +151,7 @@ export function TimeRow({
           <Pressable onPress={() => onChange('')} accessibilityRole="button" accessibilityLabel={`Clear ${label.toLowerCase()} time`} hitSlop={8}>
             <Text style={styles.clear}>Clear</Text>
           </Pressable>
-          <NativeDatePicker
+          <DatePicker
             style={styles.timePicker}
             value={toTimeDate(value)}
             mode="time"

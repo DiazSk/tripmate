@@ -1,8 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
-import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,6 +22,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BlurView } from '@/components/blur';
+import { SymbolView } from '@/components/symbol';
 import { apiBaseUrl } from '@/api/config';
 import { copySharedTrip, getSharedTrip } from '@/api/tripMateApi';
 import type { SharedTrip } from '@/api/types';
