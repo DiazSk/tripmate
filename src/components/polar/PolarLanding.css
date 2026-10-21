@@ -484,6 +484,17 @@
   filter: saturate(0.9);
   transition: filter 0.6s var(--wd-ease-slide), transform 1.2s var(--wd-ease-reveal);
 }
+/* WebKit only (`-webkit-hyphens` is a WebKit-only property, so Chrome and Firefox skip this): each
+   photograph gets its own layer, so its filter runs on the GPU. Without one WebKit filters them in
+   software at paint time, and the strip's clip-path scrub repaints the strip on every scroll frame:
+   three blur(2px) images at 2x cost a 60-93ms main-thread stall in every run as the strip came up
+   (Playwright WebKit, 1470x830 @2x), and 60-200ms at 390px. With the layer: 0. Chrome never
+   stalled here, so it is left as it was. */
+@supports (-webkit-hyphens: none) {
+  .tm-strip-item img {
+    will-change: transform;
+  }
+}
 .tm-strip-item:not(.is-open) img {
   filter: saturate(0.6) blur(2px) brightness(0.92);
   transform: scale(1.08);
