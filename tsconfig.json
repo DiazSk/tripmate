@@ -31,5 +31,5 @@
     "**/*.mts"
   ],
   "_comment_exclude": "mobile/ is a separate TypeScript project with its own tsconfig, path aliases and jest types. The include glob above is '**/*.ts', so without this the web app's typecheck sweeps the React Native app in under the wrong config and reports dozens of errors that are not errors.",
-  "exclude": ["node_modules", "mobile"]
+  "exclude": ["node_modules", "mobile", "sanity"]
 }
