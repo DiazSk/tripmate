@@ -55,6 +55,9 @@ export default function Profile() {
         headerLargeTitleShadowVisible: false,
         headerStyle: { backgroundColor: Platform.OS === 'ios' ? 'transparent' : SettingsColors.ground },
         headerLargeTitleStyle: fonts ? { fontFamily: PolarFonts.display, fontSize: 40, color: Polar.ink } : { color: Polar.ink },
+        // Android has no large title, so the bar's own title carries the serif: the face iOS shows
+        // at 40 above the page, at the size a 56dp bar holds.
+        ...(Platform.OS === 'android' && fonts ? { headerTitleStyle: { fontFamily: PolarFonts.display, fontSize: 30, color: Polar.ink } } : null),
         // Only while there is something to say: iOS 26 draws a glass bubble for any bar item, empty or not.
         headerRight: status === 'idle' ? undefined : () => <SaveLine status={status} />,
       }}

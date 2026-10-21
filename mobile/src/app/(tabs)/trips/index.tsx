@@ -107,7 +107,8 @@ export default function Trips() {
         headerShadowVisible: false,
         headerLargeTitleShadowVisible: false,
         headerLargeTitleStyle: fonts ? { fontFamily: PolarFonts.display, fontSize: 40, color: Polar.ink } : { color: Polar.ink },
-        headerTitleStyle: { color: Polar.ink },
+        // Android has no large title, so the bar's own title carries the serif (as Profile's does).
+        headerTitleStyle: Platform.OS === 'android' && fonts ? { fontFamily: PolarFonts.display, fontSize: 30, color: Polar.ink } : { color: Polar.ink },
         // The app runs in dark appearance (`userInterfaceStyle`), so the system would draw this bar
         // for a night page; this one is white, so its colours are said outright.
         headerSearchBarOptions: {
