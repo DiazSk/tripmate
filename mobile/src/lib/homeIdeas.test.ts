@@ -47,8 +47,8 @@ const petra = trip({
   pace: 'Easy pace',
   order: 1,
   itinerary: [
-    { day: 1, theme: 'The Siq', stops: [{ name: 'The Siq', kind: 'walk', note: '' }, { name: 'Treasury', kind: 'sight', note: '' }] },
-    { day: 2, theme: 'Up', stops: [{ name: 'Monastery', kind: 'sight', note: '' }] },
+    { key: 'd1', day: 1, theme: 'The Siq', stops: [{ key: 's1', name: 'The Siq', kind: 'walk', note: '' }, { key: 's2', name: 'Treasury', kind: 'sight', note: '' }] },
+    { key: 'd2', day: 2, theme: 'Up', stops: [{ key: 's3', name: 'Monastery', kind: 'sight', note: '' }] },
   ],
 });
 const trips = [

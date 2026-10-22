@@ -115,10 +115,11 @@ function Detail({ trip }: { trip: ReadyTrip }) {
 
         <View style={styles.days}>
           {trip.itinerary.map((day, i) => (
-            <View key={i} style={[styles.day, i > 0 && styles.dayRule]}>
+            // Sanity's _key; a catalogue copy cached before keys were served falls back to position.
+            <View key={day.key || i} style={[styles.day, i > 0 && styles.dayRule]}>
               <Text maxFontSizeMultiplier={1.6} style={styles.dayTitle}>{`Day ${i + 1} · ${day.theme}`}</Text>
               {day.stops.map((stop, s) => (
-                <Text key={s} maxFontSizeMultiplier={1.6} style={styles.stop}>
+                <Text key={stop.key || s} maxFontSizeMultiplier={1.6} style={styles.stop}>
                   {stop.name}
                 </Text>
               ))}

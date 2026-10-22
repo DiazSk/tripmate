@@ -11,8 +11,14 @@ const petra = {
   priceFrom: 1450,
   tags: ["Desert", "History"],
   featured: true,
-  itinerary: [{ day: 1, theme: "The Siq at first light", stops: [{ name: "The Siq", kind: "walk", note: "Go early." }, { kind: "food" }] }],
+  itinerary: [{ _key: "d1", day: 1, theme: "The Siq at first light", stops: [{ _key: "s1", name: "The Siq", kind: "walk", note: "Go early." }, { kind: "food" }] }],
 };
+
+test("Sanity's array keys come through as the list keys", () => {
+  const [trip] = parseReadyTrips([petra]);
+  assert.equal(trip.itinerary[0].key, "d1");
+  assert.equal(trip.itinerary[0].stops[0].key, "s1");
+});
 
 test("no read token, no Sanity: the catalogue is unavailable, not empty", async () => {
   assert.equal(sanityConfig({}), null);

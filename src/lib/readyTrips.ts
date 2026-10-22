@@ -13,12 +13,15 @@ import { cached, TTL } from "./fetchCache";
  */
 
 export interface ReadyTripStop {
+  /** Sanity's `_key` for the array item: a stable list key, unlike the stop's position or name. */
+  key: string;
   name: string;
   kind: string;
   note: string;
 }
 
 export interface ReadyTripDay {
+  key: string;
   day: number;
   theme: string;
   stops: ReadyTripStop[];
@@ -31,7 +34,8 @@ export interface ReadyTrip {
   destination: string;
   country: string;
   region: string;
-  /** The big uppercase name set on the card, e.g. "CINQUE TERRE". */
+  /** The name set big on the card, e.g. "Cinque Terre": Sanity's `shortName`, which the card's
+   *  style uppercases. Stored in ordinary case so the data says what the place is called. */
   monument: string;
   days: number;
   /** USD per person, an estimate excluding flights. */
@@ -49,11 +53,18 @@ export interface ReadyTrip {
 
 const API_VERSION = "2025-02-19";
 
-/** Published documents only: `drafts.` ids are an editor's work in progress, not the catalogue. */
-export const READY_TRIPS_QUERY = `*[_type == "readyTrip" && !(_id in path("drafts.**"))] | order(order asc) {
-  "slug": slug.current, title, destination, country, region, monument, days, priceFrom, priceNote,
-  pace, tags, weekend, bestMonths, summary, featured, order,
-  itinerary[]{ day, theme, stops[]{ name, kind, note } }
+const PRICE_NOTE = "Estimate per person, excluding flights";
+
+/**
+ * Published documents only, by the request's `perspective=published`. `weekend` is derived from
+ * `days` rather than stored beside it, so the two cannot disagree, and the price note is one default
+ * here rather than the same sentence on every document.
+ */
+export const READY_TRIPS_QUERY = /* groq */ `*[_type == "readyTrip"] | order(order asc) {
+  "slug": slug.current, title, destination, country, region, "monument": shortName, days, priceFrom,
+  "priceNote": coalesce(priceNote, "${PRICE_NOTE}"),
+  pace, tags, "weekend": days <= 3, bestMonths, summary, featured, order,
+  itinerary[]{ _key, day, theme, stops[]{ _key, name, kind, note } }
 }`;
 
 export interface SanityConfig {
@@ -96,10 +107,10 @@ export function parseReadyTrips(raw: unknown): ReadyTrip[] {
         const stops = (Array.isArray(day.stops) ? day.stops : [])
           .map((s) => {
             const stop = (s ?? {}) as Record<string, unknown>;
-            return { name: str(stop.name), kind: str(stop.kind), note: str(stop.note) };
+            return { key: str(stop._key), name: str(stop.name), kind: str(stop.kind), note: str(stop.note) };
           })
           .filter((s) => s.name);
-        return { day: num(day.day), theme: str(day.theme), stops };
+        return { key: str(day._key), day: num(day.day), theme: str(day.theme), stops };
       })
       .filter((day) => day.theme);
     trips.push({
