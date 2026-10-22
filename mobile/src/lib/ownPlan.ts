@@ -69,7 +69,7 @@ export const isFound = (stop: { lat?: number; lng?: number }) =>
   typeof stop.lat === 'number' && typeof stop.lng === 'number';
 
 /** Lowercase, accents off, punctuation to spaces: "Jerónimos, Monastery!" and "jeronimos monastery" are one. */
-const fold = (s: string) =>
+export const fold = (s: string) =>
   s
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')

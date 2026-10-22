@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 
+import { IDEA_INTERESTS } from '@shared/ideaRead';
 import { legacyExplorerStyle } from '@shared/userAnswers';
 
 import type {
@@ -113,18 +114,8 @@ export const CROWDS: { value: CrowdPreference; label: string }[] = [
 export const labelOf = <T extends string>(options: { value: T; label: string }[], value: T) =>
   options.find((option) => option.value === value)?.label ?? value;
 
-/** Interests, from `UserAnswers.swift`. */
-export const INTERESTS = [
-  'Food',
-  'Wellness & Fitness',
-  'Culture & History',
-  'Nightlife',
-  'Nature & Outdoors',
-  'Shopping',
-  'Family-Friendly',
-  'Relaxation',
-  'Photography',
-];
+/** Interests, from `UserAnswers.swift`; the server's idea reader picks from the same list, so it is shared. */
+export const INTERESTS: string[] = [...IDEA_INTERESTS];
 
 /**
  * **Starring is what actually discriminates between travellers** — everyone picks four or five
@@ -185,6 +176,12 @@ export type PlanPrefillParams = {
   budget?: string;
   adults?: string;
   children?: string;
+  /** A `PACES` value; anything else is ignored. */
+  pace?: string;
+  /** Places to include, comma-separated, as the Must-include field takes them. */
+  must?: string;
+  /** `INTERESTS` labels, comma-separated; unknown ones are dropped. */
+  into?: string;
 };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -225,6 +222,11 @@ export function prefillPatch(params: PlanPrefillParams): Partial<PlanDraft> {
     patch.party = { adults: a, children: c, infants: 0 };
     patch.group = c > 0 ? 'family_with_kids' : a === 1 ? 'solo' : 'couple';
   }
+  if (PACES.some((p) => p.value === params.pace)) patch.pace = params.pace as PacePreference;
+  const must = params.must?.trim().slice(0, 1000);
+  if (must) patch.mustInclude = must;
+  const into = params.into?.split(',').map((s) => s.trim()).filter((s) => INTERESTS.includes(s));
+  if (into?.length) patch.interests = into;
   return patch;
 }
 

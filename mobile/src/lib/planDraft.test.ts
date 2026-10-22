@@ -259,3 +259,18 @@ test('a counter changed by hand moves the preset with it', () => {
     expect(groupForParty(partyForGroup(group)!, group)).toBe(group);
   }
 });
+
+describe('prefillPatch: pace, must and into', () => {
+  test('pace only for a PACES value', () => {
+    expect(prefillPatch({ pace: 'relaxed' })).toEqual({ pace: 'relaxed' });
+    expect(prefillPatch({ pace: 'fast' })).toEqual({});
+  });
+  test('must is the must-include text, capped at 1,000 chars', () => {
+    expect(prefillPatch({ must: 'The Siq, Treasury' })).toEqual({ mustInclude: 'The Siq, Treasury' });
+    expect(prefillPatch({ must: 'x'.repeat(1500) }).mustInclude).toHaveLength(1000);
+  });
+  test('into keeps only known interests', () => {
+    expect(prefillPatch({ pace: 'fast', into: 'Food,Skydiving' })).toEqual({ interests: ['Food'] });
+    expect(prefillPatch({ into: 'Skydiving' })).toEqual({});
+  });
+});
