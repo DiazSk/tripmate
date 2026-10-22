@@ -170,7 +170,9 @@ export interface Itinerary {
   /** `must` anchors the model says it could not schedule, and why. */
   unplaced?: UnplacedAnchor[];
   /** How the plan came to exist. Absent on every plan saved before imports. */
-  origin?: "generated" | "imported";
+  origin?: "generated" | "imported" | "ready-made";
+  /** The catalogue slug a `"ready-made"` plan came from; absent otherwise. */
+  readyTrip?: string;
   /** What an import could not do, said once on the trip. */
   importNotes?: ImportNote[];
 }

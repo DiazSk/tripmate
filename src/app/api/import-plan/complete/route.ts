@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (limit.limited) return limitResponse(limit, "import-plan-complete");
   const request = readCompleteRequest(read.value);
   if (typeof request === "string") return NextResponse.json({ error: request }, { status: 400 });
-  const { plan, destination, startDate, budget } = request;
+  const { plan, destination, startDate, budget, origin, readyTrip, userAnswers } = request;
 
   const dated = datesFor(plan.days, startDate);
   if (!dated) return NextResponse.json({ error: "Pick the day your trip starts." }, { status: 400 });
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   const fill: Record<string, FillEntry> | null = ids.length === 0 ? {} : ((await fillOnce()) ?? (await fillOnce()));
   const storedBudget = budgetToStore(budget, fill !== null);
 
-  const itinerary = assembleItinerary({ dated, fill, hours, weather, budget: storedBudget, fallback });
+  const itinerary = assembleItinerary({ dated, fill, hours, weather, budget: storedBudget, fallback, origin, readyTrip });
   const rejection = itineraryRejection(itinerary);
   if (rejection) {
     console.error("[import-plan] assembled plan rejected", rejection);
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
     itinerary_json: JSON.stringify(itinerary),
     run_id: null,
     chat_session_id: null,
-    user_answers_json: null,
+    user_answers_json: userAnswers ? JSON.stringify(userAnswers) : null,
     status: "draft",
     timezone: geo?.timezone ?? null,
   });

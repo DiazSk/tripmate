@@ -245,3 +245,28 @@ test("dates spanning far longer than the plan are ignored rather than trusted", 
   const days = [day([{ name: "A" }], { date: "2026-11-01" }), day([{ name: "B" }], { date: "2026-12-20" })];
   assert.equal(datesFor(days, undefined), null);
 });
+
+test("a ready-made request keeps its origin and slug; anything else stays an import", () => {
+  const base = { destination: "Petra, Jordan", startDate: "2026-11-20", plan: { days: [{ stops: [{ name: "The Siq", note: "Go early." }] }] } };
+  const ready = readCompleteRequest({ ...base, origin: "ready-made", readyTrip: "petra-at-first-light", userAnswers: { pace: "relaxed" } });
+  assert.equal(ready.origin, "ready-made");
+  assert.equal(ready.readyTrip, "petra-at-first-light");
+  assert.deepEqual(ready.userAnswers, { pace: "relaxed" });
+  for (const bad of [{ origin: "generated", readyTrip: "x" }, { origin: "ready-made", readyTrip: "Bad Slug!" }, { origin: "ready-made" }]) {
+    const r = readCompleteRequest({ ...base, ...bad, userAnswers: "nope" });
+    assert.equal(r.origin, undefined);
+    assert.equal(r.readyTrip, undefined);
+    assert.equal(r.userAnswers, undefined);
+  }
+});
+
+test("a ready-made plan's notes are TripMate's, not the traveller's", () => {
+  const dated = [{ date: "2026-11-20", day: { stops: [{ name: "The Siq", note: "Go early.", lat: 30.32, lng: 35.45 }] } }];
+  const it = assembleItinerary({ dated, fill: null, hours: null, weather: [], budget: 0, fallback: { lat: 30.32, lng: 35.44 }, origin: "ready-made", readyTrip: "petra-at-first-light" });
+  assert.equal(it.origin, "ready-made");
+  assert.equal(it.readyTrip, "petra-at-first-light");
+  assert.ok(it.days[0].stops[0].estimated.includes("note"));
+  const imported = assembleItinerary({ dated, fill: null, hours: null, weather: [], budget: 0, fallback: { lat: 30.32, lng: 35.44 } });
+  assert.equal(imported.origin, "imported");
+  assert.ok(!imported.days[0].stops[0].estimated.includes("note"));
+});

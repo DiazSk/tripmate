@@ -13,7 +13,7 @@ import {
 import { formatClock, parseClock } from "./itinerary";
 import { rescheduleDay, travellerTimes } from "./schedule";
 import { MAX_TRIP_DAYS, closestTier } from "./tiers";
-import type { DayPlan, ImportNote, Itinerary, Stop, StopCategory } from "./types";
+import type { DayPlan, ImportNote, Itinerary, Stop, StopCategory, UserAnswers } from "./types";
 import type { DayWeather } from "./weather";
 
 /**
@@ -71,7 +71,19 @@ export function readCompleteRequest(body: unknown): CompletePlanRequest | string
   const startDate = realDate(b.startDate);
   const budget = typeof b.budget === "number" && Number.isFinite(b.budget) && b.budget > 0 ? b.budget : undefined;
   const plan: ImportedPlan = { destinationGuess: null, isPlan: true, days, loose: [], notes: [], unread: [] };
-  return { plan, destination, ...(startDate ? { startDate } : {}), ...(budget ? { budget } : {}) };
+  // An import stays an import unless it names a real catalogue slug; the pair travels together.
+  const slug = typeof b.readyTrip === "string" && /^[a-z0-9-]{1,120}$/.test(b.readyTrip) ? b.readyTrip : undefined;
+  const ready = b.origin === "ready-made" && slug;
+  const answers = b.userAnswers;
+  const userAnswers = answers && typeof answers === "object" && !Array.isArray(answers) ? (answers as UserAnswers) : undefined;
+  return {
+    plan,
+    destination,
+    ...(startDate ? { startDate } : {}),
+    ...(budget ? { budget } : {}),
+    ...(ready ? { origin: "ready-made" as const, readyTrip: slug } : {}),
+    ...(userAnswers ? { userAnswers } : {}),
+  };
 }
 
 /** How many more days than the plan has a stated date span may cover before it reads as a misread. */
@@ -232,10 +244,14 @@ export interface AssembleInput {
   weather: DayWeather[];
   budget: number;
   fallback: { lat: number; lng: number };
+  /** A catalogue trip is saved through this same path; its notes are TripMate's own words. */
+  origin?: "imported" | "ready-made";
+  readyTrip?: string;
 }
 
 export function assembleItinerary(input: AssembleInput): Itinerary {
   const weatherByDate = new Map(input.weather.map((w) => [w.date, w]));
+  const origin = input.origin ?? "imported";
   const keepTimeOf = travellerTimes({ origin: "imported" });
 
   const days: DayPlan[] = input.dated.map(({ date, day }, d) => {
@@ -245,8 +261,8 @@ export function assembleItinerary(input: AssembleInput): Itinerary {
       const e = filled ?? defaultFill();
       const found = typeof s.lat === "number" && typeof s.lng === "number";
       // The note is the traveller's own words unless they gave none and the fill wrote one, so
-      // `stopEvidence` can caption it truthfully.
-      const noteIsOurs = !s.note && Boolean(e.note);
+      // `stopEvidence` can caption it truthfully. A catalogue note was never theirs.
+      const noteIsOurs = origin === "ready-made" ? Boolean(s.note ?? e.note) : !s.note && Boolean(e.note);
       const estimated: ("time" | "cost" | "duration" | "note")[] = [
         ...(s.time ? [] : ["time" as const]),
         "duration",
@@ -288,7 +304,8 @@ export function assembleItinerary(input: AssembleInput): Itinerary {
   return {
     tier: input.budget > 0 ? closestTier(input.budget, days.length) : "midrange",
     days,
-    origin: "imported",
+    origin,
+    ...(origin === "ready-made" && input.readyTrip ? { readyTrip: input.readyTrip } : {}),
     ...(importNotes.length ? { importNotes } : {}),
   };
 }

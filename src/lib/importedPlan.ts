@@ -39,12 +39,20 @@ export interface ImportedPlan {
   unread: { index: number; reason: string }[];
 }
 
+import type { UserAnswers } from "./types";
+
 export interface CompletePlanRequest {
   plan: ImportedPlan;
   destination: string;
   /** Required when any day has no date. */
   startDate?: string;
   budget?: number;
+  /** Set only by a catalogue trip saved through this route; absent means an import. */
+  origin?: "ready-made";
+  /** The catalogue slug, present exactly when `origin` is. */
+  readyTrip?: string;
+  /** The planner answers a ready-made trip was chosen with, stored as a generated trip's are. */
+  userAnswers?: UserAnswers;
 }
 
 /** A real `YYYY-MM-DD` calendar date, or undefined. "2026-02-30" is not one. */
