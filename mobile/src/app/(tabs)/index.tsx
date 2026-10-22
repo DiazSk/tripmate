@@ -271,7 +271,7 @@ function DraftWidget({ draft, more, onPress, onTrips }: { draft: TripSummary; mo
   const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
   const clears = clearsIn(draft);
   return (
-    <Widget size="medium" label={more > 0 ? `Drafts · ${more + 1}` : 'Draft'} onPress={more > 0 ? onTrips : onPress} accessibilityLabel={`Your ${draft.destination} draft`}>
+    <Widget size="medium" fit label={more > 0 ? `Drafts · ${more + 1}` : 'Draft'} onPress={more > 0 ? onTrips : onPress} accessibilityLabel={`Your ${draft.destination} draft`}>
       <View style={styles.draft}>
         <View style={styles.draftThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}</View>
         <View style={styles.draftText}>
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   // The screen's own ground, so the rails scroll under the pinned row cleanly.
   pills: { marginTop: 8, backgroundColor: GROUND },
 
-  draft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  draft: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
   draftThumb: { width: 72, height: 72, overflow: 'hidden', borderRadius: 14, backgroundColor: Polar.deep },
   draftText: { flex: 1, gap: 3 },
 });

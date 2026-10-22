@@ -73,7 +73,8 @@ export function Widget({
   /** Absent for a widget that only reports, which is then not a button. */
   onPress?: () => void;
   accessibilityLabel?: string;
-  /** As tall as its words, never shorter than a row: for copy that would leave a fixed size half empty. */
+  /** As tall as its words: for a widget that stands alone on its line, where a row's fixed height
+   *  only pushed the label and the content apart. */
   fit?: boolean;
   children: ReactNode;
 }) {
@@ -81,7 +82,7 @@ export function Widget({
   const fixed = size === 'large' ? ROW * 2 + GAP : ROW;
   // A floor, not a fixed height: at the larger text sizes the words grow the widget rather than
   // spilling out of it over the photograph (the grid's rows stretch the pair beside it to match).
-  const height = { minHeight: fit ? ROW : fixed };
+  const height = fit ? null : { minHeight: fixed };
   return (
     <Pressable
       onPress={onPress}
