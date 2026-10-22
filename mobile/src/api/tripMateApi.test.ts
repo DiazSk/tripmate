@@ -1,6 +1,6 @@
 import { fetchWithSession } from "./session";
 import type { TravelerProfile } from "./types";
-import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip, getReadyTrips, readIdea } from "./tripMateApi";
+import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip, getReadyTrips, readIdea, completePlan } from "./tripMateApi";
 
 // Reads as though it runs too late, and does not: babel-jest hoists every `jest.mock` above the
 // imports, so the mock is registered before `tripMateApi` resolves `./session`.
@@ -336,4 +336,25 @@ test("readIdea is undefined when the fetch rejects", async () => {
   mockedFetch.mockRejectedValue(new Error("network down"));
 
   expect(await readIdea("x")).toBeUndefined();
+});
+
+test("readIdea says it couldn't read the idea when an error body is not JSON", async () => {
+  mockedFetch.mockResolvedValue(new Response("<html>Bad gateway</html>", { status: 502 }));
+
+  expect(await readIdea("x")).toEqual({ error: "Couldn\u2019t read that idea. Try again, or plan it step by step.", limited: false });
+});
+
+test("completePlan says it couldn't save when an error body is not JSON", async () => {
+  mockedFetch.mockResolvedValue(new Response("<html>Bad gateway</html>", { status: 502 }));
+
+  expect(await completePlan({ plan: { destinationGuess: null, isPlan: true, days: [], loose: [], notes: [], unread: [] }, destination: "Petra" })).toBe("Couldn\u2019t save this plan. Try again.");
+});
+
+test("completePlan puts a caller's sentence in place of the server's for that status", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ error: "Check where it is." }), { status: 422 }));
+  const body = { plan: { destinationGuess: null, isPlan: true, days: [], loose: [], notes: [], unread: [] }, destination: "Petra" };
+
+  expect(await completePlan(body, { 422: "Try again later." })).toBe("Try again later.");
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ error: "Check where it is." }), { status: 422 }));
+  expect(await completePlan(body)).toBe("Check where it is.");
 });

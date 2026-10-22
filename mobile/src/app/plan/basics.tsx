@@ -1,19 +1,29 @@
-import { Stack, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
 import { BlurView } from '@/components/blur';
 import { SymbolView } from '@/components/symbol';
-import { geocode } from '@/api/tripMateApi';
+import type { ReadyTrip } from '@shared/readyTrips';
+
+import { completePlan, geocode } from '@/api/tripMateApi';
+import type { PartyCounts, PlanDraft } from '@/api/types';
+import { isoDaysFromNow } from '@/components/form';
+import { useCardPhoto } from '@/components/home/postcard';
 import { PlacePhoto } from '@/components/place-photo';
 import { DateRow, PlanColors, SegmentRow, Section, StepperRow, TextRow } from '@/components/plan-ui';
-import { ChoiceRow } from '@/components/settings-list';
+import { ChoiceRow, ValueRow } from '@/components/settings-list';
 import { Polar, PolarFonts } from '@/constants/polar';
-import { GROUPS, groupForParty, partyForGroup, usePlanDraft } from '@/lib/planDraft';
+import { readyTripPrefill, suggestedBudget } from '@/lib/homeIdeas';
+import { GROUPS, groupForParty, partyForGroup, prefillPatch, toUserAnswers, usePlanDraft } from '@/lib/planDraft';
+import { paceFor } from '@/lib/readyTrips';
+import { formatMoney } from '@/lib/spend';
+import { useReadyTrips } from '@/lib/useReadyTrips';
 import { planTiles, type PlanTileId } from '@/lib/planTiles';
 import { crossFieldProblem, gapSentence, planGap } from '@/lib/formGap';
 import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
@@ -30,15 +40,32 @@ import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
  * on it, and a tile is one tap from changing.
  *
  * Canvas design "Phone plan · 3C Essentials, then make it yours".
+ *
+ * **The same page saves a ready-made trip** (`?ready=<slug>`, from its sheet's Use this plan). The
+ * trip has no dates, costs or coordinates, so this asks what Basics already asks, with the place and
+ * the length fixed by the plan: the photograph and title are the trip's, Where is not editable and
+ * Leave follows Arrive. The tiles shape its notes, not its stops, and the button saves it through
+ * the bring-your-own-plan route, marked `ready-made`. **Make it mine** turns the page back into the
+ * planner, the trip's stops now its must-sees, for a plan written around the traveller.
  */
 export default function Basics() {
   const router = useRouter();
   const { draft, patch } = usePlanDraft();
+  const { ready: readySlug } = useLocalSearchParams<{ ready?: string }>();
+  const catalogue = useReadyTrips(!!readySlug);
+  const [mine, setMine] = useState(false);
+  /** The ready-made trip this page is saving, while it is; `undefined` for the planner. */
+  const ready = mine ? undefined : catalogue?.find((t) => t.slug === readySlug);
+  const readyPhoto = useCardPhoto(ready);
+  /** Set once the traveller types a budget: until then a ready-made trip's follows the party and the basis. */
+  const budgetTyped = useRef(false);
+  const followBudget = (party: PartyCounts, basis: PlanDraft['budgetBasis']) =>
+    ready && !budgetTyped.current ? { budget: readyBudget(ready, basis, party) } : {};
   // A counter changed by hand carries the preset with it, so "Who" never contradicts the counts.
   const setParty = (change: Partial<typeof draft.party>) =>
     patch((prev) => {
       const party = { ...prev.party, ...change };
-      return { party, group: groupForParty(party, prev.group) };
+      return { party, group: groupForParty(party, prev.group), ...followBudget(party, prev.budgetBasis) };
     });
   const { destination, startDate, endDate, budget } = draft;
   const budgetBasis = draft.budgetBasis ?? 'whole_party';
@@ -66,6 +93,24 @@ export default function Basics() {
     // Once, on first mount: re-running would fight the traveller's own edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Once, when the ready-made trip is known: its place, its length from the arrival, its pace, and the party's budget. */
+  const readySeeded = useRef(false);
+  useEffect(() => {
+    if (!ready || readySeeded.current) return;
+    readySeeded.current = true;
+    const pace = paceFor(ready.pace);
+    patch((prev) => {
+      const start = prev.startDate || isoDaysFromNow(30);
+      return {
+        destination: ready.destination,
+        startDate: start,
+        endDate: leaveFor(ready, start),
+        budget: readyBudget(ready, prev.budgetBasis, prev.party),
+        ...(pace ? { pace } : {}),
+      };
+    });
+  }, [ready, patch]);
 
   /**
    * Type-ahead for Where, from the same free Open-Meteo geocoder `/api/geocode` wraps — reached
@@ -131,7 +176,7 @@ export default function Basics() {
 
   const setStartDate = (value: string) => {
     closeSuggestions();
-    patch({ startDate: value });
+    patch(ready ? { startDate: value, endDate: leaveFor(ready, value) } : { startDate: value });
   };
   const setEndDate = (value: string) => {
     closeSuggestions();
@@ -139,6 +184,7 @@ export default function Basics() {
   };
   const setBudget = (text: string) => {
     closeSuggestions();
+    budgetTyped.current = true;
     setBudgetText(text);
     patch({ budget: Number(text.replace(/[^0-9.]/g, '')) || 0 });
   };
@@ -203,11 +249,57 @@ export default function Basics() {
   }
 
 
+  /** Held while the save is in flight; a ref beside the state, since two taps in one frame both see `saving` false. */
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [saveProblem, setSaveProblem] = useState<string | null>(null);
+
+  /** Use this plan: the trip's stops, in order, saved as a draft with the answers beside them. */
+  async function saveReadyPlan(trip: ReadyTrip) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveProblem(null);
+    const result = await completePlan({
+      destination: trip.destination,
+      startDate,
+      // The route reads one traveller's budget (own.tsx's "Budget per person"), whatever the toggle says here.
+      ...(budget > 0 ? { budget: Math.round(perPersonBudget(budget, budgetBasis, draft.party)) } : {}),
+      plan: {
+        destinationGuess: trip.destination,
+        isPlan: true,
+        days: trip.itinerary.map((d) => ({ stops: d.stops.map((s) => ({ name: s.name, ...(s.note ? { note: s.note } : {}) })) })),
+        loose: [],
+        notes: [],
+        unread: [],
+      },
+      origin: 'ready-made',
+      readyTrip: trip.slug,
+      userAnswers: toUserAnswers(draft),
+    }, { 422: UNPLACED });
+    if (result !== undefined && typeof result !== 'string') {
+      // Still held: the plan modal closes onto the trip, as `own.tsx`'s build does.
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace(`/trip/${result.id}`);
+      return;
+    }
+    savingRef.current = false;
+    setSaving(false);
+    setSaveProblem(result ?? 'Couldn’t reach TripMate. Your answers are kept.');
+  }
+
+  /** Back to the planner, the trip as a starting point. No dates in the patch, so the arrival, party and budget stay. */
+  function makeItMine(trip: ReadyTrip) {
+    patch(prefillPatch(readyTripPrefill(trip, null)));
+    setSaveProblem(null);
+    setMine(true);
+  }
 
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   // 402:262, never shorter than what the band holds (see the note on `PlacePhoto` below).
-  const heroRatio = screenWidth / Math.max((screenWidth * 262) / 402, insets.top + HERO_BODY);
+  // A trip's title can take two lines where "Plan a trip" takes one.
+  const heroRatio = screenWidth / Math.max((screenWidth * 262) / 402, insets.top + HERO_BODY + (ready ? TITLE_LINE : 0));
   const tiles = planTiles(draft);
   const open = (id: PlanTileId) => {
     closeSuggestions();
@@ -218,7 +310,9 @@ export default function Basics() {
     missed ? 'We couldn’t find that place, but the plan will still work.' : null,
     problem,
     asked ? gapSentence(gap, problem) : null,
+    ready ? saveProblem : null,
   ].filter((n): n is string => !!n);
+  const leave = endDate ? new Date(`${endDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -235,7 +329,7 @@ export default function Basics() {
             the field sat 2pt above the sheet where plan-3C leaves 14pt. The floor goes into the
             ratio, not into a `minHeight`: with a ratio, Yoga widens the box to keep it when the
             height is clamped, and the band (and the field in it) ran past the screen's right edge. */}
-        <PlacePhoto name={city || 'Travel'} aspectRatio={heroRatio} radius={0} scrim={0.42} style={styles.hero}>
+        <PlacePhoto name={city || 'Travel'} source={ready ? readyPhoto : undefined} aspectRatio={heroRatio} radius={0} scrim={0.42} style={styles.hero}>
           <View style={[styles.heroInner, { paddingTop: insets.top + 4 }]}>
             <Pressable
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
@@ -245,8 +339,8 @@ export default function Basics() {
               <SymbolView name={{ ios: 'xmark', android: 'close' }} size={15} weight="semibold" tintColor="#fff" />
             </Pressable>
             <View style={styles.grow} />
-            <Text style={styles.title} accessibilityRole="header">
-              Plan a trip
+            <Text style={styles.title} accessibilityRole="header" numberOfLines={2}>
+              {ready ? ready.title : 'Plan a trip'}
             </Text>
             <View style={styles.where}>
               <SymbolView name={{ ios: 'mappin.and.ellipse', android: 'place' }} size={17} tintColor={PlanColors.grey} />
@@ -263,10 +357,12 @@ export default function Basics() {
                 autoCorrect={false}
                 returnKeyType="done"
                 accessibilityLabel="Where"
+                // The plan is of this place; a different one is Make it mine.
+                editable={!ready}
                 maxFontSizeMultiplier={1.6}
                 style={styles.whereInput}
               />
-              {destination ? (
+              {destination && !ready ? (
                 <Pressable onPress={() => setDestination('')} accessibilityRole="button" accessibilityLabel="Clear where" hitSlop={10}>
                   <SymbolView name={{ ios: 'xmark.circle.fill', android: 'cancel' }} size={17} tintColor={PlanColors.faint} />
                 </Pressable>
@@ -297,9 +393,13 @@ export default function Basics() {
             </Section>
           ) : null}
 
-          <Section header="The essentials" footer={readout}>
+          <Section header="The essentials" footer={ready ? `Estimate from ${formatMoney(ready.priceFrom)} per person, excluding flights` : readout}>
             <DateRow label="Arrive" value={startDate} onChange={setStartDate} />
-            <DateRow label="Leave" value={endDate} minimumDate={startDate || undefined} onChange={setEndDate} />
+            {ready ? (
+              <ValueRow label="Leave" value={leave} />
+            ) : (
+              <DateRow label="Leave" value={endDate} minimumDate={startDate || undefined} onChange={setEndDate} />
+            )}
             <TextRow
               ref={budgetField}
               label="Budget"
@@ -320,7 +420,7 @@ export default function Basics() {
                 { value: 'per_person', label: 'Per person' },
               ]}
               value={budgetBasis}
-              onChange={(next) => patch({ budgetBasis: next })}
+              onChange={(next) => patch({ budgetBasis: next, ...followBudget(draft.party, next) })}
             />
             {/* A shortcut into the counters, not a second question about the same thing — see
                 `partyForGroup`. The counters stay editable, so a preset is a starting point. */}
@@ -330,7 +430,7 @@ export default function Basics() {
               options={GROUPS}
               onChange={(group) => {
                 const seeded = partyForGroup(group);
-                patch(seeded ? { group, party: seeded } : { group });
+                patch(seeded ? { group, party: seeded, ...followBudget(seeded, draft.budgetBasis) } : { group });
               }}
             />
             {draft.group === 'other' ? (
@@ -375,6 +475,14 @@ export default function Basics() {
               </Pressable>
             ))}
           </View>
+          {ready ? (
+            <View style={styles.readyFoot}>
+              <Text style={styles.readyNote}>These shape the notes and later changes, not this plan’s stops. To change the stops, make it yours instead.</Text>
+              <Pressable onPress={() => makeItMine(ready)} accessibilityRole="button" accessibilityHint="Plan it fresh, with this trip's stops as must-sees" hitSlop={8}>
+                <Text style={styles.readyLink}>Make it mine</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -387,25 +495,27 @@ export default function Basics() {
             {note}
           </Text>
         ))}
-        <Pressable
-          onPress={() => goOn(() => router.replace('/plan/generating'))}
-          accessibilityRole="button"
-          accessibilityHint={gap?.reason}
-          style={({ pressed }) => [styles.plan, pressed && styles.planPressed]}>
-          <Text style={styles.planText}>Plan my trip</Text>
-        </Pressable>
+        {ready ? (
+          <Pressable
+            onPress={() => saveReadyPlan(ready)}
+            disabled={saving}
+            accessibilityRole="button"
+            accessibilityState={{ busy: saving, disabled: saving }}
+            style={({ pressed }) => [styles.plan, pressed && styles.planPressed]}>
+            {saving ? <ActivityIndicator color={Polar.ink} /> : <Text style={styles.planText}>Use this plan</Text>}
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => goOn(() => router.replace('/plan/generating'))}
+            accessibilityRole="button"
+            accessibilityHint={gap?.reason}
+            style={({ pressed }) => [styles.plan, pressed && styles.planPressed]}>
+            <Text style={styles.planText}>Plan my trip</Text>
+          </Pressable>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
-}
-
-/** `YYYY-MM-DD`, n days from today, read with local accessors to match the date picker. */
-function isoDaysFromNow(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 const TILE_ICON: Record<PlanTileId, React.ComponentProps<typeof SymbolView>['name']> = {
@@ -419,6 +529,21 @@ const TILE_ICON: Record<PlanTileId, React.ComponentProps<typeof SymbolView>['nam
 
 /** Below the inset: 4 + close 38 + 12 + title 44 + 12 + field 52 + 38 padding, and 14 to spare. */
 const HERO_BODY = 214;
+/** One more line of the title, for a ready-made trip's name. */
+const TITLE_LINE = 44;
+
+/**
+ * A ready-made trip's suggested budget, in the unit the toggle says: `priceFrom` is one traveller's,
+ * so per person it is that, and in total it is that times the party.
+ */
+const readyBudget = (trip: ReadyTrip, basis: PlanDraft['budgetBasis'], party: PartyCounts) =>
+  basis === 'per_person' ? trip.priceFrom : suggestedBudget(trip, party.adults + party.children);
+
+/** Where is locked in ready mode, so the route's "check where it is" would point at nothing to change. */
+const UNPLACED = 'Couldn’t place this trip on the map right now. Try again, or make it yours below.';
+
+/** The last day of a ready-made trip from its arrival: the plan fixes the length. */
+const leaveFor = (trip: ReadyTrip, start: string) => readyTripPrefill(trip, start).end ?? start;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: PlanColors.ground },
@@ -465,6 +590,9 @@ const styles = StyleSheet.create({
   optional: { fontSize: 12, color: PlanColors.grey },
   tileTitle: { fontSize: 16, fontWeight: '600', color: PlanColors.ink },
   tileValue: { fontSize: 13, lineHeight: 17, color: PlanColors.grey },
+  readyFoot: { marginHorizontal: 32, marginTop: 10, gap: 10 },
+  readyNote: { fontSize: 13, lineHeight: 18, color: PlanColors.grey },
+  readyLink: { fontSize: 15, fontWeight: '600', color: Polar.ember },
   dock: {
     position: 'absolute',
     left: 0,

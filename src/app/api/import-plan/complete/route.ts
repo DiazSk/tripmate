@@ -10,6 +10,7 @@ import { geocodeAnchors } from "@/lib/anchorGeocode";
 import { fetchAnchorHours } from "@/lib/anchorHours";
 import { fetchPoiOsmTags } from "@/lib/poiDetails";
 import { geocodeDestinationCached } from "@/lib/serverFetchCached";
+import { nominatimPlace } from "@/lib/nominatim";
 import { getWeatherForDates } from "@/lib/weather";
 import {
   assembleItinerary,
@@ -66,7 +67,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const geo = await geocodeDestinationCached(destination).catch(() => null);
+  const named = await geocodeDestinationCached(destination).catch(() => null);
+  // Open-Meteo knows cities, not regions ("Wadi Rum, Jordan", "Val d'Orcia, Italy"): without a
+  // point here no stop is looked up and the trip is refused, so Nominatim gets a second try. It
+  // gives no timezone, which stays unknown on that path.
+  const geo = named ?? (await nominatimPlace(destination));
   const stops = dated.flatMap(({ day }) => day.stops);
 
   // Stops renamed on the confirm screen, or never found, get one more look.
@@ -142,7 +147,7 @@ export async function POST(req: NextRequest) {
     chat_session_id: null,
     user_answers_json: userAnswers ? JSON.stringify(userAnswers) : null,
     status: "draft",
-    timezone: geo?.timezone ?? null,
+    timezone: named?.timezone ?? null,
   });
   return NextResponse.json({ id: trip.id });
 }

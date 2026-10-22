@@ -183,15 +183,21 @@ export async function readPlan(
   }
 }
 
-/** `POST /api/import-plan/complete` — build the confirmed plan into a draft trip. */
-export async function completePlan(body: CompletePlanRequest): Promise<{ id: string } | string | undefined> {
+/**
+ * `POST /api/import-plan/complete` — build the confirmed plan into a draft trip. `byStatus` lets a
+ * caller say a status in its own words where the server's sentence would point at the wrong thing.
+ */
+export async function completePlan(
+  body: CompletePlanRequest,
+  byStatus: Partial<Record<number, string>> = {}
+): Promise<{ id: string } | string | undefined> {
   try {
     const res = await fetchWithSession("/api/import-plan/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return errorMessage(res);
+    if (!res.ok) return byStatus[res.status] ?? errorMessage(res, SAVE_FAILURE);
     return (await res.json()) as { id: string };
   } catch {
     return undefined;
@@ -224,7 +230,8 @@ export async function readIdea(idea: string): Promise<IdeaRead | { error: string
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idea }),
     });
-    if (!res.ok) return { error: await errorMessage(res), limited: res.status === 429 || res.status === 503 };
+    // Not the planner's sentence: nothing was being generated, and "try generating again" would say it was.
+    if (!res.ok) return { error: await errorMessage(res, IDEA_FAILURE), limited: res.status === 429 || res.status === 503 };
     return (await res.json()) as IdeaRead;
   } catch {
     return undefined;
@@ -542,13 +549,16 @@ export async function generateTrip(
 }
 
 const GENERIC_FAILURE = "The planner didn't finish. Try generating again.";
+const IDEA_FAILURE = "Couldn’t read that idea. Try again, or plan it step by step.";
+const SAVE_FAILURE = "Couldn’t save this plan. Try again.";
 
-async function errorMessage(res: Response): Promise<string> {
+/** The server's own sentence, or `fallback` when the body has none (a proxy's HTML page, an empty 502). */
+async function errorMessage(res: Response, fallback = GENERIC_FAILURE): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
-    return body.error || GENERIC_FAILURE;
+    return body.error || fallback;
   } catch {
-    return GENERIC_FAILURE;
+    return fallback;
   }
 }
 

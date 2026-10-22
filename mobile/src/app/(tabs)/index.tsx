@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -137,9 +137,8 @@ export default function Home() {
   const pills = ready && 'value' in ready ? pillCounts(ready.value) : [];
   // A pill the catalogue no longer has (its last trip went) falls back to All rather than to nothing.
   const active = pills.some((p) => p.pill === pill) ? pill : 'All';
-  // `as Href` until the idea and ready-made screens land (plan Task 7) and typed routes know them.
   const sendIdea = (idea: string) =>
-    router.push(`/idea?text=${encodeURIComponent(idea)}${lastRequestReachedServer() === false ? '&offline=1' : ''}` as Href);
+    router.push(`/idea?text=${encodeURIComponent(idea)}${lastRequestReachedServer() === false ? '&offline=1' : ''}`);
 
   return (
     <View style={styles.screen}>
@@ -198,7 +197,7 @@ export default function Home() {
         )}
         {/* Always rendered off a trip, even empty, so `PILLS_INDEX` keeps pointing at it. */}
         {trip ? null : <View style={styles.pills}>{pills.length ? <FilterPills pills={pills} active={active} onChange={setPill} /> : null}</View>}
-        {trip ? null : <ReadySections state={ready} pill={active} onShowAll={() => setPill('All')} onOpen={(slug) => router.push(`/ready/${slug}` as Href)} />}
+        {trip ? null : <ReadySections state={ready} pill={active} onShowAll={() => setPill('All')} onOpen={(slug) => router.push(`/ready/${slug}`)} />}
       </ScrollView>
 
       <Bar folded={folded} glass={!!trip} title={title} top={insets.top} />

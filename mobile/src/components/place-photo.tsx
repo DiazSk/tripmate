@@ -18,6 +18,11 @@ type Props = {
   scrim?: number | false;
   /** Drawn over the photograph — a dateline, a badge. Positioned by the caller. */
   children?: React.ReactNode;
+  /**
+   * A picture already chosen (a ready-made trip's bundled scene): drawn instead of the lookup, which
+   * then asks nothing. `null` is "this has no photograph", the slate alone.
+   */
+  source?: number | { uri: string } | null;
   style?: ViewStyle;
 };
 
@@ -40,15 +45,17 @@ export function PlacePhoto({
   scrim = false,
   children,
   style,
+  source,
 }: Props) {
-  const photo = usePlacePhoto(name);
-  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? undefined;
+  const photo = usePlacePhoto(source === undefined ? name : undefined);
+  const looked = photo?.imageUrl ?? photo?.thumbnailUrl;
+  const picture = source !== undefined ? source : looked ? { uri: looked } : null;
 
   return (
     <View style={[styles.ground, { aspectRatio, borderRadius: radius }, style]}>
-      {url ? (
+      {picture ? (
         <Image
-          source={{ uri: url }}
+          source={picture}
           alt={`Photograph of ${name}`}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
@@ -61,7 +68,7 @@ export function PlacePhoto({
         />
       ) : null}
 
-      {url && scrim !== false ? (
+      {picture && scrim !== false ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${scrim})` }]} />
       ) : null}
 

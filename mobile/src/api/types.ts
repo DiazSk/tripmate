@@ -1,5 +1,7 @@
 import type { Located } from '@shared/evidence';
 import type { HomeCity } from '@shared/travelerProfile';
+import type { CompletePlanRequest as SharedCompletePlanRequest } from '@shared/importedPlan';
+
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
 /**
@@ -665,11 +667,13 @@ export interface SavedPlace {
   createdAt: string;
 }
 
-export type {
-  CompletePlanRequest,
-  ImportedDay,
-  ImportedPlan,
-  ImportedStop,
-} from '@shared/importedPlan';
+export type { ImportedDay, ImportedPlan, ImportedStop } from '@shared/importedPlan';
+
+/**
+ * The shared request with this app's `UserAnswers`. The server's type marks fields required that
+ * `toUserAnswers` leaves out when unsaid (`purpose`); the route takes any object and stores it as a
+ * generated trip's answers are stored, which is this same shape.
+ */
+export type CompletePlanRequest = Omit<SharedCompletePlanRequest, 'userAnswers'> & { userAnswers?: UserAnswers };
 
 export type { StoryBeat, StoryScript } from '@shared/storyScript';

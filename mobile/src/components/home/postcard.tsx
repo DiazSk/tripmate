@@ -27,7 +27,7 @@ import { formatMoney } from '@/lib/spend';
  * a missing photo is a finished card rather than an empty box.
  */
 /** A bundled asset (Metro's module number) or a fetched photo. */
-type Photo = number | { uri: string };
+export type Photo = number | { uri: string };
 
 const SCENES: Record<string, number> = {
   'petra-at-first-light': petra,
@@ -39,10 +39,14 @@ const SCENES: Record<string, number> = {
   'sinaia-and-the-carpathians': peles,
 };
 
-function useCardPhoto(trip: ReadyTrip): Photo | null {
-  const scene = SCENES[trip.slug];
+/**
+ * Also the detail sheet's and the planner's photograph, so both open on the picture the card
+ * showed. `undefined` (the planner with no trip) looks nothing up.
+ */
+export function useCardPhoto(trip: ReadyTrip | undefined): Photo | null {
+  const scene = trip ? SCENES[trip.slug] : undefined;
   // No lookup for a trip with a scene: `usePlacePhoto(undefined)` subscribes to nothing.
-  const photo = usePlacePhoto(scene ? undefined : trip.destination);
+  const photo = usePlacePhoto(scene || !trip ? undefined : trip.destination);
   const uri = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
   return scene ?? (uri ? { uri } : null);
 }

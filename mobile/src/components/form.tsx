@@ -327,6 +327,13 @@ export function toIso(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** `YYYY-MM-DD`, n days from today, read with local accessors to match the date picker. */
+export function isoDaysFromNow(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return toIso(d);
+}
+
 /**
  * The primary action. Jade, which the One Meaning Rule reserves for exactly this and which
  * nothing in the app has legitimately needed until now — with dark ink on it, because

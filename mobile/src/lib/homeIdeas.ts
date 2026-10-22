@@ -1,4 +1,5 @@
 import type { IdeaRead } from '@shared/ideaRead';
+import { realDate } from '@shared/importedPlan';
 import type { ReadyTrip } from '@shared/readyTrips';
 
 import { fold } from '@/lib/ownPlan';
@@ -75,12 +76,23 @@ export function matchTrips(trips: ReadyTrip[], read: IdeaRead): ReadyTrip[] {
 const words = (s: string) => fold(s).split(' ').filter(Boolean);
 
 /**
+ * Words a trip idea is full of and a trip's title often shares, which say nothing about the place:
+ * "petra and wadi rum" found "Jaipur in pink and gold" on its "and".
+ */
+const FILLER = new Set([
+  'and', 'the', 'for', 'with', 'from', 'into', 'over', 'under', 'about', 'around', 'near', 'some', 'somewhere',
+  'day', 'days', 'night', 'nights', 'week', 'weeks', 'weekend', 'trip', 'trips', 'long', 'short', 'not', 'too',
+  'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'our', 'partner', 'friends',
+  'budget', 'mid', 'range', 'slow', 'fast', 'rushed', 'that', 'this', 'where', 'can', 'all',
+]);
+
+/**
  * The offline stand-in for `matchTrips`, for when the reader could not be asked: whole words of
- * three letters or more from what was typed against whole words of a trip's own text. Whole words,
- * so "and" never finds "Islands".
+ * three letters or more from what was typed, less `FILLER`, against whole words of a trip's own
+ * text. Whole words, so "land" never finds "Islands".
  */
 export function keywordTrips(trips: ReadyTrip[], text: string): ReadyTrip[] {
-  const wanted = [...new Set(words(text).filter((w) => w.length >= 3))];
+  const wanted = [...new Set(words(text).filter((w) => w.length >= 3 && !FILLER.has(w)))];
   return trips
     .map((t) => {
       const has = new Set([t.destination, t.country, t.region, t.monument, t.title, ...t.tags].flatMap(words));
@@ -124,14 +136,18 @@ export function ideaPrefill(read: IdeaRead, today: string): PlanPrefillParams {
   return out;
 }
 
-/** The planner's fields from a ready-made trip: its stops become the must-include list, in the order they are walked. */
+/**
+ * The planner's fields from a ready-made trip: its stops become the must-include list, in the order
+ * they are walked. A start that is not a real calendar day writes no dates, since `addDays` would
+ * throw on it and a screen's date state is not something to crash over.
+ */
 export function readyTripPrefill(trip: ReadyTrip, start: string | null): PlanPrefillParams {
   const out: PlanPrefillParams = { destination: trip.destination };
   const pace = paceFor(trip.pace);
   if (pace) out.pace = pace;
   const must = trip.itinerary.flatMap((d) => d.stops.map((s) => s.name)).join(', ');
   if (must) out.must = must;
-  if (start) {
+  if (start && realDate(start)) {
     out.start = start;
     out.end = addDays(start, trip.days - 1);
   }
@@ -140,3 +156,13 @@ export function readyTripPrefill(trip: ReadyTrip, start: string | null): PlanPre
 
 /** `priceFrom` is per person, so the whole party's budget is that times the head count. */
 export const suggestedBudget = (trip: ReadyTrip, people: number): number => trip.priceFrom * Math.max(1, people);
+
+/**
+ * A prefill as `/plan/basics`'s query string, which `PlanDraftProvider` reads back. Encoded as Home
+ * encodes `/idea?text=`, with `encodeURIComponent`, so a space is `%20` and never a `+` left to chance.
+ */
+export const prefillQuery = (p: PlanPrefillParams): string =>
+  Object.entries(p)
+    .filter((e): e is [string, string] => typeof e[1] === 'string' && e[1] !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');

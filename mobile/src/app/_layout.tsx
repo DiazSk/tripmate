@@ -46,6 +46,9 @@ const TRIP_SHEET_OPTIONS: ScreenOptions = {
   contentStyle: { backgroundColor: Colors.canvas },
 };
 
+/** Home's two sheets, on white as Home's cards are: a ready-made trip, and Meri's answer to an idea. */
+const HOME_SHEET_OPTIONS: ScreenOptions = { ...TRIP_SHEET_OPTIONS, contentStyle: { backgroundColor: '#fff' } };
+
 /** The dev previews (`__DEV__` only, each returns null in a release bundle), with what each draws. */
 const PREVIEWS: [string, ScreenOptions][] = [
   ['offline', { headerShown: false }],
@@ -170,6 +173,8 @@ export default function RootLayout() {
           {TRIP_SHEETS.map((name) => (
             <Stack.Screen key={name} name={`trip/[id]/${name}`} options={TRIP_SHEET_OPTIONS} />
           ))}
+          <Stack.Screen name="ready/[slug]" options={HOME_SHEET_OPTIONS} />
+          <Stack.Screen name="idea" options={HOME_SHEET_OPTIONS} />
           {/* A trip somebody sent you: its cover runs under the status bar, so no header. */}
           <Stack.Screen name="s/[token]" options={{ headerShown: false }} />
           <Stack.Screen name="signin" options={{ presentation: 'fullScreenModal', headerShown: false }} />

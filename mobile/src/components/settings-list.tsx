@@ -176,7 +176,8 @@ export function CheckRow({ label, on, onPress, trailing }: { label: string; on: 
 /** A plain row: a label and a value, nothing to press. */
 export function ValueRow({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.row}>
+    // One element to VoiceOver and TalkBack, so the label and its value are read together.
+    <View style={styles.row} accessible accessibilityLabel={`${label}, ${value}`}>
       <Text style={styles.label}>{label}</Text>
       <Text style={[styles.value, styles.valueWide]} numberOfLines={1}>
         {value}

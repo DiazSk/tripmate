@@ -6,6 +6,7 @@ import {
   ideaPrefill,
   keywordTrips,
   matchTrips,
+  prefillQuery,
   readyTripPrefill,
   suggestedBudget,
   typewriterTick,
@@ -104,6 +105,11 @@ describe('keywordTrips', () => {
     expect(keywordTrips(trips, 'petra and wadi rum')).toHaveLength(1);
     expect(keywordTrips(trips, 'petra and wadi rum')[0].slug).toBe('petra');
   });
+  test('filler words match nothing: "and" does not find "Jaipur in pink and gold"', () => {
+    const jaipur = trip({ slug: 'jaipur', title: 'Jaipur in pink and gold', destination: 'Jaipur, India', country: 'India' });
+    expect(keywordTrips([...trips, jaipur], 'petra and wadi rum').map((t) => t.slug)).toEqual(['petra']);
+    expect(keywordTrips([trip({ slug: 'x', title: 'Days with the family for under a week' })], 'four days with the kids for under 2000')).toEqual([]);
+  });
   test('"and" never matches "Islands"', () => {
     const islands = [trip({ slug: 'x', tags: ['Islands'], title: 'Islands' })];
     expect(keywordTrips(islands, 'and')).toEqual([]);
@@ -154,9 +160,17 @@ describe('readyTripPrefill', () => {
   test('end is start + days - 1', () => {
     expect(readyTripPrefill(petra, '2026-12-30')).toMatchObject({ start: '2026-12-30', end: '2027-01-01' });
   });
+  test('a start that is not a calendar day writes no dates rather than throwing', () => {
+    expect(readyTripPrefill(petra, '2026-13-40').start).toBeUndefined();
+    expect(readyTripPrefill(petra, '').end).toBeUndefined();
+  });
 });
 
 test('suggestedBudget is priceFrom per person', () => {
   expect(suggestedBudget(petra, 2)).toBe(2900);
   expect(suggestedBudget(petra, 0)).toBe(1450);
+});
+
+test('prefillQuery encodes each field for /plan/basics', () => {
+  expect(prefillQuery({ destination: 'Lisbon, Portugal', pace: 'relaxed' })).toBe('destination=Lisbon%2C%20Portugal&pace=relaxed');
 });
