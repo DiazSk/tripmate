@@ -52,7 +52,8 @@ export function Avatar({ account, size = 84, editable = false }: { account: Acco
     <Image source={{ uri: account.image }} style={disc} contentFit="cover" transition={200} />
   ) : account ? (
     <View style={[disc, styles.center, { backgroundColor: avatarTint(account.id) }]}>
-      <Text style={[styles.initials, { fontSize: size * 0.36 }]}>{initialsFor(account.name)}</Text>
+      {/* Sized to the disc, which does not grow with Dynamic Type, so neither do the letters. */}
+      <Text allowFontScaling={false} style={[styles.initials, { fontSize: size * 0.36 }]}>{initialsFor(account.name)}</Text>
     </View>
   ) : (
     <View style={[disc, styles.center, styles.empty]}>

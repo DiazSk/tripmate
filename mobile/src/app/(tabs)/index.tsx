@@ -1,43 +1,56 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { clearsIn } from '@shared/memories';
+import type { ReadyTrip } from '@shared/readyTrips';
 
 import { BlurView } from '@/components/blur';
-import { SymbolView } from '@/components/symbol';
 import { useAccount } from '@/api/auth';
 import { usePlacePhoto } from '@/api/placePhotos';
 import { lastRequestReachedServer } from '@/api/session';
 import { listTrips } from '@/api/tripMateApi';
 import type { Trip, TripSummary } from '@/api/types';
-import { TripPhotoWidget, TripWidgets, Widget, WidgetGrid, WidgetIcon, widgetText } from '@/components/home-widgets';
+import { Avatar } from '@/components/avatar';
+import { FilterPills } from '@/components/home/filter-pills';
+import { MeriSearch } from '@/components/home/meri-search';
+import { ReadySections } from '@/components/home/ready-sections';
+import { TripPhotoWidget, TripWidgets, Widget, WidgetGrid, widgetText } from '@/components/home-widgets';
 import { OfflineScreen } from '@/components/offline-screen';
-import { PlusButton, usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
+import { usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
-import { formatRange } from '@/lib/dayDisplay';
-import { METHOD } from '@/lib/method';
-import { loadSavedPlaces, loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
+import { pillCounts, type Pill } from '@/lib/readyTrips';
+import { loadReadyTrips, loadSavedPlaces, loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
 import { daysUntil, todayISO, tripShelves } from '@/lib/tripsWall';
 import { useFocusedFetch, useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
 
+/** The bar the greeting folds into, under the status bar. */
+const BAR = 50;
+/** The root scroll view's children, in order, when not on a trip: the pills are the fourth. */
+const PILLS_INDEX = 3;
 
 /**
- * Home, as a page of widgets (canvas design "Phone home · 4 Widgets with a live next stop").
+ * Home (design D, "Phone Home · D · Combined").
  *
- * **Two jobs, and the screen tells them apart.** Before a trip it is where you start one: the next
- * trip counting down, the two ways in (plan one, bring your own), the draft you have not kept,
- * what is later, and how TripMate plans. During one it is "what now" (`TripWidgets`): the next stop
- * as a Live Activity, where you are, the weather, a saved place near you, the rest of the day.
+ * **Two jobs, and the screen tells them apart.** Before a trip it is where one starts: your own next
+ * trip and draft first, then Ask Meri for a trip, then ready-made trips under pinned filter pills.
+ * During one it is "what now" (`TripWidgets`): the next stop as a Live Activity, where you are, the
+ * weather, a saved place near you, the rest of the day — and none of the ideas.
  *
- * The greeting carries your name and folds into a glass bar as you scroll, with Plan a trip beside
- * it. Offline is the case this screen most has to survive, since it is the one you open standing
- * in a street: trips come through `loadTrips`, which falls back to what is on disk.
+ * **The pills pin with `stickyHeaderIndices`, so the scroll view starts under the bar.** A sticky
+ * header sticks at the scroll view's own top edge; a full-screen scroll view would pin the pills
+ * under the clock. So, not on a trip, the content is clipped at the bar's foot and the bar needs no
+ * glass (nothing passes beneath it). On a trip nothing pins, and the page keeps scrolling under the
+ * glass bar exactly as it did.
+ *
+ * Offline is the case this screen most has to survive, since it is the one you open standing in a
+ * street: trips come through `loadTrips` and the catalogue through `loadReadyTrips`, both falling
+ * back to what is on disk.
  */
 export default function Home() {
   const router = useRouter();
@@ -45,7 +58,26 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const { account } = useAccount();
   const [folded, setFolded] = useState(false);
+  // Component state only: it holds across tab switches because tab screens stay mounted.
+  const [pill, setPill] = useState<Pill>('All');
   usePolarStatusBar(true);
+
+  /**
+   * Focusing the Meri field lifts the whole card to just under the bar. iOS's own keyboard inset
+   * (`automaticallyAdjustKeyboardInsets`) scrolls only far enough to show the caret's line, which
+   * left the chips and the send under the keyboard; so once the keyboard is up, the card is put
+   * where all of it shows. Refs, not state: none of this is drawn.
+   */
+  const scroller = useRef<ScrollView>(null);
+  const searchY = useRef(0);
+  const searching = useRef(false);
+  const liftSearch = () => scroller.current?.scrollTo({ y: Math.max(0, searchY.current - 8), animated: true });
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', () => {
+      if (searching.current) scroller.current?.scrollTo({ y: Math.max(0, searchY.current - 8), animated: true });
+    });
+    return () => shown.remove();
+  }, []);
 
   /** On focus, not on mount: "Up next" has to notice a trip kept a moment ago in the wizard. */
   const { data: fetched, retry } = useFocusedFetchWithRetry(
@@ -57,6 +89,9 @@ export default function Home() {
   const offline = listed?.cachedAt != null;
   // Drafts are a network nicety: nothing is cached for them, and a miss is simply no widget.
   const drafts = useFocusedFetch(async () => (await listTrips('draft')) ?? []) ?? [];
+  // "Couldn't ask, nothing on disk" draws the same quiet line as "the catalogue is down": `undefined`
+  // is the loading skeleton, and a request that never answers must not leave it there for good.
+  const ready = useFocusedFetch(async (): Promise<Cached<ReadyTrip[]> | { unavailable: true }> => (await loadReadyTrips()) ?? { unavailable: true });
 
   /**
    * The trip you are on, if you are on one: two reads, and only while one is running, because the
@@ -94,178 +129,136 @@ export default function Home() {
     );
   }
 
-  const tripPage = trip ? (
-    <TripWidgets
-      trip={trip}
-      today={tripToday}
-      cachedAt={onTrip?.cachedAt ?? null}
-      onOpenTrip={() => router.push(`/trip/${trip.id}`)}
-      onAsk={offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)}
-      saved={saved}
-    />
-  ) : null;
-
   const first = account?.name?.trim().split(/\s+/)[0];
   const hello = greeting();
   const title = trip ? 'Today' : first ? `${hello}, ${first}` : hello;
   const dateLine = trip ? tripLine(trip, tripToday) : longDate();
 
+  const pills = ready && 'value' in ready ? pillCounts(ready.value) : [];
+  // A pill the catalogue no longer has (its last trip went) falls back to All rather than to nothing.
+  const active = pills.some((p) => p.pill === pill) ? pill : 'All';
+  // `as Href` until the idea and ready-made screens land (plan Task 7) and typed routes know them.
+  const sendIdea = (idea: string) =>
+    router.push(`/idea?text=${encodeURIComponent(idea)}${lastRequestReachedServer() === false ? '&offline=1' : ''}` as Href);
+
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 52 }]}
+        ref={scroller}
+        style={trip ? null : { marginTop: insets.top + BAR }}
+        contentContainerStyle={[styles.content, { paddingTop: trip ? insets.top + 52 : 2 }]}
+        stickyHeaderIndices={trip ? undefined : [PILLS_INDEX]}
+        // The Meri field sits mid-page: iOS insets the page by the keyboard and scrolls the focused
+        // field above it, as the planner's sheets do (`plan-ui.tsx`). Android resizes the window.
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         scrollEventThrottle={32}
         onScroll={(e) => setFolded(e.nativeEvent.contentOffset.y > 46)}>
         <View style={styles.head}>
-          <Text maxFontSizeMultiplier={1.6} style={styles.date}>{dateLine.toUpperCase()}</Text>
-          <Text maxFontSizeMultiplier={1.3} style={[styles.title, fonts && styles.titleFont]} accessibilityRole="header" numberOfLines={2}>
-            {title}
-          </Text>
+          <View style={styles.headText}>
+            <Text maxFontSizeMultiplier={1.6} style={styles.date}>{dateLine.toUpperCase()}</Text>
+            <Text maxFontSizeMultiplier={1.3} style={[styles.title, fonts && styles.titleFont, fonts && !trip && styles.titleHome]} accessibilityRole="header" numberOfLines={2}>
+              {title}
+            </Text>
+          </View>
+          {trip ? null : (
+            <Pressable onPress={() => router.push('/(tabs)/profile')} accessibilityRole="button" accessibilityLabel="Your profile" hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
+              <Avatar account={account} size={36} />
+            </Pressable>
+          )}
         </View>
 
-        {tripPage ?? (
-          <Planning
-            trips={trips}
-            drafts={drafts}
-            onPlan={() => router.push('/plan/basics')}
-            onImport={() => router.push('/plan/own')}
-            onOpen={(id) => router.push(`/trip/${id}`)}
-            onMethod={() => router.push('/how-it-works')}
-            onTrips={() => router.push('/(tabs)/trips')}
+        {trip ? (
+          <TripWidgets
+            trip={trip}
+            today={tripToday}
+            cachedAt={onTrip?.cachedAt ?? null}
+            onOpenTrip={() => router.push(`/trip/${trip.id}`)}
+            onAsk={offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)}
+            saved={saved}
           />
+        ) : (
+          <YourOwn trips={trips} drafts={drafts} onOpen={(id) => router.push(`/trip/${id}`)} onTrips={() => router.push('/(tabs)/trips')} />
         )}
+        {trip ? null : (
+          <View onLayout={(e) => (searchY.current = e.nativeEvent.layout.y)}>
+            <MeriSearch
+              offline={offline}
+              onSend={sendIdea}
+              onPlanStepByStep={() => router.push('/plan/basics')}
+              onBringPlan={() => router.push('/plan/own')}
+              onFocusChange={(on) => {
+                searching.current = on;
+                // With the keyboard already up (a chip after the field), there is no show event to wait for.
+                if (on) liftSearch();
+              }}
+            />
+          </View>
+        )}
+        {/* Always rendered off a trip, even empty, so `PILLS_INDEX` keeps pointing at it. */}
+        {trip ? null : <View style={styles.pills}>{pills.length ? <FilterPills pills={pills} active={active} onChange={setPill} /> : null}</View>}
+        {trip ? null : <ReadySections state={ready} pill={active} onShowAll={() => setPill('All')} onOpen={(slug) => router.push(`/ready/${slug}` as Href)} />}
       </ScrollView>
 
-      <Bar folded={folded} title={title} top={insets.top} onPlan={() => router.push('/plan/basics')} />
+      <Bar folded={folded} glass={!!trip} title={title} top={insets.top} />
     </View>
   );
 }
 
-/** The glass bar the greeting folds into, with Plan a trip beside it, always. */
-function Bar({ folded, title, top, onPlan }: { folded: boolean; title: string; top: number; onPlan: () => void }) {
+/** The bar the greeting folds into. Glass only on a trip, the one page that scrolls beneath it. */
+function Bar({ folded, glass, title, top }: { folded: boolean; glass: boolean; title: string; top: number }) {
   return (
-    <View style={[styles.bar, { paddingTop: top, height: top + 50 }]} pointerEvents="box-none">
-      {folded ? <BlurView intensity={60} tint="systemChromeMaterialLight" style={StyleSheet.absoluteFill} /> : null}
-      {folded ? <View style={styles.barRule} /> : null}
+    <View style={[styles.bar, { paddingTop: top, height: top + BAR }]} pointerEvents="box-none">
+      {folded && glass ? <BlurView intensity={60} tint="systemChromeMaterialLight" style={StyleSheet.absoluteFill} /> : null}
+      {folded && glass ? <View style={styles.barRule} /> : null}
       <Text maxFontSizeMultiplier={1.6} style={[styles.barTitle, !folded && styles.hidden]} numberOfLines={1} accessibilityElementsHidden={!folded}>
         {title}
       </Text>
-      <View style={styles.barEnd}>
-        <PlusButton onPress={onPlan} />
-      </View>
     </View>
   );
 }
 
-function Planning({
-  trips,
-  drafts,
-  onPlan,
-  onImport,
-  onOpen,
-  onMethod,
-  onTrips,
-}: {
-  trips: TripSummary[] | null | undefined;
-  drafts: TripSummary[];
-  onPlan: () => void;
-  onImport: () => void;
-  onOpen: (id: string) => void;
-  onMethod: () => void;
-  onTrips: () => void;
-}) {
+/**
+ * Your own plans, before anyone else's: the next trip you kept (or, with none, an unkept plan for
+ * days still ahead) and the draft line. Nothing while the list loads, so ideas are not pushed down
+ * and then back up.
+ */
+function YourOwn({ trips, drafts, onOpen, onTrips }: { trips: TripSummary[] | null | undefined; drafts: TripSummary[]; onOpen: (id: string) => void; onTrips: () => void }) {
   const today = todayISO();
-  const { upcoming, past } = tripShelves(trips ?? [], today);
-  // With nothing kept ahead, an unkept plan for days still to come leads the page (review H3):
-  // "Your first trip" above a draft said no trip existed while one did. Marked as a draft on the
-  // card, and so not repeated in the Draft widget below.
+  const { upcoming } = tripShelves(trips ?? [], today);
+  // Marked as a draft on the card, and so not repeated in the Draft widget below (review H3).
   const draftLead = upcoming[0] ? null : (tripShelves(drafts, today).upcoming[0] ?? null);
-  const lead = upcoming[0] ?? draftLead ?? past[0];
-  // Later: what is still to come after the lead, then the latest memory once something is ahead.
-  const later = [...upcoming.slice(1, 4), ...(upcoming.length ? past.slice(0, 1) : [])];
+  const lead = upcoming[0] ?? draftLead;
   const rest = draftLead ? drafts.filter((d) => d.id !== draftLead.id) : drafts;
   const draft = rest[0];
-
+  if (trips === undefined || (trips && !lead && !draft)) return <View />;
   return (
-    <>
+    <View style={styles.own}>
       <WidgetGrid>
-        {trips === undefined ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={Polar.ink} />
-          </View>
-        ) : trips === null ? (
-          <Widget size="medium" tone="warn" label="Not loaded">
+        {trips === null ? (
+          <Widget size="medium" fit tone="warn" label="Not loaded">
             <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>Couldn’t reach TripMate. Your trips show up here once it answers.</Text>
           </Widget>
         ) : lead ? (
-          <LeadWidget trip={lead} upcoming={lead !== past[0]} draft={lead === draftLead} today={today} onPress={() => onOpen(lead.id)} />
-        ) : (
-          // No pill of its own: Plan a trip is already the small orange widget beside it and the +
-          // above, and the whole card still plans. Sized to its words, so the space the pill took
-          // is not left as a hole in a two-row card.
-          <Widget size="medium" fit tone="paper" label="Your first trip" onPress={onPlan} accessibilityLabel="Your first trip. Plan a trip">
-            <Text maxFontSizeMultiplier={1.3} style={styles.first}>Days worth keeping, written for where you are going.</Text>
-            <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>Tell TripMate where, when and how much. It writes the days and checks every place.</Text>
-          </Widget>
-        )}
-
-        <Widget size="small" tone="signal" label="New" onPress={onPlan} accessibilityLabel="Plan a trip">
-          <WidgetIcon name="sparkles" />
-          <Text maxFontSizeMultiplier={1.6} style={widgetText.title}>Plan a trip</Text>
-          <Text maxFontSizeMultiplier={1.6} style={[widgetText.dim, styles.onSignal]}>Where, when, how much.</Text>
-        </Widget>
-        <Widget size="small" label="Import" onPress={onImport} accessibilityLabel="Bring your own plan">
-          <WidgetIcon name="doc.text" color={Polar.ember} />
-          <Text maxFontSizeMultiplier={1.6} style={widgetText.title}>Bring your plan</Text>
-          <Text maxFontSizeMultiplier={1.6} style={widgetText.dim}>Paste it, or a photo.</Text>
-        </Widget>
-
+          <LeadWidget trip={lead} draft={lead === draftLead} today={today} onPress={() => onOpen(lead.id)} />
+        ) : null}
         {draft ? <DraftWidget draft={draft} more={rest.length - 1} onPress={() => onOpen(draft.id)} onTrips={onTrips} /> : null}
       </WidgetGrid>
-
-      {later.length ? (
-        <View style={styles.later}>
-          <Text maxFontSizeMultiplier={1.6} style={styles.h} accessibilityRole="header">
-            Later
-          </Text>
-          <View style={styles.list}>
-            {later.map((t, i) => (
-              <LaterRow key={t.id} trip={t} today={today} memory={upcoming.length > 0 && t === past[0]} first={i === 0} onPress={() => onOpen(t.id)} />
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      <View style={styles.method}>
-        <WidgetGrid>
-          <Widget size="medium" label="How TripMate plans" onPress={onMethod}>
-            <View style={styles.steps}>
-              {METHOD.map((m) => (
-                <View key={m.number} style={styles.stepCell}>
-                  <Text maxFontSizeMultiplier={1.6} style={styles.stepNum}>{m.number}</Text>
-                  <Text maxFontSizeMultiplier={1.6} style={styles.stepTitle} numberOfLines={2}>
-                    {m.title}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </Widget>
-        </WidgetGrid>
-      </View>
-    </>
+    </View>
   );
 }
 
-function LeadWidget({ trip, upcoming, draft, today, onPress }: { trip: TripSummary; upcoming: boolean; draft: boolean; today: string; onPress: () => void }) {
+function LeadWidget({ trip, draft, today, onPress }: { trip: TripSummary; draft: boolean; today: string; onPress: () => void }) {
   const photo = usePlacePhoto(trip.destination);
   const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
-  const label = draft ? 'Draft · Up next' : upcoming ? 'Up next' : 'Latest memory';
   return (
     <TripPhotoWidget
-      label={label}
+      size="medium"
+      label={draft ? 'Draft · Up next' : 'Up next'}
       trip={trip}
       photo={url}
-      days={upcoming ? daysUntil(trip.startDate, today) : null}
+      days={daysUntil(trip.startDate, today)}
       note={draft ? clearsIn(trip) : null}
       onPress={onPress}
     />
@@ -289,25 +282,6 @@ function DraftWidget({ draft, more, onPress, onTrips }: { draft: TripSummary; mo
         </View>
       </View>
     </Widget>
-  );
-}
-
-function LaterRow({ trip, today, memory, first, onPress }: { trip: TripSummary; today: string; memory: boolean; first: boolean; onPress: () => void }) {
-  const photo = usePlacePhoto(trip.destination);
-  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
-  const days = daysUntil(trip.startDate, today);
-  const when = memory ? 'your latest memory' : days === 1 ? 'tomorrow' : `in ${days} days`;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.row, !first && styles.rowRuled, pressed && styles.rowPressed]}>
-      <View style={styles.rowThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={trip.id} /> : null}</View>
-      <View style={styles.rowText}>
-        <Text maxFontSizeMultiplier={1.6} style={styles.rowTitle} numberOfLines={1}>
-          {trip.destination.split(',')[0].trim()}
-        </Text>
-        <Text maxFontSizeMultiplier={1.6} style={styles.rowMeta} numberOfLines={1}>{`${formatRange(trip.startDate, trip.endDate)} · ${when}`}</Text>
-      </View>
-      <SymbolView name="chevron.right" size={13} tintColor="rgba(60,60,67,0.3)" weight="semibold" />
-    </Pressable>
   );
 }
 
@@ -336,38 +310,23 @@ const styles = StyleSheet.create({
   content: { paddingBottom: BarHeight + 40 },
   pressed: { opacity: 0.8 },
   hidden: { opacity: 0 },
-  head: { paddingHorizontal: 20, marginBottom: 16 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, marginBottom: 16 },
+  headText: { flex: 1 },
   date: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5, color: Polar.secondary },
   title: { marginTop: 2, fontSize: 36, lineHeight: 42, color: Polar.ink },
   titleFont: { fontFamily: PolarFonts.display, fontSize: 40, lineHeight: 44 },
+  // A size down beside the avatar, so "Good afternoon, Zaid" holds one line on a 400pt phone.
+  titleHome: { fontSize: 34, lineHeight: 38 },
 
   bar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   barRule: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(60,60,67,0.22)' },
   barTitle: { maxWidth: '70%', fontSize: 17, fontWeight: '600', color: '#000' },
-  barEnd: { position: 'absolute', right: 12, bottom: 3 },
 
-  loading: { width: '100%', height: 200, alignItems: 'center', justifyContent: 'center' },
-  first: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 34, color: Polar.ink, marginTop: 14, marginBottom: 6 },
-  onSignal: { color: 'rgba(31,42,68,0.75)' },
+  own: { marginBottom: 16 },
+  // The screen's own ground, so the rails scroll under the pinned row cleanly.
+  pills: { marginTop: 8, backgroundColor: GROUND },
 
   draft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   draftThumb: { width: 72, height: 72, overflow: 'hidden', borderRadius: 14, backgroundColor: Polar.deep },
   draftText: { flex: 1, gap: 3 },
-
-  later: { marginTop: 26, paddingHorizontal: 16 },
-  h: { marginHorizontal: 4, marginBottom: 8, fontSize: 20, fontWeight: '700', letterSpacing: -0.2, color: '#000' },
-  list: { overflow: 'hidden', borderRadius: 16, backgroundColor: '#fff' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 10, paddingRight: 14 },
-  rowRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(60,60,67,0.22)' },
-  rowPressed: { backgroundColor: '#E5E5EA' },
-  rowThumb: { width: 52, height: 52, overflow: 'hidden', borderRadius: 10, backgroundColor: Polar.deep },
-  rowText: { flex: 1, gap: 1 },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
-  rowMeta: { fontSize: 13, color: Polar.secondary },
-
-  method: { marginTop: 14 },
-  steps: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 8 },
-  stepCell: { width: '50%', flexDirection: 'row', gap: 6, paddingRight: 8 },
-  stepNum: { fontFamily: PolarFonts.condensed, fontSize: 13, lineHeight: 17, color: Polar.ember },
-  stepTitle: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 17, color: '#000' },
 });

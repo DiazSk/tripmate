@@ -382,10 +382,13 @@ export function TripPhotoWidget({
   photo,
   days,
   note,
+  size = 'large',
   onPress,
 }: {
   label: string;
   trip: { destination: string; startDate: string; endDate: string; budget?: number };
+  /** Large when the trip is the page; medium when ideas follow it (Home not on a trip). */
+  size?: 'medium' | 'large';
   photo: string | null;
   days: number | null;
   note?: string | null;
@@ -396,8 +399,12 @@ export function TripPhotoWidget({
   const meta = [formatRange(trip.startDate, trip.endDate), `${length} ${length === 1 ? 'day' : 'days'}`, trip.budget ? formatMoney(trip.budget) : null]
     .filter(Boolean)
     .join(' · ');
+  // A medium card is one row tall, so at the larger text sizes the meta reaches the countdown's
+  // corner: there it wraps short of it instead of running under the figure.
+  const { fontScale } = useWindowDimensions();
+  const crowded = size === 'medium' && days !== null && days > 0 && fontScale > 1.2;
   return (
-    <Widget size="large" photo={photo} label={label} onPress={onPress} accessibilityLabel={`${label}: ${trip.destination}${days !== null ? `, in ${days} days` : ''}${note ? `. ${note}` : ''}`}>
+    <Widget size={size} photo={photo} label={label} onPress={onPress} accessibilityLabel={`${label}: ${trip.destination}${days !== null ? `, in ${days} days` : ''}${note ? `. ${note}` : ''}`}>
       {days !== null && days > 0 ? (
         <View style={styles.daysToGo}>
           <Text maxFontSizeMultiplier={1.3} style={styles.daysValue}>{days}</Text>
@@ -407,7 +414,7 @@ export function TripPhotoWidget({
       <Text maxFontSizeMultiplier={1.3} style={styles.photoCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
         {city.toUpperCase()}
       </Text>
-      <Text maxFontSizeMultiplier={1.6} style={styles.photoMeta} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={1.6} style={[styles.photoMeta, crowded && styles.photoMetaShort]} numberOfLines={crowded ? 3 : 1}>
         {meta}
       </Text>
       {note ? <Text maxFontSizeMultiplier={1.6} style={styles.photoNote}>{note}</Text> : null}
@@ -461,6 +468,7 @@ const styles = StyleSheet.create({
   daysUnit: { marginTop: -16, marginRight: 3, fontSize: 13, fontWeight: '600', color: Polar.ice },
   photoCity: { fontFamily: PolarFonts.condensed, fontSize: 52, lineHeight: 56, color: Polar.ice },
   photoMeta: { fontSize: 15, lineHeight: 20, fontWeight: '500', color: Polar.ice, fontVariant: ['tabular-nums'] },
+  photoMetaShort: { maxWidth: '58%' },
   photoNote: { marginTop: 2, fontSize: 13, lineHeight: 17, color: Polar.frost68 },
 
   trip: { gap: GAP },
