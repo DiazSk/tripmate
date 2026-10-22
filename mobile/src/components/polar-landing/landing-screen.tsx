@@ -44,12 +44,12 @@ import { Scrim } from './scrim';
 
 /**
  * The Polar Interior landing, for the phone — the "TripMate — Polar Landing (Mobile)" design on the
- * MagicPath canvas: the welcome a signed-out phone opens on once (`launchTarget` in
- * `lib/authGate.ts`), and the tour Profile opens later.
+ * MagicPath canvas. It is the tour Profile opens; no launch goes here.
  *
- * **On the welcome there is nothing under it yet but Home**, so it offers Skip into the app, and
- * the plan and sign-in it leads to *replace* it: closing either lands on Home, not back here. As the
- * tour, it is pushed over Profile, so it offers Close and the hand-offs push as before.
+ * **The `?welcome=1` mode is still here but nothing opens it.** With nothing under it but Home, it
+ * offers Skip into the app, and the plan and sign-in it leads to *replace* it: closing either lands
+ * on Home, not back here. As the tour, it is pushed over Profile, so it offers Close and the
+ * hand-offs push as before.
  *
  * **It hands off rather than mocks.** Every "plan" here opens the real wizard at `/plan/basics`,
  * prefilled through route params where it knows what to say (`draftFromPrefill`): a sample plan's

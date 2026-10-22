@@ -1,17 +1,12 @@
-import { readSignedInFlag, readWelcomeSeen } from '@/api/session';
 import { launchTarget } from '@/lib/authGate';
-import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
 /**
  * Where a launch actually goes, decided before any navigation state exists.
  *
- * **This is the gate, and this file is the only place it can live without flashing.**
- * `redirectSystemPath` may return a promise, and expo-router awaits it through
- * `useThenable(getInitialState)` while rendering its `fallback` — `null` by default
- * (`expo-router/build/fork/NavigationContainer.js`). So the root layout does not mount during the
- * await, which means `AnimatedSplashOverlay` has not yet called `SplashScreen.hideAsync()` and the
- * native splash is still up. The keychain read is free, and the *first* navigation state the app
- * ever builds already has the right screen on top. Nothing has to be corrected after the fact.
+ * **Synchronous on purpose.** expo-router accepts a promise here, and awaits it while rendering its
+ * `fallback`, which would hold the root layout back behind the native splash. Nothing here is async,
+ * so the first navigation state the app ever builds already has the right screen on top, and nothing
+ * has to be corrected after the fact.
  *
  * The alternatives all decide too late. A `<Redirect>` in `(tabs)/index` mounts Home first and then
  * fires again on every visit to the Home tab; a `router.replace` in a root effect has to work out
@@ -21,30 +16,6 @@ import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
  * It runs on a plain icon tap too, not just on links: with no URL to open,
  * `expo-router/build/link/linking.js` substitutes `getRootURL()`, so `path` is always a string.
  */
-export async function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
-  // Fail open, and this `catch` is the whole reason the read is not inlined into the call below.
-  // A keychain that cannot be answered must not put a wall in front of anybody, so the default is
-  // "signed in" — the state that gates nothing. Being wrong here shows an account-less traveller
-  // Home; being wrong the other way locks an account holder out of their own app.
-  let signedIn = true;
-  try {
-    // The flag is written by `ClerkBridge`, because Clerk itself is not available before React
-    // mounts. A build with no Clerk key never opens on a sign-in screen that cannot work.
-    signedIn = !CLERK_PUBLISHABLE_KEY || (await readSignedInFlag());
-  } catch {
-    // Left as `true`.
-  }
-
-  // Fail open the same way: a welcome flag that cannot be read counts as seen, so a broken keychain
-  // opens on Home rather than showing the welcome on every launch. Only read when it can matter.
-  let seenWelcome = true;
-  if (!signedIn) {
-    try {
-      seenWelcome = await readWelcomeSeen();
-    } catch {
-      // Left as `true`.
-    }
-  }
-
-  return launchTarget({ path, initial, signedIn, seenWelcome }) ?? path;
+export function redirectSystemPath({ path }: { path: string }) {
+  return launchTarget({ path }) ?? path;
 }

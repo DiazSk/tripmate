@@ -23,15 +23,13 @@ SplashScreen.preventAutoHideAsync();
  *
  * The root layout had none: `getRoutesCore` derives one from the first child group matching the
  * layout's own route name, and the root's route is `''`, so nothing matched and every cold-start
- * deep link landed as a single-entry stack with `canGoBack() === false`. That was survivable while
- * the app always opened on Home. It is not now that `+native-intent` can open somewhere else: a
- * first signed-out launch opens on the welcome (`/landing?welcome=1`), and the escapes out of it and
- * out of sign-in need somewhere to go.
+ * deep link landed as a single-entry stack with `canGoBack() === false`. Every launch opens on Home,
+ * so nothing has to sit under a launch's screen to make it dismissible, but a deep link still needs
+ * one: that is what the anchor is for.
  *
- * So the welcome launch resolves to `[(tabs), landing]`: Skip has a Home to dismiss to, and the
- * planner or sign-in that replaces the landing closes onto Home. Cold-start `/trip/[id]` and
- * `/share` get the same treatment, which is why `share.tsx` can `back()` out of itself instead of
- * replacing the route under it.
+ * So a cold-start `/trip/[id]` or `/share` resolves to `[(tabs), trip]`, with Home under it, which is
+ * why `share.tsx` can `back()` out of itself instead of replacing the route under it. The landing is
+ * the tour Profile pushes, and it is not a launch target.
  */
 export const unstable_settings = { anchor: '(tabs)' };
 

@@ -19,8 +19,9 @@ import wadiRum from '@/assets/images/scenes/wadi-rum-desert.webp';
  * **The photograph is behind the `Stack`, and that is the whole reason this is a group.** Mounted
  * once here it survives every push, so the ground stays still while the steps slide over it.
  *
- * `/signin` still resolves to `index`, so `lib/authGate.ts`'s `launchTarget`, its tests and the
- * root layout's `fullScreenModal` registration are untouched.
+ * `/signin` still resolves to `index`, but no launch is sent here: `lib/authGate.ts`'s `launchTarget`
+ * routes only shares now, so sign-in is reached from inside the app (Profile, the Trips empty state,
+ * the welcome flow).
  */
 export const unstable_settings = { anchor: 'index' };
 

@@ -12,13 +12,13 @@ import { PolarLandingScreen } from '@/components/polar-landing/landing-screen';
 import { Polar } from '@/constants/polar';
 
 /**
- * `/landing` — the Polar Interior landing: the welcome a signed-out phone opens on once
- * (`launchTarget` in `lib/authGate.ts`, which adds `?welcome=1`), and the tour Profile opens after
- * that. Everything on it leads somewhere real: the wizard, prefilled where it can be, sign-in,
- * which it offers and never requires, or out to the app (Skip on the welcome, Close on the tour).
+ * `/landing` — the Polar Interior landing: the product tour, opened from Profile → Take the tour.
+ * Every launch opens on Home, so nothing sends a launch here. Everything on it leads somewhere real:
+ * the wizard, prefilled where it can be, sign-in, which it offers and never requires, or out to the
+ * app. `?welcome=1` still switches it to the welcome, which offers Skip into Home.
  *
- * **Seen as soon as it is shown.** The flag is written on mount, not on Skip, so somebody who
- * closes the app on the welcome opens on Home next time rather than on the welcome again.
+ * **The welcome flag is still written on mount**, not on Skip. Nothing reads it at launch now, so
+ * the write is dead until the welcome code is retired.
  *
  * **Three of the six faces load here, not in the root layout.** The root already loads Polar's
  * display cut and the two figure cuts every screen uses; the italic, Inter Tight Regular and Oswald
