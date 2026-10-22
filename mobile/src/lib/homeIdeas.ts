@@ -45,17 +45,28 @@ export function typewriterTick(s: Typewriter, lines: string[]): { next: Typewrit
     : { next: { line: (s.line + 1) % Math.max(1, lines.length), chars: 0, phase: 'typing' }, delayMs: TYPE_MS };
 }
 
+const words = (s: string) => fold(s).split(' ').filter(Boolean);
+/**
+ * Whole words with a space either side, so containment is whole-word: " bucharest romania " does
+ * not contain " oman ". `''` for text with no words at all.
+ */
+const phrase = (s: string) => {
+  const w = words(s);
+  return w.length ? ` ${w.join(' ')} ` : '';
+};
+
 const MAX_MATCHES = 3;
 const byOrder = (a: ReadyTrip, b: ReadyTrip) => a.order - b.order;
 
 /**
- * The ready-made trips closest to what a read found: a place that matches (either way round, so
- * "Lisbon, Portugal" finds a trip to "Lisbon" and "Kyoto" finds "Kyoto, Japan") or a shared tag.
+ * The ready-made trips closest to what a read found: a place that matches in whole words (either
+ * way round, so "Lisbon, Portugal" finds a trip to "Lisbon" and "Kyoto" finds "Kyoto, Japan", but
+ * "Oman" never finds "Bucharest, Romania") or a shared tag.
  * A trip whose length or price is far from what was asked is dropped rather than ranked low,
  * since a card that cannot fit the sentence is worse than one fewer card.
  */
 export function matchTrips(trips: ReadyTrip[], read: IdeaRead): ReadyTrip[] {
-  const place = read.destination ? fold(read.destination) : '';
+  const place = read.destination ? phrase(read.destination) : '';
   const perPerson =
     read.budget === null ? null : read.budgetBasis === 'per_person' ? read.budget : read.budget / Math.max(1, (read.adults ?? 1) + (read.children ?? 0));
   return trips
@@ -63,7 +74,7 @@ export function matchTrips(trips: ReadyTrip[], read: IdeaRead): ReadyTrip[] {
       // An empty field (a trip with no region) would "contain" everything, so it never counts.
       const placeHit =
         place !== '' &&
-        [t.destination, t.country, t.region, t.title].map(fold).some((f) => f !== '' && (f.includes(place) || place.includes(f)));
+        [t.destination, t.country, t.region, t.title].map(phrase).some((f) => f !== '' && (f.includes(place) || place.includes(f)));
       const shared = t.tags.filter((tag) => (read.tags as string[]).includes(tag)).length;
       return { t, score: (placeHit ? 3 : 0) + shared, candidate: placeHit || shared > 0 };
     })
@@ -72,8 +83,6 @@ export function matchTrips(trips: ReadyTrip[], read: IdeaRead): ReadyTrip[] {
     .slice(0, MAX_MATCHES)
     .map(({ t }) => t);
 }
-
-const words = (s: string) => fold(s).split(' ').filter(Boolean);
 
 /**
  * Words a trip idea is full of and a trip's title often shares, which say nothing about the place:
@@ -104,13 +113,13 @@ export function keywordTrips(trips: ReadyTrip[], text: string): ReadyTrip[] {
     .map(({ t }) => t);
 }
 
-/** "Here's a start: 4 days in Lisbon · about $1,900", saying only what the sentence did. */
+/** "Here's a start: 4 days in Lisbon · about $1,900", saying only what the sentence did, per person included. */
 export function ideaHeadline(read: IdeaRead): string {
   const place = read.destination?.split(',')[0].trim();
   const length = read.days === null ? null : `${read.days} ${read.days === 1 ? 'day' : 'days'}`;
   // "in" only joins a length to a place: "4 days in Lisbon", but "Lisbon" alone.
   const where = place ? (length ? `in ${place}` : place) : read.kind;
-  const parts = [[length, where].filter(Boolean).join(' '), read.budget === null ? '' : `about $${read.budget.toLocaleString('en-US')}`].filter(Boolean);
+  const parts = [[length, where].filter(Boolean).join(' '), read.budget === null ? '' : `about $${read.budget.toLocaleString('en-US')}${read.budgetBasis === 'per_person' ? ' per person' : ''}`].filter(Boolean);
   return parts.length ? `Here's a start: ${parts.join(' · ')}` : "Here's a start";
 }
 
@@ -129,6 +138,7 @@ export function ideaPrefill(read: IdeaRead, today: string): PlanPrefillParams {
     out.end = addDays(out.start, read.days - 1);
   }
   if (read.budget !== null) out.budget = String(read.budget);
+  if (read.budgetBasis) out.basis = read.budgetBasis;
   if (read.adults !== null) out.adults = String(read.adults);
   if (read.children !== null) out.children = String(read.children);
   if (read.pace) out.pace = read.pace;

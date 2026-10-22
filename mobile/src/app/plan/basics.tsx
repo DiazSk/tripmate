@@ -477,7 +477,7 @@ export default function Basics() {
           </View>
           {ready ? (
             <View style={styles.readyFoot}>
-              <Text style={styles.readyNote}>These shape the notes and later changes, not this plan’s stops. To change the stops, make it yours instead.</Text>
+              <Text style={styles.readyNote}>Meri uses these when you change the plan. This plan’s stops stay as they are; to change them, make it mine instead.</Text>
               <Pressable onPress={() => makeItMine(ready)} accessibilityRole="button" accessibilityHint="Plan it fresh, with this trip's stops as must-sees" hitSlop={8}>
                 <Text style={styles.readyLink}>Make it mine</Text>
               </Pressable>

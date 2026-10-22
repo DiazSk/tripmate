@@ -174,6 +174,8 @@ export type PlanPrefillParams = {
   start?: string;
   end?: string;
   budget?: string;
+  /** What `budget` is for: `'per_person'` or `'whole_party'`; anything else is ignored. */
+  basis?: string;
   adults?: string;
   children?: string;
   /** A `PACES` value; anything else is ignored. */
@@ -214,6 +216,7 @@ export function prefillPatch(params: PlanPrefillParams): Partial<PlanDraft> {
   }
   const budget = count(params.budget, 1, 1_000_000);
   if (budget !== null) patch.budget = budget;
+  if (params.basis === 'per_person' || params.basis === 'whole_party') patch.budgetBasis = params.basis;
   const adults = count(params.adults, 1, 12);
   const children = count(params.children, 0, 12);
   if (adults !== null || children !== null) {

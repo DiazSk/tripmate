@@ -22,8 +22,8 @@ import { OfflineScreen } from '@/components/offline-screen';
 import { usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
-import { pillCounts, type Pill } from '@/lib/readyTrips';
-import { loadReadyTrips, loadSavedPlaces, loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
+import { homeIsUnreachable, pillCounts, type Pill } from '@/lib/readyTrips';
+import { loadReadyTrips, loadSavedPlaces, loadTrip, loadTrips, readCachedReadyTrips, type Cached } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
 import { daysUntil, todayISO, tripShelves } from '@/lib/tripsWall';
@@ -83,10 +83,12 @@ export default function Home() {
   const { data: fetched, retry } = useFocusedFetchWithRetry(
     async () => (await loadTrips()) ?? (lastRequestReachedServer() === false ? ('offline' as const) : null)
   );
-  const unreachable = fetched === 'offline';
-  const listed = unreachable ? null : fetched;
+  // No trip list and no trip on disk: Home still stands on a catalogue copy, with "Your trips" saying
+  // it could not reach TripMate. Only with nothing at all is it the full-screen offline page.
+  const unreachable = homeIsUnreachable(fetched, () => readCachedReadyTrips() !== null);
+  const listed = fetched === 'offline' ? null : fetched;
   const trips = listed === undefined ? undefined : (listed?.value ?? null);
-  const offline = listed?.cachedAt != null;
+  const offline = fetched === 'offline' || listed?.cachedAt != null;
   // Drafts are a network nicety: nothing is cached for them, and a miss is simply no widget.
   const drafts = useFocusedFetch(async () => (await listTrips('draft')) ?? []) ?? [];
   // "Couldn't ask, nothing on disk" draws the same quiet line as "the catalogue is down": `undefined`

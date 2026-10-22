@@ -14,15 +14,17 @@ import { nominatimPlace } from "@/lib/nominatim";
 import { getWeatherForDates } from "@/lib/weather";
 import {
   assembleItinerary,
-  budgetToStore,
+  budgetsFor,
   buildFillPrompt,
   datesFor,
   fallbackPoint,
   parseFill,
   readCompleteRequest,
   stopId,
+  trustReadyTrip,
   type FillEntry,
 } from "@/lib/planComplete";
+import { fetchReadyTrips } from "@/lib/readyTrips";
 import { MAX_TRIP_DAYS } from "@/lib/tiers";
 import { itineraryRejection } from "@/lib/itinerary";
 import { insertTrip } from "@/lib/db";
@@ -54,9 +56,13 @@ export async function POST(req: NextRequest) {
   }
   const limit = throttle(req, "import-plan-complete");
   if (limit.limited) return limitResponse(limit, "import-plan-complete");
-  const request = readCompleteRequest(read.value);
-  if (typeof request === "string") return NextResponse.json({ error: request }, { status: 400 });
-  const { plan, destination, startDate, budget, origin, readyTrip, userAnswers } = request;
+  const parsed = readCompleteRequest(read.value);
+  if (typeof parsed === "string") return NextResponse.json({ error: parsed }, { status: 400 });
+  // A ready-made claim is checked against the catalogue (cached an hour), so an import cannot
+  // dress itself up as TripMate's own plan; an import never asks the catalogue at all.
+  const request =
+    parsed.origin === "ready-made" ? trustReadyTrip(parsed, (await fetchReadyTrips())?.map((t) => t.slug) ?? null) : parsed;
+  const { plan, destination, startDate, origin, readyTrip, userAnswers } = request;
 
   const dated = datesFor(plan.days, startDate);
   if (!dated) return NextResponse.json({ error: "Pick the day your trip starts." }, { status: 400 });
@@ -126,9 +132,9 @@ export async function POST(req: NextRequest) {
     }
   };
   const fill: Record<string, FillEntry> | null = ids.length === 0 ? {} : ((await fillOnce()) ?? (await fillOnce()));
-  const storedBudget = budgetToStore(budget, fill !== null);
+  const { stored: storedBudget, tierBudget } = budgetsFor(request, fill !== null);
 
-  const itinerary = assembleItinerary({ dated, fill, hours, weather, budget: storedBudget, fallback, origin, readyTrip });
+  const itinerary = assembleItinerary({ dated, fill, hours, weather, budget: storedBudget, tierBudget, fallback, origin, readyTrip });
   const rejection = itineraryRejection(itinerary);
   if (rejection) {
     console.error("[import-plan] assembled plan rejected", rejection);

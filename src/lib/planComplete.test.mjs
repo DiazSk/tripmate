@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   assembleItinerary,
   budgetToStore,
+  budgetsFor,
   buildFillPrompt,
   centreOf,
   datesFor,
@@ -17,7 +18,9 @@ import {
   parseFill,
   readCompleteRequest,
   stopId,
+  trustReadyTrip,
 } from "./planComplete.ts";
+import { closestTier } from "./tiers.ts";
 import { parseDuration } from "./itinerary.ts";
 import { CAPS, checkItinerary } from "./inputLimits.ts";
 import { SCOPE_BLOCK } from "./promptScope.ts";
@@ -269,4 +272,42 @@ test("a ready-made plan's notes are TripMate's, not the traveller's", () => {
   const imported = assembleItinerary({ dated, fill: null, hours: null, weather: [], budget: 0, fallback: { lat: 30.32, lng: 35.44 } });
   assert.equal(imported.origin, "imported");
   assert.ok(!imported.days[0].stops[0].estimated.includes("note"));
+});
+
+test("a ready-made trip stores the whole party's budget and takes its tier from the per-person figure", () => {
+  // The phone sends the per-person figure as `budget` (the tier input) and the traveller's own
+  // figure in userAnswers. A generated trip stores the traveller's figure; so does this one.
+  const request = { budget: 1450, origin: "ready-made", readyTrip: "petra-at-first-light", userAnswers: { budget: 2900, budgetBasis: "whole_party" } };
+  const budgets = budgetsFor(request, true);
+  assert.deepEqual(budgets, { stored: 2900, tierBudget: 1450 });
+  const dated = datesFor([day([{ name: "The Siq", lat: 30.32, lng: 35.45 }]), day([{ name: "Monastery", lat: 30.34, lng: 35.43 }]), day([{ name: "Little Petra", lat: 30.4, lng: 35.47 }]), day([{ name: "Wadi Rum", lat: 29.57, lng: 35.42 }])], "2026-11-20");
+  const it = assembleItinerary({ dated, fill: {}, hours: null, weather: [], budget: budgets.stored, tierBudget: budgets.tierBudget, fallback: { lat: 30.32, lng: 35.44 }, origin: "ready-made", readyTrip: "petra-at-first-light" });
+  assert.equal(it.tier, closestTier(1450, 4));
+  assert.notEqual(closestTier(1450, 4), closestTier(2900, 4), "the fixture must tell the two figures apart");
+  // The failed-fill rule still holds for what is stored.
+  assert.equal(budgetsFor(request, false).stored, 0);
+});
+
+test("an import, or a ready-made request with no usable answer budget, stores and tiers its own budget", () => {
+  assert.deepEqual(budgetsFor({ budget: 900 }, true), { stored: 900, tierBudget: 900 });
+  assert.deepEqual(budgetsFor({ budget: 900 }, false), { stored: 0, tierBudget: 0 });
+  // userAnswers on an import are not a budget to store.
+  assert.deepEqual(budgetsFor({ budget: 900, userAnswers: { budget: 4000 } }, true), { stored: 900, tierBudget: 900 });
+  for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, "2900", undefined]) {
+    assert.deepEqual(budgetsFor({ budget: 1450, origin: "ready-made", readyTrip: "x", userAnswers: { budget: bad } }, true), { stored: 1450, tierBudget: 1450 });
+  }
+});
+
+test("a ready-made claim is kept only for a slug the catalogue has", () => {
+  const ready = { destination: "Petra, Jordan", plan: { days: [] }, origin: "ready-made", readyTrip: "petra-at-first-light", userAnswers: { pace: "relaxed" } };
+  assert.deepEqual(trustReadyTrip(ready, ["petra-at-first-light", "lisbon"]), ready);
+  for (const slugs of [["lisbon"], [], null]) {
+    const got = trustReadyTrip(ready, slugs);
+    assert.equal(got.origin, undefined);
+    assert.equal(got.readyTrip, undefined);
+    assert.ok(!("origin" in got) && !("readyTrip" in got));
+    assert.deepEqual(got.userAnswers, { pace: "relaxed" });
+  }
+  const imported = { destination: "Lisbon", plan: { days: [] } };
+  assert.equal(trustReadyTrip(imported, null), imported);
 });

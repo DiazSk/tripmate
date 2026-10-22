@@ -236,6 +236,40 @@ export function fallbackPoint(
 /** A real budget against zeroed costs would read as comfortably under it, so a failed fill stores none. */
 export const budgetToStore = (budget: number | undefined, filled: boolean) => (filled && budget ? budget : 0);
 
+const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
+
+/**
+ * What a completed plan stores as its budget, and what its tier is read from. An import stores
+ * and tiers its one figure. A ready-made trip sends two: the per-person figure as `budget`, which
+ * the tier is chosen from, and the traveller's own in `userAnswers.budget`, which is stored, as a
+ * generated trip stores `draft.budget`. Both stores go through `budgetToStore`'s failed-fill rule.
+ */
+export function budgetsFor(
+  request: Pick<CompletePlanRequest, "budget" | "origin" | "userAnswers">,
+  filled: boolean
+): { stored: number; tierBudget: number } {
+  const answered = request.userAnswers?.budget;
+  if (request.origin === "ready-made" && positive(answered)) {
+    return { stored: budgetToStore(answered, filled), tierBudget: request.budget ?? 0 };
+  }
+  const stored = budgetToStore(request.budget, filled);
+  return { stored, tierBudget: stored };
+}
+
+/**
+ * A ready-made claim kept only for a slug the catalogue has: anything else, or any claim while the
+ * catalogue cannot be read (`null`), is saved as a plain import. `readCompleteRequest` checks only
+ * that a slug is well formed, and any client can send one.
+ */
+export function trustReadyTrip(request: CompletePlanRequest, slugs: readonly string[] | null): CompletePlanRequest {
+  if (request.origin !== "ready-made") return request;
+  if (slugs && request.readyTrip && slugs.includes(request.readyTrip)) return request;
+  const plain = { ...request };
+  delete plain.origin;
+  delete plain.readyTrip;
+  return plain;
+}
+
 export interface AssembleInput {
   dated: DatedDay[];
   fill: Record<string, FillEntry> | null;
@@ -243,6 +277,8 @@ export interface AssembleInput {
   hours: Record<string, string[] | null> | null;
   weather: DayWeather[];
   budget: number;
+  /** What the tier is read from when it is not `budget`: a ready-made trip's per-person figure. */
+  tierBudget?: number;
   fallback: { lat: number; lng: number };
   /** A catalogue trip is saved through this same path; its notes are TripMate's own words. */
   origin?: "imported" | "ready-made";
@@ -301,8 +337,9 @@ export function assembleItinerary(input: AssembleInput): Itinerary {
     ...(input.hours === null ? ["hoursUnchecked" as const] : []),
     ...(input.fill === null ? ["costsUnestimated" as const] : []),
   ];
+  const tierBudget = input.tierBudget ?? input.budget;
   return {
-    tier: input.budget > 0 ? closestTier(input.budget, days.length) : "midrange",
+    tier: tierBudget > 0 ? closestTier(tierBudget, days.length) : "midrange",
     days,
     origin,
     ...(origin === "ready-made" && input.readyTrip ? { readyTrip: input.readyTrip } : {}),

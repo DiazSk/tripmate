@@ -243,6 +243,12 @@ describe('prefillPatch', () => {
       budget: 2400,
     });
   });
+
+  it('carries the budget basis, and only the two the wizard knows', () => {
+    expect(prefillPatch({ budget: '1000', basis: 'per_person' })).toEqual({ budget: 1000, budgetBasis: 'per_person' });
+    expect(prefillPatch({ basis: 'whole_party' })).toEqual({ budgetBasis: 'whole_party' });
+    expect(prefillPatch({ basis: 'per_head' })).toEqual({});
+  });
 });
 
 test('a counter changed by hand moves the preset with it', () => {

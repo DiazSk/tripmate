@@ -51,3 +51,11 @@ export function paceFor(pace: string): 'relaxed' | 'balanced' | 'packed' | null 
       return null;
   }
 }
+
+/**
+ * Whether Home gives way to the full-screen offline page. Only when the trip list could not be
+ * reached *and* there is no catalogue copy on disk either: with a copy, Home still has the search
+ * card and the saved catalogue to offer, and "Your trips" says it could not reach TripMate. A thunk,
+ * so the disk is read only on the offline path rather than on every render.
+ */
+export const homeIsUnreachable = (fetched: unknown, hasCatalogueCopy: () => boolean): boolean => fetched === 'offline' && !hasCatalogueCopy();

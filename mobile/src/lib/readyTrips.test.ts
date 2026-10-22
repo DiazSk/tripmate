@@ -1,6 +1,6 @@
 import type { ReadyTrip } from '@shared/readyTrips';
 
-import { featuredFor, filterTrips, paceFor, pillCounts, railsFor } from './readyTrips';
+import { featuredFor, filterTrips, homeIsUnreachable, paceFor, pillCounts, railsFor } from './readyTrips';
 
 const trip = (o: Partial<ReadyTrip> & { slug: string }): ReadyTrip => ({
   title: o.slug,
@@ -61,4 +61,16 @@ test('paceFor maps the catalogue wording and nothing else', () => {
   expect(paceFor('Balanced')).toBe('balanced');
   expect(paceFor('Full days')).toBe('packed');
   expect(paceFor('Frantic')).toBeNull();
+});
+
+test('homeIsUnreachable: the full-screen offline page only when there is neither a trip list nor a catalogue copy', () => {
+  expect(homeIsUnreachable('offline', () => false)).toBe(true);
+  expect(homeIsUnreachable('offline', () => true)).toBe(false);
+  // Anything but "the server could not be reached" is Home, and never reads the disk.
+  const never = () => {
+    throw new Error('read the disk');
+  };
+  expect(homeIsUnreachable(undefined, never)).toBe(false);
+  expect(homeIsUnreachable(null, never)).toBe(false);
+  expect(homeIsUnreachable({ value: [], cachedAt: null }, never)).toBe(false);
 });

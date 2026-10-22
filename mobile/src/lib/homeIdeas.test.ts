@@ -98,6 +98,16 @@ describe('matchTrips', () => {
   test('nothing known matches nothing', () => {
     expect(matchTrips(trips, none)).toEqual([]);
   });
+  test('a place matches by whole words, so Oman never finds Romania', () => {
+    const bucharest = trip({ slug: 'bucharest', title: 'Old town walks', destination: 'Bucharest, Romania', country: 'Romania', region: 'Europe' });
+    const muscat = trip({ slug: 'muscat', title: 'Forts and souqs', destination: 'Muscat', country: 'Oman', region: 'Middle East' });
+    expect(matchTrips([bucharest, muscat], { ...none, destination: 'Oman' }).map((t) => t.slug)).toEqual(['muscat']);
+    expect(matchTrips([bucharest, muscat], { ...none, destination: 'Bucharest, Romania' }).map((t) => t.slug)).toEqual(['bucharest']);
+  });
+  test('the read may name more than the trip does: "Lisbon, Portugal" finds a trip to just "Lisbon"', () => {
+    const bare = trip({ slug: 'bare', title: 'Seven hills', destination: 'Lisbon', country: '', region: '' });
+    expect(matchTrips([bare], { ...none, destination: 'Lisbon, Portugal' }).map((t) => t.slug)).toEqual(['bare']);
+  });
 });
 
 describe('keywordTrips', () => {
@@ -134,6 +144,10 @@ describe('ideaHeadline', () => {
   test('"day" for one', () => {
     expect(ideaHeadline({ ...none, destination: 'Lisbon', days: 1 })).toBe("Here's a start: 1 day in Lisbon");
   });
+  test('a per-person budget says so', () => {
+    expect(ideaHeadline({ ...none, destination: 'Lisbon', days: 4, budget: 1000, budgetBasis: 'per_person' })).toBe("Here's a start: 4 days in Lisbon · about $1,000 per person");
+    expect(ideaHeadline({ ...none, destination: 'Lisbon', days: 4, budget: 1000, budgetBasis: 'whole_party' })).toBe("Here's a start: 4 days in Lisbon · about $1,000");
+  });
 });
 
 describe('ideaPrefill', () => {
@@ -145,6 +159,9 @@ describe('ideaPrefill', () => {
     expect(
       ideaPrefill({ ...none, destination: 'Lisbon, Portugal', days: 4, budget: 1900, adults: 2, children: 1, pace: 'relaxed', interests: ['Food', 'Nightlife'] }, '2026-10-21'),
     ).toEqual({ destination: 'Lisbon, Portugal', start: '2026-11-20', end: '2026-11-23', budget: '1900', adults: '2', children: '1', pace: 'relaxed', into: 'Food,Nightlife' });
+  });
+  test('the budget keeps what it was a budget for', () => {
+    expect(ideaPrefill({ ...none, budget: 1000, budgetBasis: 'per_person' }, '2026-10-21')).toEqual({ budget: '1000', basis: 'per_person' });
   });
 });
 
