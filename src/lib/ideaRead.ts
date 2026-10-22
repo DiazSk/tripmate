@@ -45,6 +45,9 @@ export interface IdeaRead {
   pace: "relaxed" | "balanced" | "packed" | null;
   interests: string[];
   tags: IdeaTag[];
+  /** Tags the traveller ruled out ("no food tours", "anything but a city"). A matcher excludes
+   *  them; leaving a refusal out of `tags` alone would still offer the trip that has it. */
+  avoidTags: IdeaTag[];
 }
 
 /** What the box takes. The route checks it before the model sees a character. */
@@ -61,16 +64,17 @@ Read the traveller's one-sentence trip idea into planner fields. Today is ${toda
 ${tagUserText(idea)}
 
 Return exactly one JSON object and nothing else:
-{"destination": string|null, "kind": string|null, "days": integer|null, "budget": number|null, "budgetBasis": "per_person"|"whole_party"|null, "adults": integer|null, "children": integer|null, "pace": "relaxed"|"balanced"|"packed"|null, "interests": string[], "tags": string[]}
+{"destination": string|null, "kind": string|null, "days": integer|null, "budget": number|null, "budgetBasis": "per_person"|"whole_party"|null, "adults": integer|null, "children": integer|null, "pace": "relaxed"|"balanced"|"packed"|null, "interests": string[], "tags": string[], "avoidTags": string[]}
 
 Rules:
-- Use null (or [] for the two lists) for anything the sentence did not say. Never guess a field it did not give.
+- Use null (or [] for the lists) for anything the sentence did not say. Never guess a field it did not give.
 - destination is a place a geocoder can read, such as "Lisbon, Portugal". A region like "the Algarve" is a destination. If they named no place and asked for a kind of trip instead, such as "somewhere warm", leave destination null and put that in kind.
 - days is 1 to ${MAX_TRIP_DAYS}. budget is a number in US dollars. budgetBasis is "per_person" or "whole_party" as they said it; null if the sentence gave a budget without saying which.
 - adults is 1 to 12 and children 0 to 12. "for two" is 2 adults; "a couple" is 2 adults.
 - pace: "slow" or "easy" is relaxed, "packed" or "see everything" is packed.
 - interests: choose only from ${IDEA_INTERESTS.map((i) => `"${i}"`).join(", ")}.
-- tags: choose only from ${IDEA_TAGS.map((t) => `"${t}"`).join(", ")}.`;
+- tags: choose only from ${IDEA_TAGS.map((t) => `"${t}"`).join(", ")}.
+- avoidTags: from the same list, only the ones the traveller ruled out ("no food tours" is Food, "anything but a city" is City, "nothing historic" is History). A ruled-out tag never goes in tags.`;
 }
 
 const int = (v: unknown, min: number, max: number): number | null =>
@@ -99,6 +103,8 @@ export function parseIdeaRead(raw: string): IdeaRead | null {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
   if (o.refused !== undefined) return null;
+  // A refusal wins over a want: a tag in both lists is one the traveller said no to.
+  const avoidTags = subset(o.avoidTags, IDEA_TAGS);
   return {
     destination: text(o.destination),
     kind: text(o.kind),
@@ -109,6 +115,7 @@ export function parseIdeaRead(raw: string): IdeaRead | null {
     children: int(o.children, 0, 12),
     pace: pick(o.pace, ["relaxed", "balanced", "packed"] as const),
     interests: subset(o.interests, IDEA_INTERESTS),
-    tags: subset(o.tags, IDEA_TAGS),
+    tags: subset(o.tags, IDEA_TAGS).filter((t) => !avoidTags.includes(t)),
+    avoidTags,
   };
 }

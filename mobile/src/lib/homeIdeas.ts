@@ -69,7 +69,11 @@ export function matchTrips(trips: ReadyTrip[], read: IdeaRead): ReadyTrip[] {
   const place = read.destination ? phrase(read.destination) : '';
   const perPerson =
     read.budget === null ? null : read.budgetBasis === 'per_person' ? read.budget : read.budget / Math.max(1, (read.adults ?? 1) + (read.children ?? 0));
+  // What the traveller ruled out removes the trip outright, place match or not: "no food tours"
+  // must not be answered with a food trip. `?? []` for a read from a server older than the field.
+  const avoid = (read.avoidTags ?? []) as string[];
   return trips
+    .filter((t) => !t.tags.some((tag) => avoid.includes(tag)))
     .map((t) => {
       // An empty field (a trip with no region) would "contain" everything, so it never counts.
       const placeHit =

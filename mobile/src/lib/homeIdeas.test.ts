@@ -12,7 +12,7 @@ import {
   typewriterTick,
 } from './homeIdeas';
 
-const none: IdeaRead = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [] };
+const none: IdeaRead = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [] };
 
 const trip = (o: Partial<ReadyTrip> & { slug: string }): ReadyTrip => ({
   title: o.slug,
@@ -94,6 +94,17 @@ describe('matchTrips', () => {
   test('place outscores a tag, and at most 3 return', () => {
     expect(matchTrips(trips, { ...none, destination: 'Kyoto', tags: ['Food', 'City'] }).map((t) => t.slug)[0]).toBe('kyoto');
     expect(matchTrips(trips, { ...none, tags: ['History', 'City', 'Food', 'Desert'] })).toHaveLength(3);
+  });
+  test('a ruled-out tag excludes the trip, even one whose place or other tag matched', () => {
+    // "by the coast, no food tours": Lisbon is Coast, but also Food, so it is not offered.
+    expect(matchTrips(trips, { ...none, tags: ['Coast'], avoidTags: ['Food'] }).map((t) => t.slug)).toEqual([]);
+    expect(matchTrips(trips, { ...none, destination: 'Lisbon', avoidTags: ['Food'] }).map((t) => t.slug)).toEqual([]);
+    expect(matchTrips(trips, { ...none, tags: ['History'], avoidTags: ['City'] }).map((t) => t.slug)).toEqual(['petra']);
+  });
+  test('a read from a server that predates avoidTags still matches', () => {
+    const old = { ...none, tags: ['History'] } as Partial<IdeaRead> as IdeaRead;
+    delete (old as { avoidTags?: unknown }).avoidTags;
+    expect(matchTrips(trips, old).map((t) => t.slug)).toEqual(['petra', 'kyoto']);
   });
   test('nothing known matches nothing', () => {
     expect(matchTrips(trips, none)).toEqual([]);
