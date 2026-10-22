@@ -116,6 +116,7 @@ describe("model routing", () => {
       "judge",
       "plan-read",
       "plan-fill",
+      "idea-read",
     ];
     for (const type of types) assert.ok(apiModelFor(type), `${type} routed nowhere`);
   });
@@ -148,7 +149,7 @@ describe("model routing", () => {
   it("gives every call type a token ceiling, largest for whole itineraries", () => {
     assert.ok(maxTokensFor("generate") > maxTokensFor("chat"));
     assert.ok(maxTokensFor("chat") > maxTokensFor("place-detail"));
-    for (const type of ["generate", "refine", "rebalance", "critique", "chat", "element-edit", "place-detail", "context", "story", "extract", "sketch", "judge", "plan-read", "plan-fill"]) {
+    for (const type of ["generate", "refine", "rebalance", "critique", "chat", "element-edit", "place-detail", "context", "story", "extract", "sketch", "judge", "plan-read", "plan-fill", "idea-read"]) {
       assert.ok(maxTokensFor(type) > 0, type);
     }
   });
@@ -259,5 +260,9 @@ describe("bring-your-own-itinerary call types", () => {
   it("routes plan-read like extract and plan-fill to the cheap tier", () => {
     assert.equal(apiModelFor("plan-read"), extractModel());
     assert.equal(apiModelFor("plan-fill"), cheapModel());
+  });
+
+  it("reads a trip idea on the cheap tier", () => {
+    assert.equal(apiModelFor("idea-read"), cheapModel());
   });
 });

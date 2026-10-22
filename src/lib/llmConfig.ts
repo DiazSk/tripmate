@@ -40,6 +40,8 @@ export type ClaudeCallType =
   | "plan-read"
   /** Fills cost, duration, category and description for an imported plan's stops, keyed by id. */
   | "plan-fill"
+  /** Reads a traveller's one-sentence trip idea into planner fields (the phone's Home). */
+  | "idea-read"
   /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
   | "judge";
 
@@ -251,6 +253,7 @@ export function apiModelFor(type: ClaudeCallType): string {
     case "sketch":
       return sketchModel();
     case "plan-fill":
+    case "idea-read":
     case "element-edit":
     case "place-detail":
     case "context":
@@ -328,6 +331,9 @@ export function maxTokensFor(type: ClaudeCallType): number {
     // Five short fields per stop, keyed by id. A bound on a runaway, as `place-detail` is.
     case "plan-fill":
       return 24_000;
+    // Ten short fields, most of them null. A bound on a runaway.
+    case "idea-read":
+      return 1_000;
     // One short object per day, at most 14 days.
     case "sketch":
       return 6_000;

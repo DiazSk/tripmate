@@ -37,6 +37,7 @@ const LIMIT_SENTENCES: Record<LimitedBucket, (wait: string) => string> = {
   "import-plan-complete": (w) =>
     `You’ve saved 30 imported plans in the last 10 minutes, which is the limit. You can try again in about ${w}.`,
   "geocode-place": (w) => `You’ve looked up 60 places in the last 10 minutes, which is the limit. You can look again in about ${w}.`,
+  idea: (w) => `You’ve asked Meri to read 20 trip ideas in the last 10 minutes, which is the limit. You can ask again in about ${w}.`,
   context: (w) =>
     `TripMate looked up 10 destinations in the last 10 minutes, which is the limit. It can look up another in about ${w}.`,
   lookup: (w) => `TripMate looked up a lot of places in the last 10 minutes. It can look again in about ${w}.`,
@@ -53,6 +54,7 @@ export const TIMEOUT_SENTENCES = {
   edit: "TripMate took longer than it allows to make that change, so it stopped. Your plan is unchanged. Try again.",
   "place-detail":
     "Writing the details for this place took longer than TripMate allows, so it stopped. Your plan is unchanged. Try again.",
+  idea: "Reading your idea took longer than TripMate allows, so it stopped. Try again.",
 } satisfies Partial<Record<Bucket, string>>;
 
 /** SV-14..SV-16: what the scope guard says when it refuses, per surface. */
@@ -60,6 +62,7 @@ export const OFF_TOPIC_SENTENCES = {
   chat: "TripMate can only help with this trip: its stops, timing, costs and getting around. Ask about the plan, or ask for a change to it.",
   element: "TripMate can only swap this stop for another place to go. Describe the stop you’d like instead.",
   refine: "TripMate can only change this trip. Say what you’d like different about the plan.",
+  idea: "TripMate can only read a trip idea: where, how long, who and what you’d like. Describe the trip you have in mind.",
 };
 
 export function offTopicResponse(kind: keyof typeof OFF_TOPIC_SENTENCES): NextResponse {

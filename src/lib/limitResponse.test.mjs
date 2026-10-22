@@ -5,7 +5,7 @@ import { listTraces } from "./db.ts";
 import { OFF_TOPIC_SENTENCES, capResponse, limitResponse, modelFailureResponse, offTopicResponse, prefilterRefusal, routeLimitSentence, unit } from "./limitResponse.ts";
 import { ModelTimeoutError } from "./modelTimeout.ts";
 
-// Copy table rows SV-01..SV-13, SV-18, SV-19 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
+// Copy table rows SV-01..SV-13, SV-18, SV-19, SV-25 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
 // section 9), with {minutes} = 5 for retryAfterSeconds 241..300.
 const SV = {
   plan: "You’ve planned 3 trips in the last 10 minutes, which is the limit. You can plan another in about 5 minutes.",
@@ -16,6 +16,7 @@ const SV = {
   "import-plan": "You’ve brought in 30 plans in the last 10 minutes, which is the limit. You can try again in about 5 minutes.",
   "import-plan-complete": "You’ve saved 30 imported plans in the last 10 minutes, which is the limit. You can try again in about 5 minutes.",
   "geocode-place": "You’ve looked up 60 places in the last 10 minutes, which is the limit. You can look again in about 5 minutes.",
+  idea: "You’ve asked Meri to read 20 trip ideas in the last 10 minutes, which is the limit. You can ask again in about 5 minutes.",
   context: "TripMate looked up 10 destinations in the last 10 minutes, which is the limit. It can look up another in about 5 minutes.",
   lookup: "TripMate looked up a lot of places in the last 10 minutes. It can look again in about 5 minutes.",
 };
@@ -59,6 +60,7 @@ test("a model timeout is a 504 with its action's sentence; anything else stays a
     edit: "TripMate took longer than it allows to make that change, so it stopped. Your plan is unchanged. Try again.",
     "place-detail":
       "Writing the details for this place took longer than TripMate allows, so it stopped. Your plan is unchanged. Try again.",
+    idea: "Reading your idea took longer than TripMate allows, so it stopped. Try again.",
   };
   for (const [action, sentence] of Object.entries(SV_TIMEOUT)) {
     const timedOut = modelFailureResponse(new ModelTimeoutError("claude CLI timed out after 5ms"), "Edit failed", action);
@@ -84,11 +86,12 @@ test("a value of 1 takes the singular unit, 2 the plural", async () => {
   assert.equal(routeLimitSentence(2), "Too many walking-time lookups in the last minute. They’ll be ready again in about 2 seconds.");
 });
 
-// Copy table rows SV-14..SV-16.
+// Copy table rows SV-14..SV-16, SV-27.
 const OFF_TOPIC = {
   chat: "TripMate can only help with this trip: its stops, timing, costs and getting around. Ask about the plan, or ask for a change to it.",
   element: "TripMate can only swap this stop for another place to go. Describe the stop you’d like instead.",
   refine: "TripMate can only change this trip. Say what you’d like different about the plan.",
+  idea: "TripMate can only read a trip idea: where, how long, who and what you’d like. Describe the trip you have in mind.",
 };
 
 test("offTopicResponse is a 422 off_topic carrying the copy row for its surface", async () => {

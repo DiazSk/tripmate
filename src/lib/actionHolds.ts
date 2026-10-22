@@ -11,7 +11,7 @@ const KEY = "tripmateHolds";
 /** Mirrors `Bucket` (ipThrottle.ts is server code, so it can't be imported as a value). `satisfies` rejects a
  *  stale entry, the line below a missing one. */
 const BUCKETS = [
-  "plan", "edit", "place-detail", "story", "import", "import-plan", "import-plan-complete", "geocode-place",
+  "plan", "edit", "place-detail", "story", "import", "import-plan", "import-plan-complete", "geocode-place", "idea",
   "context", "lookup", "refusal",
 ] as const satisfies readonly Bucket[];
 const _exhaustive: Exclude<Bucket, (typeof BUCKETS)[number]> extends never ? true : never = true;

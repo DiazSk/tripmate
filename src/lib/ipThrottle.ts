@@ -18,6 +18,7 @@ export type Bucket =
   | "import-plan"
   | "import-plan-complete"
   | "geocode-place"
+  | "idea"
   | "context"
   | "lookup"
   | "refusal";
@@ -31,6 +32,7 @@ export const LIMITS: Record<Bucket, { max: number; windowMinutes: number }> = {
   "import-plan": { max: 30, windowMinutes: 10 },
   "import-plan-complete": { max: 30, windowMinutes: 10 },
   "geocode-place": { max: 60, windowMinutes: 10 },
+  idea: { max: 20, windowMinutes: 10 },
   // destination-context: two model calls and a paid Brave search per request, and the wizard fires it
   // on leaving the basics step, so a person plans a handful an hour, not a handful a minute.
   context: { max: 10, windowMinutes: 10 },
