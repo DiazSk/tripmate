@@ -17,11 +17,12 @@ import {
   fallbackPoint,
   parseFill,
   readCompleteRequest,
+  readyStopTime,
   stopId,
   trustReadyTrip,
 } from "./planComplete.ts";
 import { closestTier } from "./tiers.ts";
-import { parseDuration } from "./itinerary.ts";
+import { parseClock, parseDuration } from "./itinerary.ts";
 import { CAPS, checkItinerary } from "./inputLimits.ts";
 import { SCOPE_BLOCK } from "./promptScope.ts";
 
@@ -310,4 +311,35 @@ test("a ready-made claim is kept only for a slug the catalogue has", () => {
   }
   const imported = { destination: "Lisbon", plan: { days: [] } };
   assert.equal(trustReadyTrip(imported, null), imported);
+});
+
+test("readyStopTime reads a time of day off a catalogue stop's name, whole word only", () => {
+  assert.equal(readyStopTime("Breakfast at camp", null), "08:30");
+  assert.equal(readyStopTime("Lunch around Chiado", null), "12:30");
+  assert.equal(readyStopTime("Dinner around Alfama", null), "19:30");
+  assert.equal(readyStopTime("Supper by the harbour", null), "19:30");
+  assert.equal(readyStopTime("Evening walk by the river", null), "18:30");
+  assert.equal(readyStopTime("Night market", null), "18:30");
+  assert.equal(readyStopTime("Sunset above Vernazza", null), "18:30");
+  assert.equal(readyStopTime("Dunes at SUNSET", "20:12"), "19:42");
+  assert.equal(readyStopTime("Torre de Belém", null), null);
+  assert.equal(readyStopTime("Dinnerware shop", null), null);
+});
+
+test("a ready-made day anchors a dinner stop at dinner time; the same day as an import does not", () => {
+  const dated = () => [{ date: "2026-11-02", day: day([
+    { name: "Castelo", lat: 38.71, lng: -9.13 },
+    { name: "Miradouro", lat: 38.712, lng: -9.131 },
+    { name: "Dinner around Alfama", lat: 38.711, lng: -9.129 },
+  ]) }];
+  const base = { fill: null, hours: null, weather: [], budget: 0, fallback };
+  const ready = assembleItinerary({ ...base, dated: dated(), origin: "ready-made", readyTrip: "x" });
+  const dinner = ready.days[0].stops[2];
+  assert.equal(parseClock(dinner.time), 19 * 60 + 30);
+  assert.ok(dinner.estimated.includes("time"));
+  assert.equal(parseClock(ready.days[0].stops[0].time), 9 * 60);
+  const sunsetDay = assembleItinerary({ ...base, weather: [{ date: "2026-11-02", sunset: "17:00" }], dated: [{ date: "2026-11-02", day: day([{ name: "Sunset above Vernazza", lat: 38.71, lng: -9.13 }]) }], origin: "ready-made", readyTrip: "x" });
+  assert.equal(parseClock(sunsetDay.days[0].stops[0].time), 16 * 60 + 30);
+  const imported = assembleItinerary({ ...base, dated: dated() });
+  assert.ok(parseClock(imported.days[0].stops[2].time) < 17 * 60);
 });

@@ -75,7 +75,7 @@ function Detail({ trip }: { trip: ReadyTrip }) {
   const from = formatMoney(trip.priceFrom);
 
   return (
-    <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
       <View style={styles.photo}>
         {photo ? <Image source={photo} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} accessibilityIgnoresInvertColors /> : null}
         <Scrim stops={[[0, Polar.night, 0.4], [0.3, Polar.night, 0], [1, Polar.night, 0.82]]} />

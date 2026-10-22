@@ -270,6 +270,28 @@ export function trustReadyTrip(request: CompletePlanRequest, slugs: readonly str
   return plain;
 }
 
+const hhmm = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+/**
+ * The wall-clock time a catalogue stop's own name asks for. The catalogue carries no times, so
+ * without this `rescheduleDay` lays "Dinner around Alfama" out at 1 PM like everything else.
+ * Whole words only ("Dinnerware shop" is a shop); a sunset is half an hour before the day's
+ * measured one, or 18:30 when there is none.
+ */
+export function readyStopTime(name: string, sunset: string | null): string | null {
+  const has = (words: string) => new RegExp(`\\b(?:${words})\\b`, "i").test(name);
+  if (has("breakfast")) return "08:30";
+  if (has("lunch")) return "12:30";
+  if (has("dinner|supper")) return "19:30";
+  if (has("sunset")) {
+    const at = parseClock(sunset ?? "");
+    return at === null ? "18:30" : hhmm(at - 30);
+  }
+  if (has("evening|night")) return "18:30";
+  return null;
+}
+
 export interface AssembleInput {
   dated: DatedDay[];
   fill: Record<string, FillEntry> | null;
@@ -288,7 +310,7 @@ export interface AssembleInput {
 export function assembleItinerary(input: AssembleInput): Itinerary {
   const weatherByDate = new Map(input.weather.map((w) => [w.date, w]));
   const origin = input.origin ?? "imported";
-  const keepTimeOf = travellerTimes({ origin: "imported" });
+  const importedTimes = travellerTimes({ origin: "imported" });
 
   const days: DayPlan[] = input.dated.map(({ date, day }, d) => {
     const centre = centreOf(day.stops) ?? input.fallback;
@@ -322,6 +344,19 @@ export function assembleItinerary(input: AssembleInput): Itinerary {
       };
     });
     const weatherDetail = weatherByDate.get(date);
+    // A ready-made stop's hinted time is still TripMate's estimate (`estimated` keeps "time"), but
+    // it is held where it is so the day flows around it instead of overwriting it from 9:00.
+    const hinted = new Set<Stop>();
+    if (origin === "ready-made") {
+      for (const stop of stops) {
+        const at = readyStopTime(stop.name, weatherDetail?.sunset ?? null);
+        if (at !== null) {
+          stop.time = formatClock(parseClock(at) as number);
+          hinted.add(stop);
+        }
+      }
+    }
+    const keepTimeOf = origin === "ready-made" ? (stop: Stop) => hinted.has(stop) : importedTimes;
     const planned: DayPlan = {
       date,
       // The model's prose field. Left empty rather than invented; the badge reads weatherDetail.

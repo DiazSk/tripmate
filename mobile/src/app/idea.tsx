@@ -75,7 +75,7 @@ export default function IdeaSheet() {
   }
 
   return (
-    <ScrollView style={styles.sheet} contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.sheet} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
       <View style={styles.meri}>
         <Meridian state={answer === undefined ? 'thinking' : answer === null ? 'offline' : 'idle'} size={32} />
         {said ? (
