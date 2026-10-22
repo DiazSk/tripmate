@@ -1,6 +1,6 @@
 import { fetchWithSession } from "./session";
 import type { TravelerProfile } from "./types";
-import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip } from "./tripMateApi";
+import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip, getReadyTrips, readIdea } from "./tripMateApi";
 
 // Reads as though it runs too late, and does not: babel-jest hoists every `jest.mock` above the
 // imports, so the mock is registered before `tripMateApi` resolves `./session`.
@@ -293,4 +293,47 @@ test("generateTrip ignores an error arriving after the plan", async () => {
 test("generateTrip returns a failure when the request itself throws", async () => {
   mockedFetch.mockRejectedValue(new Error("network down"));
   expect((await generateTrip(REQ, { onPlan: () => {} }))?.kind).toBe("failed");
+});
+
+test("getReadyTrips returns the catalogue and its availability", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ available: true, trips: [{ id: "lisbon" }] }), { status: 200 }));
+
+  expect(await getReadyTrips()).toEqual({ available: true, trips: [{ id: "lisbon" }] });
+  expect(mockedFetch).toHaveBeenCalledWith("/api/ready-trips", expect.anything());
+});
+
+test("getReadyTrips is undefined on a non-2xx and when the fetch rejects", async () => {
+  mockedFetch.mockResolvedValueOnce(new Response("", { status: 500 }));
+  expect(await getReadyTrips()).toBeUndefined();
+
+  mockedFetch.mockRejectedValueOnce(new Error("network down"));
+  expect(await getReadyTrips()).toBeUndefined();
+});
+
+test("readIdea returns the read on a 200", async () => {
+  const read = { destination: "Lisbon" };
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify(read), { status: 200 }));
+
+  expect(await readIdea("somewhere sunny")).toEqual(read);
+  expect(mockedFetch).toHaveBeenCalledWith("/api/read-idea", expect.objectContaining({ method: "POST", body: JSON.stringify({ idea: "somewhere sunny" }) }));
+});
+
+test("readIdea carries the server's sentence, limited for a 429 and a 503", async () => {
+  mockedFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Slow down a little.", code: "rate_limited" }), { status: 429 }));
+  expect(await readIdea("x")).toEqual({ error: "Slow down a little.", limited: true });
+
+  mockedFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Back tomorrow.", code: "daily_cap" }), { status: 503 }));
+  expect(await readIdea("x")).toEqual({ error: "Back tomorrow.", limited: true });
+});
+
+test("readIdea is not limited for a 422", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ error: "That is not a trip.", code: "off_topic" }), { status: 422 }));
+
+  expect(await readIdea("x")).toEqual({ error: "That is not a trip.", limited: false });
+});
+
+test("readIdea is undefined when the fetch rejects", async () => {
+  mockedFetch.mockRejectedValue(new Error("network down"));
+
+  expect(await readIdea("x")).toBeUndefined();
 });

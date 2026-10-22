@@ -35,6 +35,8 @@ import type {
   TravelerProfile,
   TripStatus,
 } from "./types";
+import type { IdeaRead } from "@shared/ideaRead";
+import type { ReadyTrip } from "@shared/readyTrips";
 import type { RawFetch } from "@shared/types";
 
 export async function listTrips(status: TripStatus = "saved"): Promise<TripSummary[] | undefined> {
@@ -191,6 +193,39 @@ export async function completePlan(body: CompletePlanRequest): Promise<{ id: str
     });
     if (!res.ok) return errorMessage(res);
     return (await res.json()) as { id: string };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `GET /api/ready-trips` — the ready-made catalogue. `available: false` is the server saying the
+ * catalogue is not configured, which is different from `undefined` (no answer, or a non-2xx).
+ */
+export async function getReadyTrips(): Promise<{ available: boolean; trips: ReadyTrip[] } | undefined> {
+  try {
+    const res = await fetchWithSession("/api/ready-trips", {});
+    if (!res.ok) return undefined;
+    return (await res.json()) as { available: boolean; trips: ReadyTrip[] };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `POST /api/read-idea` — Meri's read of a free-text idea. A non-2xx carries the server's own
+ * sentence, and `limited` marks the two the traveller can only wait out (429 throttle, 503 daily
+ * cap) so the caller can say "later" rather than "try again". `undefined` is only a fetch that threw.
+ */
+export async function readIdea(idea: string): Promise<IdeaRead | { error: string; limited: boolean } | undefined> {
+  try {
+    const res = await fetchWithSession("/api/read-idea", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idea }),
+    });
+    if (!res.ok) return { error: await errorMessage(res), limited: res.status === 429 || res.status === 503 };
+    return (await res.json()) as IdeaRead;
   } catch {
     return undefined;
   }

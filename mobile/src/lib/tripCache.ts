@@ -1,7 +1,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { getTrip, listSavedPlaces, listTrips } from '@/api/tripMateApi';
+import { getReadyTrips, getTrip, listSavedPlaces, listTrips } from '@/api/tripMateApi';
 import type { SavedPlace, Trip, TripSummary } from '@/api/types';
+import type { ReadyTrip } from '@shared/readyTrips';
 
 /**
  * The trip you are on, readable with no network.
@@ -216,4 +217,60 @@ export async function loadSavedPlaces(): Promise<Cached<SavedPlace[]> | undefine
     return { value: live, cachedAt: null };
   }
   return readCachedSavedPlaces() ?? undefined;
+}
+
+
+/* --- the ready-made catalogue, for the Home screen's offline rail --- */
+
+/**
+ * One file beside `saved-places.json`, for the same reason: it is read whole and never searched.
+ * `readCachedTrips` lists this folder, but a file with no `trip` in it is a miss there, so it is
+ * never mistaken for a trip and `prune` never reaches it.
+ */
+const READY_FILE = 'ready-trips.json';
+
+interface ReadyEnvelope {
+  trips: ReadyTrip[];
+  cachedAt: string;
+}
+
+function cacheReadyTrips(trips: ReadyTrip[]): void {
+  try {
+    const envelope: ReadyEnvelope = { trips, cachedAt: new Date().toISOString() };
+    new File(dir(), READY_FILE).write(JSON.stringify(envelope));
+  } catch {
+    // Same bargain as `cacheTrip`.
+  }
+}
+
+/** The catalogue as it was last read online — synchronous, for the sheets that open from it. */
+export function readCachedReadyTrips(): Cached<ReadyTrip[]> | null {
+  try {
+    const file = new File(dir(), READY_FILE);
+    if (!file.exists) return null;
+    const envelope = JSON.parse(file.textSync()) as ReadyEnvelope;
+    if (!Array.isArray(envelope?.trips)) return null;
+    return { value: envelope.trips, cachedAt: envelope.cachedAt };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The catalogue: live if the server has one, else the copy on disk.
+ *
+ * `{ unavailable: true }` is the server saying there is no catalogue and we have nothing older —
+ * the rail hides. `undefined` is no answer and no copy — the rail can say it could not load. An
+ * `available: false` answer does not erase a copy already on disk: an unconfigured server is not
+ * a deleted catalogue, and the offline rail should still have something to show.
+ */
+export async function loadReadyTrips(): Promise<Cached<ReadyTrip[]> | { unavailable: true } | undefined> {
+  const live = await getReadyTrips();
+  if (live?.available) {
+    cacheReadyTrips(live.trips);
+    return { value: live.trips, cachedAt: null };
+  }
+  const cached = readCachedReadyTrips();
+  if (cached) return cached;
+  return live ? { unavailable: true } : undefined;
 }

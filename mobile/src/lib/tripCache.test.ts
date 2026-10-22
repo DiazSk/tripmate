@@ -1,4 +1,5 @@
 import type { Trip } from '@/api/types';
+import type { ReadyTrip } from '@shared/readyTrips';
 
 /**
  * An in-memory stand-in for `expo-file-system`'s synchronous class API.
@@ -50,15 +51,17 @@ jest.mock('expo-file-system', () => ({
 
 const mockGetTrip = jest.fn();
 const mockListTrips = jest.fn();
+const mockGetReadyTrips = jest.fn();
 jest.mock('@/api/tripMateApi', () => ({
   getTrip: (...a: unknown[]) => mockGetTrip(...a),
   listTrips: (...a: unknown[]) => mockListTrips(...a),
+  getReadyTrips: (...a: unknown[]) => mockGetReadyTrips(...a),
 }));
 
 // Must follow the mocks. `jest.mock` is hoisted, but its factory runs on *this* import, and it
 // closes over `mockDisk` — which is in its temporal dead zone until the declaration above has run.
 // eslint-disable-next-line import/first
-import { cacheTrip, loadTrip, loadTrips, readCachedTrip, readCachedTrips } from './tripCache';
+import { cacheTrip, loadReadyTrips, loadTrip, loadTrips, readCachedReadyTrips, readCachedTrip, readCachedTrips } from './tripCache';
 
 const trip = (id: string, startDate = '2026-09-27', endDate = '2026-09-29'): Trip => ({
   id,
@@ -76,6 +79,7 @@ beforeEach(() => {
   mockThrowOn = 'none';
   mockGetTrip.mockReset();
   mockListTrips.mockReset();
+  mockGetReadyTrips.mockReset();
 });
 
 test('a trip written is a trip read back', () => {
@@ -182,4 +186,57 @@ test('non-json files in the folder are ignored', () => {
   cacheTrip(trip('lisbon'));
   mockDisk.set('.DS_Store', 'junk');
   expect(readCachedTrips().map((c) => c.value.id)).toEqual(['lisbon']);
+});
+
+describe('the ready-made catalogue', () => {
+  const ready = [{ id: 'lisbon' }, { id: 'kyoto' }] as unknown as ReadyTrip[];
+
+  it('writes a live catalogue to disk and returns it as current', async () => {
+    mockGetReadyTrips.mockResolvedValue({ available: true, trips: ready });
+
+    expect(await loadReadyTrips()).toEqual({ value: ready, cachedAt: null });
+    expect(readCachedReadyTrips()?.value).toEqual(ready);
+    expect(typeof readCachedReadyTrips()?.cachedAt).toBe('string');
+  });
+
+  it('falls back to the disk copy, with its cachedAt, when there is no answer', async () => {
+    mockGetReadyTrips.mockResolvedValueOnce({ available: true, trips: ready });
+    await loadReadyTrips();
+    mockGetReadyTrips.mockResolvedValue(undefined);
+
+    const result = await loadReadyTrips();
+
+    expect(result).toEqual({ value: ready, cachedAt: expect.any(String) });
+  });
+
+  it('is undefined when there is no answer and nothing on disk', async () => {
+    mockGetReadyTrips.mockResolvedValue(undefined);
+
+    expect(await loadReadyTrips()).toBeUndefined();
+  });
+
+  it('keeps the disk copy when the server says the catalogue is not configured', async () => {
+    mockGetReadyTrips.mockResolvedValueOnce({ available: true, trips: ready });
+    await loadReadyTrips();
+    mockGetReadyTrips.mockResolvedValue({ available: false, trips: [] });
+
+    expect(await loadReadyTrips()).toEqual({ value: ready, cachedAt: expect.any(String) });
+  });
+
+  it('is { unavailable: true } when the server has no catalogue and there is no copy', async () => {
+    mockGetReadyTrips.mockResolvedValue({ available: false, trips: [] });
+
+    expect(await loadReadyTrips()).toEqual({ unavailable: true });
+  });
+
+  it('is never mistaken for a trip, and a live trips list does not prune it', async () => {
+    mockGetReadyTrips.mockResolvedValue({ available: true, trips: ready });
+    await loadReadyTrips();
+    mockListTrips.mockResolvedValue([]);
+
+    await loadTrips();
+
+    expect(readCachedTrips()).toEqual([]);
+    expect(readCachedReadyTrips()?.value).toEqual(ready);
+  });
 });
