@@ -546,7 +546,7 @@ export default function TripBoard({
                   {longDate(day.date)}
                   <DayWeather day={day} />
                 </p>
-                <h2>{day.title || day.theme || `Day ${di + 1}`}</h2>
+                <h2 data-ph-mask>{day.title || day.theme || `Day ${di + 1}`}</h2>
               </div>
               <div className="tb-tools">
                 {day.lodging && (
@@ -673,11 +673,11 @@ function StopCard({ stop, n, dayIndex, lit, onHover, onOpen }: { stop: Stop; n: 
           {n}
         </span>
       </span>
-      <b className="tb-card-name">{stop.name}</b>
+      <b className="tb-card-name" data-ph-mask>{stop.name}</b>
       <span className="tb-card-meta">
         {[stop.durationLabel, cost > 0 ? formatMoney(cost) : stop.durationLabel ? "free" : null].filter(Boolean).join(" · ")}
       </span>
-      {(stop.why || stop.note) && <span className="tb-card-why">{stop.why || stop.note}</span>}
+      {(stop.why || stop.note) && <span className="tb-card-why" data-ph-mask>{stop.why || stop.note}</span>}
     </button>
   );
 }

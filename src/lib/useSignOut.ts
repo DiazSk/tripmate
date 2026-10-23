@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
+import { resetAfterSignOut } from "@/lib/analytics/client";
 
 /**
  * Signing out, shared by the profile masthead and the navbar's account menu so the two can never
@@ -34,6 +35,8 @@ export function useSignOut(onSignedOut?: () => void) {
       );
       return;
     }
+    // The next person on this browser starts as a stranger to PostHog, not as this account.
+    resetAfterSignOut();
     onSignedOut?.();
     // `refresh()` rather than a reload: every owner-scoped server component on this route and
     // the next one has to re-read, and a router cache holding the signed-in render would show

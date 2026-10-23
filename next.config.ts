@@ -20,6 +20,22 @@ function clerkOrigins(key: string): string[] {
   return key.startsWith("pk_test_") ? ["https://*.clerk.accounts.dev"] : [];
 }
 
+/** PostHog's origins, from the public host the client is built with: the API it posts to, and for
+ *  PostHog Cloud the sibling `<region>-assets` host that serves the recorder and survey scripts
+ *  (script-src) the SDK lazy-loads. Empty without a key, like Clerk's, so an unconfigured build
+ *  trusts none of it; a host that does not parse gives none either rather than failing the build. */
+function posthogOrigins(key: string, host: string): string[] {
+  if (!key) return [];
+  try {
+    const { origin, hostname } = new URL(host);
+    const cloud = hostname.match(/^(\w+)\.i\.posthog\.com$/);
+    return cloud ? [origin, `https://${cloud[1]}-assets.i.posthog.com`] : [origin];
+  } catch {
+    return [];
+  }
+}
+
+const POSTHOG = posthogOrigins(process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "", process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com");
 const CLERK_API = clerkOrigins(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "");
 const list = (...o: string[]) => o.join(" ");
 
@@ -57,11 +73,11 @@ const KOKORO = [
  *  dynamic. */
 const CSP = [
   "default-src 'self'",
-  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", ...CLERK_SCRIPT)}`,
+  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", ...CLERK_SCRIPT, ...POSTHOG)}`,
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  `connect-src ${list("'self'", ...KOKORO, OPENFREEMAP, TERRAIN, ...CESIUM, OSM_TILES, "https://geocoding-api.open-meteo.com", ...CLERK_CONNECT)}`,
+  `connect-src ${list("'self'", ...KOKORO, OPENFREEMAP, TERRAIN, ...CESIUM, OSM_TILES, "https://geocoding-api.open-meteo.com", ...CLERK_CONNECT, ...POSTHOG)}`,
   `img-src ${list("'self'", "data:", "blob:", OPENFREEMAP, OSM_TILES, "https://assets.ion.cesium.com", "https://upload.wikimedia.org", "https://thumb.wikimedia.org", COMMONS, ...CLERK_IMG)}`,
   `frame-src ${list("https://challenges.cloudflare.com", ...CLERK_API)}`,
   "object-src 'none'",

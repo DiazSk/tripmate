@@ -20,6 +20,7 @@ import { city } from "@/lib/memories";
 import { profileSentence } from "@/lib/profileSentence";
 import { useSignOut } from "@/lib/useSignOut";
 import InlineNote from "@/components/InlineNote";
+import AnalyticsSwitch from "@/components/analytics/AnalyticsSwitch";
 import { failureFromResponse, failureFromThrown, type Failure } from "@/lib/failure";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile } from "@/lib/travelerProfile";
@@ -438,7 +439,7 @@ export default function ProfileForm({
             {profile.homeCity && (
               <p className="pf-home-now">
                 <span className="pf-pin" aria-hidden="true" />
-                {profile.homeCity.name}
+                <span data-ph-mask>{profile.homeCity.name}</span>
               </p>
             )}
             {/* A null is the search reporting that the text moved off the picked city. It must not
@@ -483,7 +484,7 @@ export default function ProfileForm({
                 <a href={`#pb-${s.key}`} className={active === s.key ? "is-on" : ""} aria-current={active === s.key ? "true" : undefined}>
                   <span className="pb-index-n">{String(i + 1).padStart(2, "0")}</span>
                   <span className="pb-index-t">{s.title}</span>
-                  <span className="pb-index-a">{answerOf(profile, s.key)}</span>
+                  <span className="pb-index-a" data-ph-mask>{answerOf(profile, s.key)}</span>
                 </a>
               </li>
             ))}
@@ -521,6 +522,8 @@ export default function ProfileForm({
               <div className="pb-field-control">{field(s.key)}</div>
             </section>
           ))}
+
+          <AnalyticsSwitch />
 
           <section className="pb-kept" aria-label="Kept from your trips">
             <div>

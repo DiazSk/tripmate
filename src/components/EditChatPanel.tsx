@@ -304,7 +304,7 @@ export default function EditChatPanel({
   return (
     // Fills whatever pane it is placed in — Focus Mode owns the framing, header and dimensions
     // now, so this component no longer positions itself.
-    <div className={k("flex h-full min-h-0 flex-col", "td-chat")} {...devLabel("EditChatPanel")}>
+    <div className={`ph-no-capture ${k("flex h-full min-h-0 flex-col", "td-chat")}`} {...devLabel("EditChatPanel")}>
       {/* Who is replying, and whether they are. This replaces the "Thinking…" line that used to sit
           at the foot of the transcript. */}
       <div className={k("flex shrink-0 items-center gap-3 border-b border-card-border px-4 py-3", "td-chat-who")}>
@@ -382,7 +382,8 @@ export default function EditChatPanel({
                 "td-bubble"
               )}
             >
-              {m.content}
+              {/* A tester's own words: marked for replay masking on the text itself, so it holds even if the panel's `ph-no-capture` is ever moved. */}
+              <span data-ph-mask>{m.content}</span>
             </div>
             {/* The shown delta — the persisted itinerary is updated silently behind this. */}
             {m.role === "assistant" && m.daysModified && m.daysModified.length > 0 && (

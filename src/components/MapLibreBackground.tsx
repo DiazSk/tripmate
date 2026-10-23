@@ -158,7 +158,7 @@ export default function MapLibreBackground({
   return (
     <div
       // `invisible`, never unmounted — see the component comment.
-      className={`absolute inset-0 ${built && globeWanted ? "" : "invisible"}`}
+      className={`ph-no-capture absolute inset-0 ${built && globeWanted ? "" : "invisible"}`}
       data-map-engine="maplibre"
     >
       <div ref={containerRef} className="absolute inset-0" />

@@ -581,7 +581,7 @@ export default function GlobeBackground({
           handing scroll back. Do not delete it as redundant. */}
       <div
         ref={containerRef}
-        className={`h-full w-full ${globeWanted ? "" : "invisible"}`}
+        className={`ph-no-capture h-full w-full ${globeWanted ? "" : "invisible"}`}
       />
       {/* Day-to-night, as a blend-mode sheet over the canvas rather than anything in Cesium.
 

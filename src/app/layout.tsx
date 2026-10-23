@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ClerkProvider } from "@clerk/nextjs";
 import AppShell from "@/components/AppShell";
+import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import { clerkClientConfigured } from "@/lib/clerkConfig";
 import "./globals.css";
@@ -165,7 +166,21 @@ function Shell({ children }: { children: React.ReactNode }) {
       )}
     </>
   );
-  return clerkClientConfigured() ? <ClerkProvider>{app}</ClerkProvider> : app;
+  const clerk = clerkClientConfigured();
+  // Inside the ClerkProvider when there is one, so it can see who is signed in. Renders nothing
+  // without NEXT_PUBLIC_POSTHOG_KEY; otherwise asks once and starts PostHog only after a Yes.
+  const analytics = <AnalyticsProvider clerk={clerk} />;
+  return clerk ? (
+    <ClerkProvider>
+      {app}
+      {analytics}
+    </ClerkProvider>
+  ) : (
+    <>
+      {app}
+      {analytics}
+    </>
+  );
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

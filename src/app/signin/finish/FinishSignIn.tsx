@@ -6,6 +6,7 @@ import { useToast } from "@/lib/toast";
 import { ACCOUNT_CREATED_KEY } from "@/components/AccountReceipt";
 import { afterSignInPath } from "@/lib/afterSignIn";
 import { safeNextPath } from "@/lib/safeNext";
+import { identifyAfterSignIn } from "@/lib/analytics/client";
 
 type Claim = { ok: true; claimed: number; needsOnboarding: boolean } | { ok: false; unauthorized: boolean };
 
@@ -66,7 +67,11 @@ export default function FinishSignIn() {
         title: "You’re signed in, but the trips you made before signing in haven’t moved to your account yet.",
         action: { label: "Try again", onClick: async () => settle(await postClaim(), true) },
       });
-    void postClaim().then((claim) => settle(claim, false));
+    void postClaim().then((claim) => {
+      // After the claim, so the id is the account's owner; unawaited, because analytics never holds a screen.
+      if (claim.ok) void identifyAfterSignIn();
+      settle(claim, false);
+    });
   }, [params, router, toast]);
 
   return <main className="min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] text-sm text-muted">One moment…</main>;
