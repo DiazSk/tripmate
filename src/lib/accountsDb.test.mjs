@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
+  analyticsConsent,
   appendChatTurn,
   createLlmSession,
   deleteAccountData,
@@ -19,6 +20,7 @@ import {
   putAvatar,
   rawDb,
   saveStoryScript,
+  setAnalyticsConsent,
   upsertSavedPlaces,
   writeProfile,
 } from "./db.ts";
@@ -148,4 +150,18 @@ test("isAccountOwnerId is true only for an account's owner id", () => {
   assert.equal(isAccountOwnerId(a.owner_id), true);
   assert.equal(isAccountOwnerId(randomUUID()), false);
   assert.equal(isAccountOwnerId("local"), false);
+});
+
+test("analyticsConsent is null before an answer, follows the latest answer, and goes with the account", () => {
+  const owner = getOrCreateAccount("user_acc_consent").owner_id;
+  assert.equal(analyticsConsent(owner), null);
+  setAnalyticsConsent(owner, true);
+  assert.equal(analyticsConsent(owner), true);
+  setAnalyticsConsent(owner, false);
+  assert.equal(analyticsConsent(owner), false);
+  setAnalyticsConsent(owner, true);
+
+  deleteAccountData("user_acc_consent");
+  assert.equal(analyticsConsent(owner), null);
+  assert.equal(rawDb.prepare(`SELECT 1 FROM analytics_consent WHERE owner_id = ?`).get(owner), undefined);
 });

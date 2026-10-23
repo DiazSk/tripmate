@@ -225,6 +225,19 @@ db.exec(`
 `);
 
 /**
+ * Whether this owner agreed to product analytics. Held on the server rather than only in the
+ * browser so one answer holds across devices and the server-side events can honour it; no row
+ * means never asked, which is not the same as No.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS analytics_consent (
+    owner_id TEXT PRIMARY KEY,
+    consent INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+/**
  * One row per Clerk user: the bridge from Clerk's `user_…` id to the UUID every owner-scoped table
  * stores. Clerk holds the identity; this holds what the app attaches to it — the owner id, the
  * avatar URL and whether the welcome has run. Created on the first signed-in request
@@ -1594,6 +1607,20 @@ export function putAvatar(ownerId: string, bytes: Uint8Array, mime: string): str
   return url;
 }
 
+export function setAnalyticsConsent(ownerId: string, consent: boolean): void {
+  db.prepare(`INSERT OR REPLACE INTO analytics_consent (owner_id, consent, updated_at) VALUES (?, ?, ?)`).run(
+    ownerId,
+    consent ? 1 : 0,
+    new Date().toISOString()
+  );
+}
+
+/** `null` is "never answered", which callers must not read as a refusal. */
+export function analyticsConsent(ownerId: string): boolean | null {
+  const row = db.prepare(`SELECT consent FROM analytics_consent WHERE owner_id = ?`).get(ownerId) as { consent: number } | undefined;
+  return row ? row.consent === 1 : null;
+}
+
 export function deleteAvatar(ownerId: string): void {
   db.prepare(`DELETE FROM user_avatar WHERE user_id = ?`).run(ownerId);
   db.prepare(`UPDATE accounts SET image = NULL WHERE owner_id = ?`).run(ownerId);
@@ -1650,6 +1677,7 @@ export function deleteAccountData(clerkUserId: string): boolean {
     db.prepare(`DELETE FROM saved_places WHERE owner_id = ?`).run(owner);
     db.prepare(`DELETE FROM traveler_profile WHERE owner_id = ?`).run(owner);
     db.prepare(`DELETE FROM user_avatar WHERE user_id = ?`).run(owner);
+    db.prepare(`DELETE FROM analytics_consent WHERE owner_id = ?`).run(owner);
     db.prepare(`DELETE FROM accounts WHERE clerk_user_id = ?`).run(clerkUserId);
     db.prepare("COMMIT").run();
     return true;
