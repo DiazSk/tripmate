@@ -7,7 +7,9 @@ import { normalizeDays } from "@/lib/itinerary";
 import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
 import { DayPlan } from "@/lib/types";
 import { GenerationParams, runGeneration } from "@/lib/generationRunner";
-import { StageEvent } from "@/lib/generationStages";
+import { StageEvent, type StageId } from "@/lib/generationStages";
+import { attemptIdFrom, captureServer, failureOf, whoFromRequest, type Who } from "@/lib/analytics/server";
+import { llmMode } from "@/lib/llmConfig";
 import type { StreamedStop } from "@/lib/streamingItinerary";
 import type { SketchDay } from "@/lib/sketch";
 import { CAPS, capFailureResponse, checkItinerary, checkText, readJsonCapped } from "@/lib/inputLimits";
@@ -37,7 +39,50 @@ function sseFrame(event: string, data: unknown): Uint8Array {
   return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+/** What the handler learns that the analytics at the edge of `POST` cannot read off a response. */
+interface Seen {
+  /** Whether this request is a plan being written (the "plan" allowance), once the body says so. */
+  plan?: boolean;
+  /** The furthest stage reached, for a `plan_failed` to say where it stopped. */
+  stage: "fetch" | "generate" | "save";
+  /** Set when a non-streamed plan was written. A streamed one reports from inside its stream. */
+  days?: number;
+}
+
+const stageOf = (stage: StageId): Seen["stage"] => (stage === "generate" || stage === "critique" ? "generate" : "fetch");
+
+/** `limited` covers the throttle and the daily spend cap, `cap` an input cap, `rejected` the scope guard. */
+const FAILURE_REASON = { limited: "limited", cap: "cap", refused: "rejected", timeout: "timeout", error: "model_error" } as const;
+
+/**
+ * Analytics sit here, at the edge, so each of the handler's early returns is reported once, from
+ * the response it chose, rather than at every `return`. Only a plan being written counts: a refine
+ * or a rebalance is a change to a plan the traveller already has.
+ */
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const seen: Seen = { stage: "generate" };
+  // Started now, in the request's scope, because a stream's callbacks run outside it and cannot ask.
+  const who = whoFromRequest(req);
+  const attemptId = attemptIdFrom(req);
+  const res = await handle(req, seen, { who, attemptId, startedAt });
+  // The daily cap answers before the body is read, so the client's attempt id is what says it was a plan.
+  if (seen.plan ?? attemptId !== null) {
+    const failure = await failureOf(res);
+    const base = { duration_ms: Date.now() - startedAt, attempt_id: attemptId };
+    if (failure) captureServer(await who, "plan_failed", { stage: seen.stage, reason: FAILURE_REASON[failure], ...base });
+    else if (seen.days !== undefined) {
+      captureServer(await who, "plan_written", { origin: "generated", days: seen.days, transport: llmMode(), ...base });
+    }
+  }
+  return res;
+}
+
+async function handle(
+  req: NextRequest,
+  seen: Seen,
+  track: { who: Promise<Who>; attemptId: string | null; startedAt: number }
+): Promise<Response> {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
   const read = await readJsonCapped(req);
@@ -51,6 +96,7 @@ export async function POST(req: NextRequest) {
   // Read first so the refusal can name the action: a refine or a rebalance is a change to a plan
   // the traveller already has, and is held to the edit allowance, not the planning one.
   const bucket = body.rebalance || (body.previousItinerary && body.feedback) ? "edit" : "plan";
+  seen.plan = bucket === "plan";
   // Caps and the free check, before the throttle, so a refusal costs none of the allowance.
   for (const c of [
     checkText(body.destination, CAPS.destination),
@@ -160,7 +206,8 @@ export async function POST(req: NextRequest) {
 
   if (!isStreaming) {
     try {
-      const result = await runGeneration(params, () => {});
+      const result = await runGeneration(params, (event) => (seen.stage = stageOf(event.stage)));
+      seen.days = result.itinerary.days.length;
       return NextResponse.json(result);
     } catch (err) {
       // `runGeneration` throws CLI timeouts and JSON parse failures. Those messages are
@@ -203,7 +250,12 @@ export async function POST(req: NextRequest) {
           console.error("[itinerary] keepalive emit failed", err);
         }
       }, 20_000);
-      const onStage = (event: StageEvent) => safeEnqueue("stage", event);
+      const onStage = (event: StageEvent) => {
+        seen.stage = stageOf(event.stage);
+        safeEnqueue("stage", event);
+      };
+      /** Set once the plan has been handed over and reported, so a later failure (the critique) is not a failed plan. */
+      let reported = false;
       /** The plan as it went over the wire, for the revision below to recognise it on the draft. */
       let planned: { runId: string; days: DayPlan[] } | null = null;
       const live = {
@@ -213,6 +265,20 @@ export async function POST(req: NextRequest) {
         onPlan: (result: Awaited<ReturnType<typeof runGeneration>>) => {
           planned = { runId: result.runId, days: structuredClone(result.itinerary.days) };
           safeEnqueue("plan", result);
+          // The plan exists the moment it is handed to the client; the critique that follows is a
+          // revision of it, not part of writing it, so nothing more is sent when that finishes.
+          if (!isRefine && !reported) {
+            reported = true;
+            void track.who.then((who) =>
+              captureServer(who, "plan_written", {
+                origin: "generated",
+                days: result.itinerary.days.length,
+                duration_ms: Date.now() - track.startedAt,
+                transport: llmMode(),
+                attempt_id: track.attemptId,
+              })
+            );
+          }
         },
         // The critique lands minutes after the plan, usually after the client has moved to the
         // draft's trip page or left altogether, and this keeps running either way. So the
@@ -235,6 +301,14 @@ export async function POST(req: NextRequest) {
         safeEnqueue("done", result);
       } catch (err) {
         if (!(err instanceof OffTopicError)) console.error("[itinerary]", err);
+        if (!isRefine && !reported) {
+          captureServer(await track.who, "plan_failed", {
+            stage: seen.stage,
+            reason: err instanceof OffTopicError ? "rejected" : err instanceof ModelTimeoutError ? "timeout" : "model_error",
+            duration_ms: Date.now() - track.startedAt,
+            attempt_id: track.attemptId,
+          });
+        }
         // The stream's status is already 200, so the timeout code rides in the event instead.
         safeEnqueue(
           "error",

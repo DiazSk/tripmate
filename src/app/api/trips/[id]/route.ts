@@ -10,6 +10,9 @@ import { itineraryRejection } from "@/lib/itinerary";
 import { readableOwners, writableOwners } from "@/lib/owner";
 import { currentOwner } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
+import { attemptIdFrom, captureServer, whoFromRequest } from "@/lib/analytics/server";
+import { stopChanges } from "@/lib/analytics/stopChanges";
+import type { Itinerary } from "@/lib/types";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
 // use of `normalizeDays` moved into `toTripDetail`, but this did not.
 import { tripEndDate } from "@/lib/tripDays";
@@ -42,6 +45,51 @@ export async function GET(
   // this route reads the same row directly and the two must not drift. See its comment for why
   // normalizing on read is load-bearing.
   return NextResponse.json(toTripDetail(trip));
+}
+
+const ORIGINS = ["generated", "imported", "ready-made"] as const;
+
+/**
+ * Who made an edit is something only the client knows (the trip page persists a chat edit, a hand
+ * edit and a map-search add through this same route), so it says so in `X-Edit-By`. Anything else,
+ * or nothing, is a hand edit.
+ */
+function editBy(req: NextRequest): "chat" | "hand" | "search" {
+  const by = req.headers.get("x-edit-by");
+  return by === "chat" || by === "search" ? by : "hand";
+}
+
+/** Analytics for a PATCH that has already been applied: a plan kept, stops changed. Never throws. */
+async function reportPatch(
+  req: NextRequest,
+  trip: { created_at: string; itinerary_json: string },
+  itinerary: Itinerary | undefined,
+  promoted: boolean
+): Promise<void> {
+  try {
+    const before = JSON.parse(trip.itinerary_json) as Itinerary;
+    const who = await whoFromRequest(req);
+    const sinceMs = Date.now() - new Date(trip.created_at).getTime();
+    const after = itinerary ?? before;
+    if (promoted) {
+      captureServer(who, "trip_kept", {
+        // From the client's body, so only the three known values are passed on.
+        origin: ORIGINS.find((o) => o === (after.origin ?? before.origin ?? "generated")) ?? null,
+        days: after.days.length,
+        minutes_since_written: Math.max(0, Math.round(sinceMs / 60_000)),
+        attempt_id: attemptIdFrom(req),
+      });
+    }
+    // Hundredths of a day, so an edit minutes after the plan was written reads differently from one a day later.
+    const days_since_written = Math.max(0, Math.round((sinceMs / 86_400_000) * 100) / 100);
+    if (itinerary) {
+      for (const c of stopChanges(before, itinerary)) {
+        captureServer(who, "stop_changed", { ...c, by: editBy(req), days_since_written });
+      }
+    }
+  } catch (err) {
+    console.warn("[analytics] trip patch report failed:", err instanceof Error ? err.message : err);
+  }
 }
 
 export async function PATCH(
@@ -104,6 +152,7 @@ export async function PATCH(
   // "the caller isn't tracking a session", which is every pre-existing PATCH caller, and must not
   // be read as "clear the one on the row".
   if (typeof chatSessionId === "string" && chatSessionId) setTripChatSession(id, chatSessionId);
+  await reportPatch(req, trip, itinerary, promote);
   return NextResponse.json({
     ok: true,
     endDate: endDate ?? trip.end_date,

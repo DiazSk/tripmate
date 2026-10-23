@@ -11,7 +11,7 @@ import { analyticsIdFor, distinctIdFromCookies, isInternalUser } from "./ids";
  */
 
 export type ServerEvent =
-  | "plan_written" | "plan_failed" | "trip_kept" | "draft_cleared" | "idea_read"
+  | "plan_written" | "plan_failed" | "trip_kept" | "idea_read"
   | "chat_edit_answered" | "stop_changed" | "trip_shared" | "shared_trip_opened" | "trips_claimed";
 
 export type Platform = "web" | "phone";
@@ -57,13 +57,27 @@ export async function whoFromRequest(
   req: Request,
   resolve: () => Promise<{ ownerId: string; clerkUserId: string | null }> = defaultResolve,
 ): Promise<Who & { platform: Platform }> {
-  const { ownerId, clerkUserId } = await resolve();
-  return {
-    ownerId,
-    clerkUserId,
-    cookieHeader: req.headers.get("cookie"),
-    platform: /^Bearer\s/i.test(req.headers.get("authorization") ?? "") ? "phone" : "web",
-  };
+  const platform = /^Bearer\s/i.test(req.headers.get("authorization") ?? "") ? "phone" : "web";
+  const cookieHeader = req.headers.get("cookie");
+  try {
+    const { ownerId, clerkUserId } = await resolve();
+    return { ownerId, clerkUserId, cookieHeader, platform };
+  } catch (e) {
+    // Asking who someone is can fail (Clerk without its middleware, an unreadable cookie); that
+    // must cost an event, never the route. No owner and no cookie id means `captureServer` sends nothing.
+    console.warn("[analytics] who failed:", e instanceof Error ? e.message : e);
+    return { ownerId: "", clerkUserId: null, cookieHeader: null, platform };
+  }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const isUuid = (v: string) => UUID.test(v);
+
+/** The client's `X-Attempt-Id` header: one plan attempt's id. Only a UUID is trusted as a property value. */
+export function attemptIdFrom(req: Request): string | null {
+  const v = req.headers.get("x-attempt-id")?.trim().toLowerCase() ?? "";
+  return UUID.test(v) ? v : null;
 }
 
 async function defaultResolve(): Promise<{ ownerId: string; clerkUserId: string | null }> {
@@ -71,6 +85,33 @@ async function defaultResolve(): Promise<{ ownerId: string; clerkUserId: string 
   const { clerkConfigured } = await import("../clerkConfig");
   const clerkUserId = clerkConfigured() ? (await (await import("@clerk/nextjs/server")).auth()).userId : null;
   return { ownerId: await currentOwnerId(), clerkUserId };
+}
+
+export type Failure = "limited" | "cap" | "refused" | "timeout" | "error";
+
+/**
+ * What a route's refusal or failure means, read off the response it is about to send, so a route
+ * with a dozen early returns reports each once at its edge instead of at every `return`. The
+ * structured `code` (limitResponse.ts, inputLimits.ts) wins; the status is the fallback. A 2xx
+ * (including a stream, which is never read) or a plain client-side 4xx is not a failure here.
+ */
+export async function failureOf(res: Response): Promise<Failure | null> {
+  if (res.ok) return null;
+  let code: unknown;
+  try {
+    code = ((await res.clone().json()) as { code?: unknown } | null)?.code;
+  } catch {
+    // Not JSON: judged by status alone.
+  }
+  if (code === "rate_limited" || code === "daily_cap") return "limited";
+  if (code === "timeout") return "timeout";
+  if (code === "off_topic") return "refused";
+  if (code === "too_long" || code === "bad_request") return "cap";
+  if (res.status === 429 || res.status === 503) return "limited";
+  if (res.status === 504) return "timeout";
+  if (res.status === 413) return "cap";
+  if (res.status === 422) return "refused";
+  return res.status >= 500 ? "error" : null;
 }
 
 export function captureServer(
@@ -97,6 +138,11 @@ export function captureServer(
       signed_in: signedIn,
       internal: isInternalUser(who.clerkUserId, process.env.ANALYTICS_INTERNAL_USER_IDS),
     };
+    // Dev-only: lets a route be exercised end to end with nothing leaving the machine.
+    if (process.env.ANALYTICS_DEBUG === "1" && process.env.NODE_ENV !== "production") {
+      console.log(`[analytics] ${event} ${JSON.stringify(properties)}`);
+      return;
+    }
     schedule(async () => {
       try {
         const c = getClient(key);

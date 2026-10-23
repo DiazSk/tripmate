@@ -48,6 +48,7 @@ import { checkEditReply, MAX_REPLY_CHARS } from "@/lib/promptScope";
 import { loadSkill } from "@/lib/skill";
 import { dailyCapResumesAt } from "@/lib/spendCap";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
+import { captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server";
 
 interface EditResponse {
   reply?: string;
@@ -86,7 +87,27 @@ function daysModified(ops: PatchOp[], rejected: { op: PatchOp }[]): number[] {
  * persist (single source of truth), while `changes`/`why`/`knockOn` are the only things meant for
  * the UI. Raw model output never leaves this route.
  */
+/**
+ * One `chat_edit_answered` per request, reported from the response the handler chose, so none of
+ * its early returns needs its own. Counts and categories only: nothing the traveller typed or the
+ * model said goes into a property. A request that never became an edit (a 400 for a missing field,
+ * a 404) is not an outcome.
+ */
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const seen: { ops: number; mode: "chat" | "element" | null } = { ops: 0, mode: null };
+  const res = await handle(req, seen);
+  const failure = await failureOf(res);
+  const outcome = failure
+    ? ({ limited: "limited", cap: "refused", refused: "refused", timeout: "timeout", error: "error" } as const)[failure]
+    : res.ok ? (seen.ops > 0 ? "applied" : "answered") : null;
+  if (outcome) {
+    captureServer(await whoFromRequest(req), "chat_edit_answered", { outcome, mode: seen.mode, duration_ms: Date.now() - startedAt, ops: seen.ops });
+  }
+  return res;
+}
+
+async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "element" | null }): Promise<Response> {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
   const read = await readJsonCapped(req);
@@ -104,6 +125,7 @@ export async function POST(req: NextRequest) {
     syncedHash?: string | null;
   };
 
+  seen.mode = mode === "chat" || mode === "element" ? mode : null;
   if (!mode || !trip || !itinerary) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
@@ -302,6 +324,7 @@ export async function POST(req: NextRequest) {
 
     const ops = parsed.ops ?? [];
     const { itinerary: updated, rejected } = applyPatch(itinerary, ops, scope);
+    seen.ops = ops.length - rejected.length;
 
     // Whichever session actually served the turn — which is NOT necessarily the one we asked for,
     // since the fallback above opens a new one. Persisting the wrong id would strand the trip on

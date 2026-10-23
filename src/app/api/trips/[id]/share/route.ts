@@ -4,6 +4,7 @@ import { getTrip, setTripShareToken } from "@/lib/db";
 import { currentOwner } from "@/lib/ownerRequest";
 import { writableOwners } from "@/lib/owner";
 import { shareUrl } from "@/lib/share";
+import { captureServer, whoFromRequest } from "@/lib/analytics/server";
 
 /**
  * Publishing a trip, and withdrawing it again.
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
  * silently break the first link while showing the sender a perfectly good one. Rotating a token
  * is a different intention, and it is spelled `DELETE` then `POST`.
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const trip = getTrip(id);
   const { id: ownerId } = await currentOwner();
@@ -46,6 +47,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
+  // Only a link made now: the idempotent return above is the same link handed back, not a new share.
+  captureServer(await whoFromRequest(req), "trip_shared", {});
   return NextResponse.json({ token, url: shareUrl(token) });
 }
 

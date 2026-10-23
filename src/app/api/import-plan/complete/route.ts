@@ -30,6 +30,8 @@ import { itineraryRejection } from "@/lib/itinerary";
 import { insertTrip } from "@/lib/db";
 import { currentOwnerId } from "@/lib/ownerRequest";
 import type { Anchor } from "@/lib/types";
+import { attemptIdFrom, captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server";
+import { llmMode } from "@/lib/llmConfig";
 
 /**
  * Bring your own itinerary, step two: geocode what is still unplaced, look up hours and weather,
@@ -39,7 +41,32 @@ import type { Anchor } from "@/lib/types";
 
 const FILL_TIMEOUT_MS = 60_000;
 
+/** What the handler learns that the analytics at the edge of `POST` cannot read off a response. */
+interface Seen {
+  stage: "fetch" | "generate" | "save";
+  /** Set once the draft is written. */
+  written?: { origin: "imported" | "ready-made"; days: number; saveMs: number };
+}
+
+const FAILURE_REASON = { limited: "limited", cap: "cap", refused: "rejected", timeout: "timeout", error: "model_error" } as const;
+
+/** One event per outcome, reported from the response the handler chose. */
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const seen: Seen = { stage: "fetch" };
+  const res = await handle(req, seen);
+  const failure = await failureOf(res);
+  const who = await whoFromRequest(req);
+  const base = { duration_ms: Date.now() - startedAt, attempt_id: attemptIdFrom(req) };
+  if (failure) captureServer(who, "plan_failed", { stage: seen.stage, reason: FAILURE_REASON[failure], ...base });
+  else if (seen.written) {
+    const { origin, days, saveMs } = seen.written;
+    captureServer(who, "plan_written", { origin, days, transport: llmMode(), save_duration_ms: saveMs, ...base });
+  }
+  return res;
+}
+
+async function handle(req: NextRequest, seen: Seen): Promise<Response> {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
   const read = await readJsonCapped(req);
@@ -131,7 +158,9 @@ export async function POST(req: NextRequest) {
       return null;
     }
   };
+  seen.stage = "generate";
   const fill: Record<string, FillEntry> | null = ids.length === 0 ? {} : ((await fillOnce()) ?? (await fillOnce()));
+  seen.stage = "save";
   const { stored: storedBudget, tierBudget } = budgetsFor(request, fill !== null);
 
   const itinerary = assembleItinerary({ dated, fill, hours, weather, budget: storedBudget, tierBudget, fallback, origin, readyTrip });
@@ -141,6 +170,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't build this trip." }, { status: 500 });
   }
 
+  const savingFrom = Date.now();
   const trip = insertTrip({
     id: randomUUID(),
     owner_id: await currentOwnerId(),
@@ -155,5 +185,6 @@ export async function POST(req: NextRequest) {
     status: "draft",
     timezone: named?.timezone ?? null,
   });
+  seen.written = { origin: origin ?? "imported", days: dated.length, saveMs: Date.now() - savingFrom };
   return NextResponse.json({ id: trip.id });
 }

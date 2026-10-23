@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
   const limit = throttle(req, "lookup");
   if (limit.limited) return limitResponse(limit, "lookup");
   const secret = process.env.ANALYTICS_ID_SECRET;
-  if (!secret) return NextResponse.json({ id: null });
-  return NextResponse.json({ id: analyticsIdFor(await currentOwnerId(), secret) });
+  // Per caller, so it must never be cached and served to someone else.
+  const headers = { "Cache-Control": "no-store" };
+  if (!secret) return NextResponse.json({ id: null }, { headers });
+  return NextResponse.json({ id: analyticsIdFor(await currentOwnerId(), secret) }, { headers });
 }

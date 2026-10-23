@@ -91,6 +91,11 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[]): T | null =>
 const subset = <T extends string>(v: unknown, allowed: readonly T[]): T[] =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is T => pick(x, allowed) !== null))] : [];
 
+/** How much of the sentence was understood: fields with a value plus lists with something in them. Counts only, for analytics. */
+export function ideaFieldCount(read: IdeaRead): number {
+  return Object.values(read).filter((v) => (Array.isArray(v) ? v.length > 0 : v !== null)).length;
+}
+
 /** Null when the reply is not a JSON object or is the refusal shape; otherwise every field validated. */
 export function parseIdeaRead(raw: string): IdeaRead | null {
   let v: unknown;

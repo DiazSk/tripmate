@@ -6,7 +6,8 @@ import { throttle } from "@/lib/ipThrottle";
 import { capResponse, limitResponse, modelFailureResponse, offTopicResponse, prefilterRefusal } from "@/lib/limitResponse";
 import { dailyCapResumesAt } from "@/lib/spendCap";
 import { isRefusalShape } from "@/lib/promptScope";
-import { IDEA_MAX_CHARS, buildIdeaReadPrompt, parseIdeaRead } from "@/lib/ideaRead";
+import { IDEA_MAX_CHARS, buildIdeaReadPrompt, ideaFieldCount, parseIdeaRead, type IdeaRead } from "@/lib/ideaRead";
+import { captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server";
 
 /**
  * Reads a traveller's one-sentence trip idea into planner fields, for the phone's Home box. One
@@ -17,7 +18,26 @@ import { IDEA_MAX_CHARS, buildIdeaReadPrompt, parseIdeaRead } from "@/lib/ideaRe
 const READ_TIMEOUT_MS = 30_000;
 const UNREADABLE = "Couldn’t read that idea. Try again, or plan it step by step.";
 
+/**
+ * One `idea_read` per request, reported from the response the handler chose. Only how much was
+ * understood goes out (a count of fields), never the sentence or what was read from it. A request
+ * that was not an idea at all (an empty box) is not an outcome.
+ */
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const res = await handle(req);
+  const failure = await failureOf(res);
+  const outcome = failure
+    ? ({ limited: "limited", cap: "refused", refused: "refused", timeout: "timeout", error: "unreadable" } as const)[failure]
+    : res.ok ? "read" : null;
+  if (outcome) {
+    const fields = outcome === "read" ? ideaFieldCount((await res.clone().json()) as IdeaRead) : 0;
+    captureServer(await whoFromRequest(req), "idea_read", { outcome, duration_ms: Date.now() - startedAt, fields });
+  }
+  return res;
+}
+
+async function handle(req: NextRequest): Promise<Response> {
   const capped = dailyCapResumesAt();
   if (capped) return capResponse(capped);
   const read = await readJsonCapped(req);

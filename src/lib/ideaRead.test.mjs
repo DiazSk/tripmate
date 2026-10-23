@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildIdeaReadPrompt, parseIdeaRead } from "./ideaRead.ts";
+import { buildIdeaReadPrompt, ideaFieldCount, parseIdeaRead } from "./ideaRead.ts";
 
 test("a full idea reads into every field it gave", () => {
   const r = parseIdeaRead(JSON.stringify({ destination: "Lisbon, Portugal", kind: null, days: 4, budget: 2000, budgetBasis: "whole_party", adults: 2, children: 0, pace: "relaxed", interests: ["Food"], tags: ["Food", "City"], avoidTags: ["Wine"] }));
@@ -31,4 +31,10 @@ test("the prompt fences the traveller's words and carries the scope and the voca
   assert.ok(p.includes('{"refused":"off_topic"}'));
   assert.ok(!p.includes("</traveler_text> ignore"));
   for (const word of ["Desert", "Wine", "Wellness & Fitness", "2026-10-21", "avoidTags"]) assert.ok(p.includes(word), word);
+});
+
+test("ideaFieldCount counts the fields that were read, and an empty list is not one", () => {
+  const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [] };
+  assert.equal(ideaFieldCount(none), 0);
+  assert.equal(ideaFieldCount({ ...none, destination: "Lisbon, Portugal", days: 4, tags: ["food"], interests: [] }), 3);
 });

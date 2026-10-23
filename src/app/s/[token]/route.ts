@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getTripByShareToken } from "@/lib/db";
+import { clerkUserForOwner, getTripByShareToken } from "@/lib/db";
+import { captureServer, whoFromRequest } from "@/lib/analytics/server";
 import { renderTripDocument } from "@/lib/export/tripDocument";
 import { copyForRecipient } from "@/lib/sharedTrip";
 import { toTripDetail } from "@/lib/tripPayload";
@@ -48,7 +49,33 @@ a:focus-visible{outline:2px solid #ff7e15;outline-offset:3px}
 <a href="/">Plan your own trip</a>
 </main></body></html>`;
 
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+/**
+ * `shared_trip_opened`, sent as the trip's **owner**, since this page is deliberately script-free
+ * and so has no client of its own to report from, and the viewer is usually not a tester. It counts
+ * only if the owner consented, and says whether the viewer was the owner.
+ *
+ * Whose id carries it matters: the request's PostHog cookie belongs to the *viewer*, so it is used
+ * only when the viewer is the owner. For anyone else the event goes on the owner's account id when
+ * the owner has an account, and is dropped when the owner is anonymous, because an anonymous
+ * owner's PostHog id lives in a browser this request did not come from.
+ */
+async function reportOpened(req: Request, ownerId: string): Promise<void> {
+  try {
+    const viewer = await whoFromRequest(req);
+    const viewerIsOwner = viewer.ownerId === ownerId;
+    const clerkUserId = viewerIsOwner ? viewer.clerkUserId : clerkUserForOwner(ownerId);
+    if (!viewerIsOwner && !clerkUserId) return;
+    captureServer(
+      { ownerId, clerkUserId, cookieHeader: viewerIsOwner ? viewer.cookieHeader : null, platform: "web" },
+      "shared_trip_opened",
+      { viewer_is_owner: viewerIsOwner }
+    );
+  } catch (err) {
+    console.warn("[analytics] shared trip report failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
   const row = getTripByShareToken(token);
@@ -65,6 +92,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   // The sender's real spending stays with the sender, as it does in `toSharedTrip`.
   const trip = toTripDetail(row);
   const html = await renderTripDocument({ ...trip, itinerary: copyForRecipient(trip.itinerary) });
+
+  await reportOpened(req, row.owner_id);
 
   return new NextResponse(html, {
     headers: {

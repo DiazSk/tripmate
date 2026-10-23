@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
   analyticsConsent,
+  moveAnalyticsConsent,
   appendChatTurn,
   createLlmSession,
   deleteAccountData,
@@ -164,4 +165,33 @@ test("analyticsConsent is null before an answer, follows the latest answer, and 
   deleteAccountData("user_acc_consent");
   assert.equal(analyticsConsent(owner), null);
   assert.equal(rawDb.prepare(`SELECT 1 FROM analytics_consent WHERE owner_id = ?`).get(owner), undefined);
+});
+
+test("moveAnalyticsConsent hands the answer to an account with none, and the source row is gone", () => {
+  const from = randomUUID();
+  const to = randomUUID();
+  setAnalyticsConsent(from, true);
+  moveAnalyticsConsent(from, to);
+  assert.equal(analyticsConsent(to), true);
+  assert.equal(analyticsConsent(from), null);
+});
+
+test("moveAnalyticsConsent leaves the account's own answer alone and still removes the source", () => {
+  const from = randomUUID();
+  const to = randomUUID();
+  setAnalyticsConsent(from, true);
+  setAnalyticsConsent(to, false);
+  moveAnalyticsConsent(from, to);
+  assert.equal(analyticsConsent(to), false);
+  assert.equal(analyticsConsent(from), null);
+});
+
+test("moveAnalyticsConsent with nothing to move changes nothing", () => {
+  const from = randomUUID();
+  const to = randomUUID();
+  setAnalyticsConsent(to, true);
+  moveAnalyticsConsent(from, to);
+  assert.equal(analyticsConsent(to), true);
+  moveAnalyticsConsent(to, to);
+  assert.equal(analyticsConsent(to), true);
 });

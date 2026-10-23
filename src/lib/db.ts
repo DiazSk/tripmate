@@ -1572,6 +1572,12 @@ export function clerkUserForOwner(ownerId: string): string | null {
   return row?.clerk_user_id ?? null;
 }
 
+/** The owner id of a Clerk user's account, or null when they have none here. Unlike `getOrCreateAccount` it never creates one. */
+export function accountOwnerId(clerkUserId: string): string | null {
+  const row = db.prepare(`SELECT owner_id FROM accounts WHERE clerk_user_id = ?`).get(clerkUserId) as { owner_id: string } | undefined;
+  return row?.owner_id ?? null;
+}
+
 /** Whether an owner id belongs to a Clerk account rather than an anonymous cookie or device. */
 export function isAccountOwnerId(ownerId: string): boolean {
   return !!db.prepare(`SELECT 1 FROM accounts WHERE owner_id = ?`).get(ownerId);
@@ -1613,6 +1619,18 @@ export function setAnalyticsConsent(ownerId: string, consent: boolean): void {
     consent ? 1 : 0,
     new Date().toISOString()
   );
+}
+
+/**
+ * Carries an anonymous owner's answer onto the account it signed in to, then removes it. The account
+ * keeps an answer it already has. The source row must go: left at Yes, a later No on the account
+ * followed by a sign-out would leave this device anonymous again with a stored Yes.
+ */
+export function moveAnalyticsConsent(fromOwnerId: string, toOwnerId: string): void {
+  const answered = analyticsConsent(fromOwnerId);
+  if (answered === null || fromOwnerId === toOwnerId) return;
+  if (analyticsConsent(toOwnerId) === null) setAnalyticsConsent(toOwnerId, answered);
+  db.prepare(`DELETE FROM analytics_consent WHERE owner_id = ?`).run(fromOwnerId);
 }
 
 /** `null` is "never answered", which callers must not read as a refusal. */
