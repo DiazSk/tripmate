@@ -1,5 +1,5 @@
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import { accountOwnerId, deleteAccountData } from "@/lib/db";
 import { analyticsIdFor } from "@/lib/analytics/ids";
 import { requestDeletion } from "@/lib/analytics/server";
@@ -17,12 +17,13 @@ export async function POST(req: NextRequest) {
     return new Response("Error verifying webhook", { status: 400 });
   }
   if (evt.type === "user.deleted" && evt.data.id) {
-    // Read before the account row is deleted: it is the only thing that says which analytics id was theirs.
+    // Resolved before the account row is deleted: it is the only thing that says which analytics id was theirs.
     const owner = accountOwnerId(evt.data.id);
-    deleteAccountData(evt.data.id);
     const secret = process.env.ANALYTICS_ID_SECRET;
-    // Fail-soft inside; the deletion of their data here has already happened and the webhook must still answer 200.
-    if (owner && secret) await requestDeletion(analyticsIdFor(owner, secret));
+    const analyticsId = owner && secret ? analyticsIdFor(owner, secret) : null;
+    deleteAccountData(evt.data.id);
+    // After the 200, so Clerk's webhook timeout never races PostHog; fail-soft inside.
+    if (analyticsId) after(() => requestDeletion(analyticsId));
   }
   return new Response("ok", { status: 200 });
 }

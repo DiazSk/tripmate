@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef } from "react";
 import { TriangleAlert } from "lucide-react";
+import { track } from "@/lib/analytics/client";
+import { scrubPath } from "@/lib/analytics/clientConfig";
 
 type Choice = { label: string; onClick: () => void };
 
@@ -32,6 +34,7 @@ export default function ErrorDialog({
   detail,
   pending = false,
   pendingLabel = "Working…",
+  code,
 }: {
   open: boolean;
   eyebrow?: string;
@@ -48,6 +51,8 @@ export default function ErrorDialog({
    *  `aria-disabled` rather than `disabled`, so focus stays put. */
   pending?: boolean;
   pendingLabel?: string;
+  /** For `error_shown`, counted each time it opens: the copy row it is (`T-04`). */
+  code?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -63,6 +68,7 @@ export default function ErrorDialog({
     wantOpen.current = open;
     if (!el) return;
     if (open && !el.open) {
+      track("error_shown", { code: code ?? null, surface: scrubPath(location.pathname) });
       opener.current = document.activeElement as HTMLElement | null;
       el.showModal();
       // The native focusing steps would pick the first button, which is the secondary one.
@@ -71,7 +77,7 @@ export default function ErrorDialog({
       el.close();
       opener.current = null;
     }
-  }, [open]);
+  }, [open, code]);
 
   useEffect(
     () => () => {

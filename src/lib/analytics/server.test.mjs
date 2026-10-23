@@ -244,3 +244,35 @@ test("editByFrom knows chat, search and revision, and treats anything else as a 
   assert.equal(by("nonsense"), "hand");
   assert.equal(by(null), "hand");
 });
+
+test("requestDeletion bounds every PostHog call with a timeout signal", async () => {
+  process.env.POSTHOG_PERSONAL_API_KEY = "phx_test";
+  process.env.POSTHOG_PROJECT_ID = "1";
+  const signals = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    signals.push(init?.signal);
+    return init?.method === "DELETE"
+      ? new Response(null, { status: 202 })
+      : new Response(JSON.stringify({ results: [{ id: "uuid-1", distinct_ids: ["c1"] }] }), { status: 200 });
+  };
+  try {
+    await requestDeletion("c1");
+    assert.equal(signals.length, 2);
+    for (const s of signals) assert.ok(s instanceof AbortSignal, "each fetch carries a signal");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("whoFromRequest asks nobody who the caller is when analytics is off", async () => {
+  delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  let asked = 0;
+  try {
+    const who = await whoFromRequest(new Request("http://x/", { headers: { cookie: "a=b" } }), async () => { asked++; return { ownerId: "o1", clerkUserId: null }; });
+    assert.equal(asked, 0);
+    assert.deepEqual(who, { ownerId: "", clerkUserId: null, cookieHeader: null, platform: "web" });
+  } finally {
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = KEY;
+  }
+});

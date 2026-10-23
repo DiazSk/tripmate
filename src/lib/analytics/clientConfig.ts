@@ -41,6 +41,10 @@ export function maskAttribute(name: string, value: string): string {
  *   plays back as unstyled markup, which defeats watching it.
  * - `recordCanvas: false` is pinned because the project's remote config can otherwise switch
  *   canvas recording on, and the canvas is the map.
+ * - Console and network capture are pinned here for the same reason: left unset, the project's
+ *   settings decide them, and this object is the one privacy contract (nothing in PostHog's UI may
+ *   widen it). The console is off (a log line can print a trip); the network log keeps each
+ *   request's timing under its scrubbed path only, see `maskNetworkRequest`.
  */
 export function posthogInitOptions(env: { host: string }) {
   return {
@@ -51,10 +55,12 @@ export function posthogInitOptions(env: { host: string }) {
     autocapture: true,
     mask_all_text: true,
     mask_all_element_attributes: true,
+    enable_recording_console_log: false,
     session_recording: {
       maskAllInputs: true,
       maskTextSelector: "*",
       maskAttributeFn: maskAttribute,
+      maskCapturedNetworkRequestFn: maskNetworkRequest,
       captureCanvas: { recordCanvas: false },
     },
     capture_exceptions: true,
@@ -62,31 +68,73 @@ export function posthogInitOptions(env: { host: string }) {
 }
 
 /**
- * `/s/<token>` is a capability (anyone with it reads the trip) and `/trip/<id>` names one trip, so
- * neither belongs in an analytics event; the route pattern says which screen it was. `latest` is a
- * fixed route, not an id, and stays.
+ * A replay's network entry, cut to the scrubbed path of its URL. The query is where a typed
+ * destination (`/api/geocode?destination=…`) and a place search travel, and the origin says
+ * nothing a path does not; headers and bodies carry cookies and whole trips, so they never stay,
+ * whatever the project's settings ask for. Timing and status are what a replay needs. Another
+ * site's request keeps only its host: a tile's z/x/y is the area being looked at and a Wikimedia
+ * photo's file name is the place. `notRestoredReasons` (Chrome's back/forward cache) carries a URL.
  */
-export function scrubPath(path: string): string {
-  return path.replace(/^\/s\/[^/?#]+/, "/s/:token").replace(/^\/trip\/(?!latest(?:[/?#]|$))[^/?#]+/, "/trip/:id");
+type NetworkEntry = { name: string; requestHeaders?: unknown; requestBody?: unknown; responseHeaders?: unknown; responseBody?: unknown; notRestoredReasons?: unknown };
+export function maskNetworkRequest<E extends NetworkEntry>(entry: E): E {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { requestHeaders, requestBody, responseHeaders, responseBody, notRestoredReasons, ...kept } = entry;
+  const origin = typeof location === "undefined" ? "http://relative.invalid" : location.origin;
+  let name: string;
+  try {
+    const u = new URL(entry.name, origin);
+    name = u.origin === origin ? scrubPath(u.pathname) : u.hostname;
+  } catch {
+    name = "/";
+  }
+  return { ...kept, name } as E;
 }
 
+/**
+ * `/s/<token>` is a capability (anyone with it reads the trip) and `/trip/<id>` names one trip, so
+ * neither belongs in an analytics event; the route pattern says which screen it was, spelled as the
+ * app directory spells it (`/trip/[id]`, `/s/[token]`) everywhere analytics names a route. `latest`
+ * is a fixed route, not an id, and stays. The API routes behind them are cut the same way for a
+ * replay's network log; an avatar's path carries an owner id, the bearer credential for every trip.
+ */
+export function scrubPath(path: string): string {
+  return path
+    .replace(/^\/s\/[^/?#]+/, "/s/[token]")
+    .replace(/^\/trip\/(?!latest(?:[/?#]|$))[^/?#]+/, "/trip/[id]")
+    .replace(/^\/api\/trips\/[^/?#]+/, "/api/trips/[id]")
+    .replace(/^\/api\/shared\/[^/?#]+/, "/api/shared/[token]")
+    .replace(/^\/api\/avatar\/[^/?#]+/, "/api/avatar/[userId]");
+}
+
+/**
+ * The path, and any query value that is itself a path or a URL (a sign-in's `?next=/trip/<id>`).
+ * The query is only rewritten when a value changed, so every other URL keeps its exact spelling.
+ */
 export function scrubUrl(url: string): string {
   try {
     const u = new URL(url);
     u.pathname = scrubPath(u.pathname);
+    for (const [k, v] of [...u.searchParams]) {
+      const clean = v.startsWith("/") ? scrubPath(v) : /^https?:\/\//i.test(v) ? scrubUrl(v) : v;
+      if (clean !== v) u.searchParams.set(k, clean);
+    }
     return u.toString();
   } catch {
     return url;
   }
 }
 
-const URL_KEYS = ["$current_url", "$initial_current_url", "$session_entry_url", "$referrer"];
-const PATH_KEYS = ["$pathname", "$initial_pathname", "$session_entry_pathname", "$prev_pageview_pathname"];
+/** PostHog prefixes the same URL and path properties with `$initial_` and `$session_entry_`, so they are matched by ending. */
+const URL_KEY = /^\$.*(url|referrer)$/;
+const PATH_KEY = /^\$.*pathname$/;
 
 function scrubBag(bag: Record<string, unknown> | undefined | null) {
   if (!bag) return;
-  for (const k of URL_KEYS) if (typeof bag[k] === "string") bag[k] = scrubUrl(bag[k]);
-  for (const k of PATH_KEYS) if (typeof bag[k] === "string") bag[k] = scrubPath(bag[k]);
+  for (const [k, v] of Object.entries(bag)) {
+    if (typeof v !== "string") continue;
+    if (URL_KEY.test(k)) bag[k] = scrubUrl(v);
+    else if (PATH_KEY.test(k)) bag[k] = scrubPath(v);
+  }
 }
 
 /**
@@ -113,6 +161,16 @@ export function scrubEvent<E extends { properties?: Bag; $set?: Bag; $set_once?:
   scrubBag(event.$set);
   scrubBag(event.$set_once);
   return event;
+}
+
+/** This browser's PostHog session count, for the "third session" survey trigger. */
+export type SessionCount = { last: string | null; count: number };
+
+/** A new session id counts once; `third` is true exactly once, on the session that makes it three. */
+export function countSession(prev: SessionCount, sessionId: string): { next: SessionCount; third: boolean } {
+  if (sessionId === prev.last) return { next: prev, third: false };
+  const count = prev.count + 1;
+  return { next: { last: sessionId, count }, third: count === 3 };
 }
 
 /** `?via=linkedin`: where a tester came from. A short word only, since it lands in a person property. */

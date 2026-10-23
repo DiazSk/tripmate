@@ -189,6 +189,7 @@ export default function TripsView({
     const gone = () => (trip.status === "draft" ? setDrafts(removeById) : setTrips(removeById));
     const failed = (f: Failure) =>
       showError({
+        code: f.kind === "offline" ? "M-06" : "M-05",
         title:
           f.kind === "offline"
             ? `You’re offline, so that ${what} wasn’t deleted.`
@@ -205,6 +206,7 @@ export default function TripsView({
           // Already gone elsewhere: the wall was out of date, so the postcard goes either way.
           gone();
           showError({
+            code: "M-04",
             title: `That ${what} was already gone, so there was nothing to delete.`,
             detail: "It may have been deleted in another tab or on another device.",
           });

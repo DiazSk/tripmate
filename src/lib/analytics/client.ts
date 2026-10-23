@@ -1,6 +1,6 @@
 import type { PostHog } from "posthog-js";
 import { createHeld } from "./heldEvents";
-import { internalParam, posthogInitOptions, scrubEvent, viaParam } from "./clientConfig";
+import { countSession, internalParam, posthogInitOptions, scrubEvent, viaParam, type SessionCount } from "./clientConfig";
 
 /**
  * The web's whole PostHog surface, and the only module that imports `posthog-js`.
@@ -14,7 +14,9 @@ import { internalParam, posthogInitOptions, scrubEvent, viaParam } from "./clien
 export type ClientEvent =
   | "plan_started" | "plan_wait_abandoned" | "trip_opened" | "chat_edit_sent" | "error_shown"
   | "offline_screen_shown" | "story_film_played" | "story_film_finished" | "sign_up_completed" | "sign_in_completed"
-  | "idea_sent" | "idea_answered" | "idea_unmatched" | "idea_built" | "ready_trip_opened" | "ready_trip_used" | "filter_pill_selected";
+  | "idea_sent" | "idea_answered" | "idea_unmatched" | "idea_built" | "ready_trip_opened" | "ready_trip_used" | "filter_pill_selected"
+  // Survey triggers, client-side so they never double the server's funnel events.
+  | "trip_kept_seen" | "third_session";
 
 /** Both are inlined at build, so they must be read as these literals; unset key means analytics is off. */
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
@@ -25,6 +27,7 @@ export const analyticsConfigured = Boolean(KEY);
 export const CONSENT_EVENT = "tripmate:analytics-consent-changed";
 const LOCAL_KEY = "tripmate:analytics-consent";
 const LINK_KEY = "tripmate:analytics-link";
+const SESSIONS_KEY = "tripmate:analytics-sessions";
 
 let ph: PostHog | null = null;
 let starting: Promise<PostHog | null> | null = null;
@@ -101,11 +104,33 @@ function applyLinkParams(client: PostHog) {
   }
 }
 
+/** The SDK's import; a seam so `client.test.mjs` can drive the state machine with a fake. */
+let loadSdk: () => Promise<PostHog> = () => import("posthog-js").then((m) => m.default);
+export function setSdkLoaderForTest(load: () => Promise<PostHog>): void {
+  loadSdk = load;
+}
+
+/**
+ * Counts the PostHog sessions this browser has had (the SDK's own 30-minute idle rule decides when
+ * one ends), so the "third session" survey has something to target. Only the count and the last
+ * session id are kept; storage that throws just means no survey.
+ */
+function noteSession(sessionId: string) {
+  try {
+    const prev = JSON.parse(localStorage.getItem(SESSIONS_KEY) ?? "null") as SessionCount | null;
+    const { next, third } = countSession(prev ?? { last: null, count: 0 }, sessionId);
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(next));
+    if (third) track("third_session");
+  } catch {
+    // Same as `rememberConsent`.
+  }
+}
+
 /** Starts the SDK once, after a Yes. Resolves `null` (and stays off) when analytics is unconfigured, a No overtook the import, or the import fails. */
 export function start(): Promise<PostHog | null> {
   if (!KEY) return Promise.resolve(null);
-  starting ??= import("posthog-js")
-    .then(({ default: posthog }) => {
+  starting ??= loadSdk()
+    .then((posthog) => {
       // A No can land while the chunk downloads; `ph` is still null then, so only this flag can stop the init.
       if (withdrawn) {
         starting = null;
@@ -125,6 +150,7 @@ export function start(): Promise<PostHog | null> {
       if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
       applyLinkParams(posthog);
       ph = posthog;
+      posthog.onSessionId(noteSession);
       // Clerk may have reported a signed-in user before the SDK was up.
       void identifySignedIn();
       return posthog;
@@ -207,12 +233,9 @@ export async function setConsent(yes: boolean): Promise<void> {
     });
     if (!res.ok) throw new Error(`consent not saved: ${res.status}`);
   } catch (err) {
-    // Not recorded, so the answer on file stands; a Yes that was stopped is put back.
-    withdrawn = before;
-    if (!yes && ph && !before) {
-      ph.opt_in_capturing({ captureEventName: false });
-      ph.startSessionRecording();
-    }
+    // Not recorded. A Yes starts nothing. A No still holds on this page (capture stays off), since
+    // resuming would record someone who has just said no; the caller says it didn't save (AN-02, AN-04).
+    if (yes) withdrawn = before;
     throw err;
   }
   rememberConsent(yes);
@@ -236,20 +259,38 @@ export async function setConsent(yes: boolean): Promise<void> {
  * anonymous history into it), then names the person for follow-up. Keyed on Clerk's "signed in",
  * never on the id route answering: it returns an HMAC for anonymous owners too. The pair
  * `signed_in: true`, `name` and `email` is only set once `identify` has gone out.
+ *
+ * Only after a fresh read of the account's own stored answer says Yes: the SDK may be up on this
+ * browser's anonymous Yes, which is not the account's, and naming someone is the one step that
+ * cannot be taken back by an opt-out. A stored No is applied; no answer yet waits for the next try
+ * (the claim landing calls this again).
  */
 async function identifySignedIn(): Promise<void> {
   const who = account;
   if (!ph || !who || withdrawn || identified === who.id) return;
   identified = who.id;
+  const stale = () => !ph || withdrawn || account?.id !== who.id;
   try {
+    const stored = await readStoredConsent();
+    if (stale()) throw new Error("stale");
+    if (stored?.consent === false) {
+      await applyStoredConsent(false);
+      throw new Error("declined");
+    }
+    if (stored?.consent !== true) throw new Error("no answer");
     const res = await fetch("/api/analytics/id", { cache: "no-store" });
     if (!res.ok) throw new Error(String(res.status));
-    const { id } = (await res.json()) as { id: string | null };
+    const { id, internal } = (await res.json()) as { id: string | null; internal?: boolean };
     // The user may have signed out, or said No, while the id was in flight.
-    if (!id || !ph || withdrawn || account?.id !== who.id) throw new Error("stale");
+    if (!id || stale() || !ph) throw new Error("stale");
     ph.identify(id);
     ph.register({ signed_in: true });
-    ph.setPersonProperties({ ...(who.name ? { name: who.name } : {}), ...(who.email ? { email: who.email } : {}) });
+    ph.setPersonProperties({
+      ...(who.name ? { name: who.name } : {}),
+      ...(who.email ? { email: who.email } : {}),
+      // The team's own use, as the server judges it, for dashboards to filter out.
+      ...(internal === true ? { internal: true } : {}),
+    });
   } catch {
     // Still counted under the anonymous id; the next sign-in or page load tries again.
     if (identified === who.id) identified = null;
@@ -258,10 +299,12 @@ async function identifySignedIn(): Promise<void> {
 
 /** The provider reports Clerk's state here. Leaving a signed-in state is a sign-out, wherever it came from. */
 export function setAccount(next: Account | null): void {
-  const wasIdentified = identified !== null;
+  // Any signed-in state counts, identified or not: an identify still in flight, or one a stored No
+  // stopped, leaves the SDK's id and super properties to the next person all the same.
+  const wasSignedIn = account !== null;
   account = next;
   if (next) void identifySignedIn();
-  else if (wasIdentified) resetAfterSignOut();
+  else if (wasSignedIn) resetAfterSignOut();
 }
 
 /** After the claim: the account's owner may now carry a consent answer, and the SDK may already be up. */

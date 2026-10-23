@@ -81,6 +81,7 @@ export default function FinishSignIn() {
     /** The claim did not land: say so, and let "Try again" post it again. */
     const unclaimed = () =>
       toast.showError({
+        code: "S-15",
         title: "You’re signed in, but the trips you made before signing in haven’t moved to your account yet.",
         action: { label: "Try again", onClick: async () => settle(await postClaim(), true) },
       });

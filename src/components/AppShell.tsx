@@ -119,6 +119,7 @@ function ShellBody({
     const drop = () => {
       if (offlineToast.current !== null) return;
       offlineToast.current = toast.showError({
+        code: "G-08",
         title: "You’re offline.",
         detail: "Trips you’ve opened still read, but saving, planning and search wait for a connection.",
       });

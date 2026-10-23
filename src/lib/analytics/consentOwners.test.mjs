@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { consentOwners, deviceOwner } from "./consentOwners.ts";
+import { consentOwners, consentWriteOwners, deviceOwner } from "./consentOwners.ts";
 
 const account = randomUUID();
 const anon = randomUUID();
@@ -22,4 +22,12 @@ test("a cookie that is malformed, the legacy bucket, or an account's id is never
   assert.equal(deviceOwner("", anon, isAccount), null);
   assert.equal(deviceOwner(account, anon, isAccount), null);
   assert.equal(deviceOwner(randomUUID(), anon, () => true), null);
+});
+
+test("a Yes is written only to the request's own owner, a No to every owner the device holds", () => {
+  // Signed in: a Yes must not land on the device's anonymous row, or the next account to sign in here inherits it.
+  assert.deepEqual(consentWriteOwners(true, account, anon, isAccount), [account]);
+  assert.deepEqual(consentWriteOwners(false, account, anon, isAccount), [account, anon]);
+  assert.deepEqual(consentWriteOwners(true, anon, anon, isAccount), [anon]);
+  assert.deepEqual(consentWriteOwners(false, anon, undefined, isAccount), [anon]);
 });

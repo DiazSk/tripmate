@@ -1288,6 +1288,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
             // Copy rows P-37, P-37a: a toast that counts the hold down while "Plan my trip" waits.
             holdFromFailure(f);
             showError({
+              code: "P-37",
               title: "You’ve planned 3 trips in the last 10 minutes, which is the limit.",
               detail: "Your answers are kept. You can plan another in {mm:ss}.",
               hold: f.bucket,

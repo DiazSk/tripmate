@@ -17,3 +17,13 @@ export function consentOwners(ownerId: string, cookieOwner: string | undefined, 
   const device = deviceOwner(cookieOwner, ownerId, isAccountOwner);
   return device ? [ownerId, device] : [ownerId];
 }
+
+/**
+ * The rows one answer is written to, and they are not symmetric. A No goes to every owner the
+ * device holds, so it reaches each id this device could be captured under. A Yes goes only to the
+ * request's own owner: written to a signed-in device's anonymous row as well, it would be inherited
+ * by the next account to sign in from this browser, who has said nothing.
+ */
+export function consentWriteOwners(yes: boolean, ownerId: string, cookieOwner: string | undefined, isAccountOwner: (id: string) => boolean): string[] {
+  return yes ? [ownerId] : consentOwners(ownerId, cookieOwner, isAccountOwner);
+}

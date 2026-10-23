@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { consentOwners } from "@/lib/analytics/consentOwners";
+import { consentOwners, consentWriteOwners } from "@/lib/analytics/consentOwners";
 import { analyticsIdFor, distinctIdFromCookies } from "@/lib/analytics/ids";
 import { isUuid, requestDeletion } from "@/lib/analytics/server";
 import { analyticsConsent, isAccountOwnerId, setAnalyticsConsent } from "@/lib/db";
@@ -25,11 +25,13 @@ export async function POST(req: NextRequest) {
   if (!read.ok) return capFailureResponse(read);
   const consent = (read.value as { consent?: unknown } | null)?.consent;
   if (typeof consent !== "boolean") return NextResponse.json({ error: "consent must be true or false" }, { status: 400 });
-  // A signed-in device holds two owners (the account, and the anonymous one it signed in from), and
-  // the answer is written to both so a No reaches every id it could be captured under.
-  const owners = consentOwners(await currentOwnerId(), (await cookies()).get(OWNER_COOKIE)?.value, isAccountOwnerId);
+  // A signed-in device holds two owners (the account, and the anonymous one it signed in from). A No
+  // is written to both, a Yes to the request's own owner only (see `consentWriteOwners`).
+  const ownerId = await currentOwnerId();
+  const cookieOwner = (await cookies()).get(OWNER_COOKIE)?.value;
+  const owners = consentOwners(ownerId, cookieOwner, isAccountOwnerId);
   const hadYes = owners.some((id) => analyticsConsent(id) === true);
-  for (const id of owners) setAnalyticsConsent(id, consent);
+  for (const id of consentWriteOwners(consent, ownerId, cookieOwner, isAccountOwnerId)) setAnalyticsConsent(id, consent);
   // Taking a Yes back erases the person from PostHog, under every id they were known by: the ones
   // derived from their owner ids (what a signed-in session, and the id endpoint, use) and the
   // anonymous id in PostHog's own cookie. A No that was always a No has nothing to erase.

@@ -13,6 +13,8 @@ import {
 import { Check, CircleAlert, Clock, X } from "lucide-react";
 import { formatWait, heldUntil, secondsLeft as secondsLeftNow, useHold } from "./actionHolds";
 import type { Bucket } from "./ipThrottle";
+import { track } from "./analytics/client";
+import { scrubPath } from "./analytics/clientConfig";
 import {
   autoDismissMs,
   currentCopy,
@@ -46,6 +48,8 @@ export interface ErrorToast extends ToastCopy {
    *  second hold toast for the same bucket replaces the first. */
   hold?: Bucket;
   resolved?: ToastCopy;
+  /** For `error_shown`: the copy row this toast is (`T-02`), or the server's code, when the caller has one. */
+  code?: string;
 }
 
 interface ToastContextValue {
@@ -93,7 +97,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string, detail?: string) => add({ kind: "success", title: message, detail }),
     [add]
   );
-  const showError = useCallback((toast: ErrorToast) => add({ kind: "error", ...toast }), [add]);
+  const showError = useCallback(({ code, ...toast }: ErrorToast) => {
+    // A toast has no route of its own, so it is counted where it was raised.
+    track("error_shown", { code: code ?? null, surface: scrubPath(location.pathname) });
+    return add({ kind: "error", ...toast });
+  }, [add]);
 
   // Every pending timer cleared on unmount. Without this a navigation away mid-toast leaves a
   // setState scheduled against a provider that no longer exists.

@@ -341,18 +341,18 @@ export default function TripBoard({
   function shareFailed(stopping: boolean | undefined, cause: "offline" | "server" | "gone") {
     const again = { label: "Try again", onClick: share };
     if (cause === "gone") {
-      showError({ title: "This trip isn’t saved here any more, so it can’t be shared.", action: { label: "See your memories", onClick: () => router.push("/trips") } });
+      showError({ code: "T-86", title: "This trip isn’t saved here any more, so it can’t be shared.", action: { label: "See your memories", onClick: () => router.push("/trips") } });
     } else if (stopping) {
       showError(
         cause === "offline"
-          ? { title: "You’re offline, so the share link is still on.", detail: "Anyone with it can still see this trip. Turn it off once you’re back online.", action: again }
-          : { title: "The share link is still on: TripMate couldn’t turn it off.", detail: "Anyone with it can still see this trip.", action: again }
+          ? { code: "T-87", title: "You’re offline, so the share link is still on.", detail: "Anyone with it can still see this trip. Turn it off once you’re back online.", action: again }
+          : { code: "T-88", title: "The share link is still on: TripMate couldn’t turn it off.", detail: "Anyone with it can still see this trip.", action: again }
       );
     } else {
       showError(
         cause === "offline"
-          ? { title: "You’re offline, so no share link was made.", detail: "Try again once you’re back online.", action: again }
-          : { title: "TripMate couldn’t make a share link just now.", action: again }
+          ? { code: "T-84", title: "You’re offline, so no share link was made.", detail: "Try again once you’re back online.", action: again }
+          : { code: "T-85", title: "TripMate couldn’t make a share link just now.", action: again }
       );
     }
   }

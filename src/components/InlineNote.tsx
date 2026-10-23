@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Check, CircleAlert, RotateCw } from "lucide-react";
 import { formatWait, heldUntil, useHold } from "@/lib/actionHolds";
 import { track } from "@/lib/analytics/client";
+import { scrubPath } from "@/lib/analytics/clientConfig";
 import type { Bucket } from "@/lib/ipThrottle";
 import { formatClockTime, holdSentence, WAIT } from "@/lib/toastQueue";
 
@@ -66,8 +67,8 @@ export default function InlineNote({
   const showingError = tone === "error" && Boolean(children);
   useEffect(() => {
     if (!showingError) return;
-    // Route ids are not for analytics: `/trip/abc` is `/trip/[id]`.
-    const where = surface ?? route?.replace(/^\/(trip|s)\/[^/]+/, "/$1/[id]") ?? null;
+    // Route ids are not for analytics: `/trip/abc` is `/trip/[id]`, `/s/abc` is `/s/[token]`.
+    const where = surface ?? (route ? scrubPath(route) : null);
     track("error_shown", { code: code ?? null, surface: where });
     // `code` and `surface` describe this appearance; a change in them alone is not another error.
     // eslint-disable-next-line react-hooks/exhaustive-deps

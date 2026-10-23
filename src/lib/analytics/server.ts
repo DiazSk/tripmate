@@ -58,6 +58,8 @@ export async function whoFromRequest(
   resolve: () => Promise<{ ownerId: string; clerkUserId: string | null }> = defaultResolve,
 ): Promise<Who & { platform: Platform }> {
   const platform = /^Bearer\s/i.test(req.headers.get("authorization") ?? "") ? "phone" : "web";
+  // Off: nobody is asked (no Clerk call, no owner read), since `captureServer` would send nothing anyway.
+  if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return { ownerId: "", clerkUserId: null, cookieHeader: null, platform };
   const cookieHeader = req.headers.get("cookie");
   try {
     const { ownerId, clerkUserId } = await resolve();
@@ -172,7 +174,8 @@ export function captureServer(
  * to deleting people (POSTHOG_PERSONAL_API_KEY); without it this does nothing. The persons API
  * lives on the app host, not the ingestion host the SDKs post to, so it has its own setting.
  * Deletion is irreversible, so only a person who really owns this distinct id is deleted: the
- * lookup filter is not trusted to have been applied.
+ * lookup filter is not trusted to have been applied. Each call is bounded: it runs inside `after()`,
+ * and a PostHog that never answers must not hold the function open until the platform kills it.
  */
 export async function requestDeletion(distinctId: string): Promise<void> {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
@@ -181,14 +184,15 @@ export async function requestDeletion(distinctId: string): Promise<void> {
   try {
     const host = (process.env.POSTHOG_APP_HOST || "https://us.posthog.com").replace(/\/+$/, "");
     const headers = { Authorization: `Bearer ${apiKey}` };
+    const signal = () => AbortSignal.timeout(5000);
     const base = `${host}/api/projects/${encodeURIComponent(projectId)}/persons`;
-    const found = await fetch(`${base}/?distinct_id=${encodeURIComponent(distinctId)}`, { headers });
+    const found = await fetch(`${base}/?distinct_id=${encodeURIComponent(distinctId)}`, { headers, signal: signal() });
     if (!found.ok) throw new Error(`lookup ${found.status}`);
     const people = ((await found.json()) as { results?: { id?: string; distinct_ids?: string[] }[] }).results ?? [];
     if (people.length === 0) return; // never captured anything: nothing to erase
     const id = people.find((p) => p.distinct_ids?.includes(distinctId))?.id;
     if (!id) throw new Error("lookup returned no person with that distinct id; nothing deleted");
-    const del = await fetch(`${base}/${encodeURIComponent(id)}/?delete_events=true&delete_recordings=true`, { method: "DELETE", headers });
+    const del = await fetch(`${base}/${encodeURIComponent(id)}/?delete_events=true&delete_recordings=true`, { method: "DELETE", headers, signal: signal() });
     if (!del.ok) throw new Error(`delete ${del.status}`);
   } catch (e) {
     console.warn("[analytics] deletion request failed:", e instanceof Error ? e.message : e);

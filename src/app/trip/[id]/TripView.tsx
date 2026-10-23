@@ -33,7 +33,8 @@ import "@/components/polar/trip/TripDrawer.css";
 import "@/components/polar/trip/TripSpotlight.css";
 
 /** Who made an edit, for the analytics event the server fires; the server treats anything else as a hand edit. */
-type EditBy = "chat" | "hand" | "search";
+/** `revision` is the planner rewriting days (a rebalance), not the traveller: the server reports no `stop_changed` for it. */
+type EditBy = "chat" | "hand" | "search" | "revision";
 
 /** Thrown by this page's requests so the catch knows what failed, never a sentence to print. */
 class RequestError extends Error {
@@ -335,8 +336,11 @@ export default function TripView({
       const f = failureOf(e);
       if (f.kind === "not_found") return setTripGone(true);
       const bad = f.kind === "invalid" ? stopWithoutPlace(plan) : null;
+      // A rebalance's save is its own row (T-15), worded as T-01..T-03.
+      const row = (r: string) => (by === "revision" ? "T-15" : r);
       if (bad) {
         showError({
+          code: row("T-03"),
           title: `${what} didn’t save: ${bad.stop.name} on day ${bad.day} has no place on the map.`,
           detail: "Remove or replace that stop and it will save.",
         });
@@ -348,9 +352,9 @@ export default function TripView({
         const inline = what.replace(/^(Your|The) /, (m) => m.toLowerCase());
         // "Your edits" and "The rebalanced days" are plural.
         const isnt = /^(Your edits|The rebalanced days)/.test(what) ? "aren’t" : "isn’t";
-        showError({ title: `You’re offline, so ${inline} ${isnt} saved.`, detail: "It’s still on screen; press Try again once you’re back online.", action: again });
+        showError({ code: row("T-01"), title: `You’re offline, so ${inline} ${isnt} saved.`, detail: "It’s still on screen; press Try again once you’re back online.", action: again });
       } else {
-        showError({ title: `${what} didn’t save: TripMate’s server had a problem.`, detail: "It’s still on screen.", action: again });
+        showError({ code: row("T-02"), title: `${what} didn’t save: TripMate’s server had a problem.`, detail: "It’s still on screen.", action: again });
       }
     });
   }
@@ -431,6 +435,9 @@ export default function TripView({
       // Local, not a reload: the row is unchanged apart from the one field, and re-fetching the
       // whole trip would reset the panel, the active day and the camera the traveler set.
       setTrip((prev) => (prev ? { ...prev, status: "saved" } : prev));
+      // The After-Keep survey's trigger. The server's `trip_kept` is the funnel's count; this one
+      // only says the traveller saw the Keep land, so the two never double up.
+      track("trip_kept_seen");
     } catch (e) {
       if (isAbort(e)) return;
       const f = failureOf(e);
@@ -524,7 +531,7 @@ export default function TripView({
       setItinerary(updated);
       setDismissedDays((prev) => new Set(prev).add(dayIndex));
       // T-15: the new days are on screen either way, so a failed save says so rather than "unchanged".
-      save(updated, `The rebalanced ${span}`);
+      save(updated, `The rebalanced ${span}`, "revision");
     } catch (e) {
       if (isAbort(e)) return;
       const f = failureOf(e);
@@ -568,6 +575,7 @@ export default function TripView({
       {/* T-04 / T-08. Inert while closed: `open` drives showModal(). */}
       <ErrorDialog
         open={tripGone}
+        code="T-04"
         title="This trip can’t be saved any more."
         why="It’s no longer in your memories; it may have been deleted in another tab or on another device. The plan on screen is the only copy."
         now="Save it as a new trip to keep it."

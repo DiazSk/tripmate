@@ -56,6 +56,8 @@ async function reportPatch(
   itinerary: Itinerary | undefined,
   promoted: boolean
 ): Promise<void> {
+  // Off: no Clerk call, no owner read, no parse of the old plan.
+  if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
   try {
     const before = JSON.parse(trip.itinerary_json) as Itinerary;
     const who = await whoFromRequest(req);
