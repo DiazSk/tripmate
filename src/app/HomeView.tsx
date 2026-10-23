@@ -44,6 +44,8 @@ import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
 import { announceDraftRevision } from "@/lib/draftRevision";
+import { track } from "@/lib/analytics/client";
+import { newAttemptId, rememberAttempt } from "@/lib/analytics/flow";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
@@ -97,6 +99,15 @@ class RunError extends Error {
   constructor(readonly failure: RunFailure) {
     super(failure.kind);
   }
+}
+
+type Wait = { attemptId: string | null; startedAt: number };
+
+/** Leaving the writing screen with no plan: a Cancel, a closed tab or a route change. Fires once per wait. */
+function abandonWait(ref: { current: Wait | null }) {
+  const wait = ref.current;
+  ref.current = null;
+  if (wait) track("plan_wait_abandoned", { attempt_id: wait.attemptId, seconds_waited: Math.round((Date.now() - wait.startedAt) / 1000) });
 }
 
 function runFailureOf(e: unknown): RunFailure {
@@ -318,9 +329,26 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // Aborts the in-flight generate. A ref, not state: cancelling must not re-render the
   // loader, and nothing renders off this value.
   const abortRef = useRef<AbortController | null>(null);
+  /** One id per planning attempt, made when the wizard opens (or at Generate, for a wizard restored
+   *  from a refresh) and kept through Cancel-and-retry. It rides `X-Attempt-Id` to the server and
+   *  goes with the draft to the trip page for Keep, so the first-plan funnel follows attempts. */
+  const attemptRef = useRef<string | null>(null);
+  /** Set from Generate until the plan lands or the run ends; what `plan_wait_abandoned` reads. */
+  const waitRef = useRef<Wait | null>(null);
+
+  useEffect(() => {
+    // A closed tab or a route change while the plan is still being written: the tester gave up waiting.
+    const leave = () => abandonWait(waitRef);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, []);
 
   /** Stops the run and returns to the form with every answer intact. */
   function cancelGeneration() {
+    abandonWait(waitRef);
     abortRef.current?.abort();
     abortRef.current = null;
     setGenerating(false);
@@ -883,6 +911,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     hooks?: { planned?: (result: T) => void; revised?: (days: DayPlan[]) => void }
   ): Promise<T> {
     const { planned, revised } = hooks ?? {};
+    const planHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (attemptRef.current) planHeaders["X-Attempt-Id"] = attemptRef.current;
     // One controller per run, so Cancel aborts the in-flight request rather than leaving it
     // running invisibly while the UI pretends it stopped. Replaced (not reused) on every run.
     const controller = new AbortController();
@@ -891,7 +921,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     const plainFallback = async (): Promise<T> => {
       const res = await fetch("/api/itinerary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: planHeaders,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -903,7 +933,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     try {
       res = await fetch("/api/itinerary?stream=1", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: planHeaders,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -1049,6 +1079,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // `validateBasics`, copy rows P-04, P-05, P-07, P-08).
     setGenerating(true);
     setError(null);
+    attemptRef.current ??= newAttemptId();
+    waitRef.current = { attemptId: attemptRef.current, startedAt: Date.now() };
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     setDraftItinerary(null);
     setCoordsDay(null);
@@ -1087,6 +1119,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // reveal takes over from here.
       // From here until the draft insert settles, a revision is held rather than shown.
       insertPending = true;
+      // The plan exists from here, so leaving is no longer giving up on the wait.
+      waitRef.current = null;
       await settle(ARRIVAL_HOLD_MS);
       if (abortRef.current !== owner) return;
       // Every side effect of "the plan arrived" belongs here, not after `await runStreamed(…)`.
@@ -1130,7 +1164,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         if (earlyRevision) {
           await fetch(`/api/trips/${tripId}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            // The critique's own rewrite, not the traveller's edit: the server reports no stop changes for it.
+            headers: { "Content-Type": "application/json", "X-Edit-By": "revision" },
             body: JSON.stringify({ itinerary: { ...plan, days: earlyRevision }, chatSessionId: sessionId }),
           })
             .then((r) => {
@@ -1138,6 +1173,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
             })
             .catch((e) => console.error("[home] early revision write failed", e));
         }
+        rememberAttempt(tripId, attemptRef.current);
         router.push(`/trip/${tripId}`);
         return;
       }
@@ -1264,6 +1300,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         }
       }
     } finally {
+      waitRef.current = null;
       setGenerating(false);
     }
   }
@@ -1436,7 +1473,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * boot on this step anyway, and a missed geocode is non-blocking by design. The traveller
    * touching the field is what resolves it, exactly as when they type their own.
    */
-  function startPlanning(prefill?: PlanPrefill) {
+  function startPlanning(prefill?: PlanPrefill, entry: "step_by_step" | "landing" = "step_by_step") {
+    // A new wizard is a new attempt; the id is shared with everything this attempt sends.
+    attemptRef.current = newAttemptId();
+    track("plan_started", { entry, attempt_id: attemptRef.current });
     if (prefill) {
       setDestination(prefill.destination);
       setStartDate(prefill.startDate);
@@ -1600,7 +1640,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           plan knows, and a closing form. Full-bleed sections with real scroll height, handing off
           through the same startPlanning as before — every "plan" on it opens this app's own
           multi-step form, prefilled where the landing knows what to fill. */}
-      {step === "landing" && <PolarLanding onPlan={startPlanning} />}
+      {step === "landing" && <PolarLanding onPlan={(prefill) => startPlanning(prefill, "landing")} />}
 
       {/* The planner (src/components/polar/planner), from the canvas design "TripMate Planning flow
           (web)": four steps over the place being planned. Full-bleed like PolarLanding, so it cancels

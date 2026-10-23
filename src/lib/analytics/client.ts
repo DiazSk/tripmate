@@ -1,4 +1,5 @@
 import type { PostHog } from "posthog-js";
+import { createHeld } from "./heldEvents";
 import { internalParam, posthogInitOptions, scrubEvent, viaParam } from "./clientConfig";
 
 /**
@@ -146,6 +147,7 @@ export function start(): Promise<PostHog | null> {
 export async function applyStoredConsent(yes: boolean): Promise<void> {
   withdrawn = !yes;
   if (!yes) {
+    held.clear();
     ph?.stopSessionRecording();
     ph?.opt_out_capturing();
     return;
@@ -155,12 +157,28 @@ export async function applyStoredConsent(yes: boolean): Promise<void> {
     client.opt_in_capturing();
     client.startSessionRecording();
   }
+  // A stored Yes was found at load: what the page fired meanwhile was agreed to, if still fresh.
+  if (client && !withdrawn) for (const w of held.take()) track(w.event, w.properties);
 }
 
-/** Fire-and-forget; a no-op until the tester has opted in. Properties are lengths, counts and categories, never typed text. */
-export function track(event: ClientEvent, properties?: Record<string, string | number | boolean | null>): void {
+type Props = Record<string, string | number | boolean | null>;
+
+/** Events fired before the SDK is up; see `heldEvents.ts` for the queue and the rules around it. */
+const held = createHeld<{ event: ClientEvent; properties?: Props }>();
+
+/**
+ * Fire-and-forget. Properties are lengths, counts and categories, never typed text.
+ *
+ * Until the tester has opted in this sends nothing. An event fired in the first seconds of a page
+ * load (a trip page's `trip_opened`, a sign-in's finish) is held only while there is no stored
+ * answer and no No, and released only when a stored Yes is found at load, if it is under ten
+ * seconds old. A Yes tapped in the prompt or the Profile switch clears the queue first: nothing
+ * from before the tap was agreed to.
+ */
+export function track(event: ClientEvent, properties?: Props): void {
   try {
-    ph?.capture(event, properties);
+    if (ph) ph.capture(event, properties);
+    else if (analyticsConfigured) held.hold({ event, properties }, !withdrawn);
   } catch {
     // Analytics never breaks a screen.
   }
@@ -175,6 +193,7 @@ export async function setConsent(yes: boolean): Promise<void> {
   // that round trip, and the first pageview would go out for someone who has already said no.
   const before = withdrawn;
   withdrawn = !yes;
+  held.clear();
   if (!yes && ph) {
     ph.stopSessionRecording();
     ph.opt_out_capturing();
@@ -205,6 +224,8 @@ export async function setConsent(yes: boolean): Promise<void> {
       client.opt_in_capturing();
       client.startSessionRecording();
     }
+    // Only what was fired after the tap is left in the queue (it was cleared at the press).
+    if (client) for (const w of held.take()) track(w.event, w.properties);
   }
   // Any other surface asking (the prompt, the Profile switch) hears it, so two never disagree on screen.
   window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: yes }));
@@ -256,6 +277,7 @@ export async function identifyAfterSignIn(): Promise<void> {
  */
 export function resetAfterSignOut(): void {
   identified = null;
+  held.clear();
   const client = ph;
   if (!client) return;
   try {

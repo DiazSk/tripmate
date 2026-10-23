@@ -1,7 +1,7 @@
 /* Run: node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test src/lib/analytics/server.test.mjs */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { attemptIdFrom, captureServer, failureOf, requestDeletion, whoFromRequest, setAnalyticsClientForTest, setSchedulerForTest } from "./server.ts";
+import { attemptIdFrom, captureServer, editByFrom, failureOf, requestDeletion, whoFromRequest, setAnalyticsClientForTest, setSchedulerForTest } from "./server.ts";
 import { analyticsIdFor } from "./ids.ts";
 import { setAnalyticsConsent } from "../db.ts";
 
@@ -233,4 +233,14 @@ test("failureOf names a refused response by its code, then its status, and nothi
   assert.equal(await failureOf(j({ error: "plain" }, 400)), null);
   assert.equal(await failureOf(j({ error: "gone" }, 404)), null);
   assert.equal(await failureOf(new Response("<html>", { status: 500 })), "error");
+});
+
+test("editByFrom knows chat, search and revision, and treats anything else as a hand edit", () => {
+  const by = (v) => editByFrom(new Request("http://x/", { headers: v === null ? {} : { "x-edit-by": v } }));
+  assert.equal(by("chat"), "chat");
+  assert.equal(by("search"), "search");
+  assert.equal(by("revision"), "revision");
+  assert.equal(by("hand"), "hand");
+  assert.equal(by("nonsense"), "hand");
+  assert.equal(by(null), "hand");
 });

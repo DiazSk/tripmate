@@ -80,6 +80,16 @@ export function attemptIdFrom(req: Request): string | null {
   return UUID.test(v) ? v : null;
 }
 
+/**
+ * The client's `X-Edit-By`: who made a trip edit. Anything else, or nothing, is a hand edit.
+ * `revision` is the planner's own critique written to a draft by the client, not an edit by the
+ * traveller, so callers report no `stop_changed` for it.
+ */
+export function editByFrom(req: Request): "chat" | "hand" | "search" | "revision" {
+  const by = req.headers.get("x-edit-by");
+  return by === "chat" || by === "search" || by === "revision" ? by : "hand";
+}
+
 async function defaultResolve(): Promise<{ ownerId: string; clerkUserId: string | null }> {
   const { currentOwnerId } = await import("../ownerRequest");
   const { clerkConfigured } = await import("../clerkConfig");

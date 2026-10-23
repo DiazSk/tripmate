@@ -1,8 +1,10 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId } from "react";
+import { usePathname } from "next/navigation";
 import { Check, CircleAlert, RotateCw } from "lucide-react";
 import { formatWait, heldUntil, useHold } from "@/lib/actionHolds";
+import { track } from "@/lib/analytics/client";
 import type { Bucket } from "@/lib/ipThrottle";
 import { formatClockTime, holdSentence, WAIT } from "@/lib/toastQueue";
 
@@ -37,11 +39,17 @@ export default function InlineNote({
   action,
   footer,
   live = true,
+  code,
+  surface,
   children,
 }: {
   size: "field" | "item" | "section";
   tone: "error" | "ok" | "muted";
   id?: string;
+  /** What went wrong, for `error_shown`: the server's code (`rate_limited`, `daily_cap`, `timeout`...) when the caller has it. */
+  code?: string;
+  /** Where it was shown, for `error_shown`; the route pattern when a caller does not say. */
+  surface?: string;
   /** Field and item only: false inside a list that is already a live region, so it isn't read twice. */
   live?: boolean;
   /** Section only: the block's name ("Weather for these dates"). */
@@ -52,6 +60,18 @@ export default function InlineNote({
   children: React.ReactNode;
 }) {
   const titleId = useId();
+  const route = usePathname();
+  // Notes are kept mounted and empty to be announced, so an error counts when it has words, once
+  // per appearance (the effect re-runs only when it goes in or out of that state).
+  const showingError = tone === "error" && Boolean(children);
+  useEffect(() => {
+    if (!showingError) return;
+    // Route ids are not for analytics: `/trip/abc` is `/trip/[id]`.
+    const where = surface ?? route?.replace(/^\/(trip|s)\/[^/]+/, "/$1/[id]") ?? null;
+    track("error_shown", { code: code ?? null, surface: where });
+    // `code` and `surface` describe this appearance; a change in them alone is not another error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showingError]);
   const glyph = tone === "error" ? <CircleAlert aria-hidden="true" /> : tone === "ok" ? <Check aria-hidden="true" /> : null;
   const cls = `inline-note is-${size} is-${tone}`;
 
@@ -140,6 +160,7 @@ export function HeldNote({
   resolved,
   id,
   live,
+  surface,
   children,
 }: {
   size: "field" | "item" | "section";
@@ -147,6 +168,7 @@ export function HeldNote({
   resolved: string;
   id?: string;
   live?: boolean;
+  surface?: string;
   children: string;
 }) {
   const { secondsLeft } = useHold(bucket);
@@ -158,7 +180,7 @@ export function HeldNote({
     );
   }
   return (
-    <InlineNote size={size} tone="error" id={id} live={live}>
+    <InlineNote size={size} tone="error" id={id} live={live} code="rate_limited" surface={surface}>
       <span aria-hidden="true">{children.replace(WAIT, formatWait(secondsLeft))}</span>
       <span className="sr-only">{holdSentence(children, formatClockTime(heldUntil(bucket) ?? 0))}</span>
     </InlineNote>

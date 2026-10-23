@@ -30,6 +30,7 @@ import {
   peekDayRoute,
 } from "@/lib/dayRoutes";
 import { formatDistance } from "@/lib/format";
+import { track } from "@/lib/analytics/client";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import type { NaturalVoiceStatus } from "@/lib/kokoroVoice";
 import { loadNaturalVoice, naturalVoiceReady, naturalVoiceSupported } from "@/lib/kokoroVoice";
@@ -47,6 +48,9 @@ import {
   type VoiceEngine,
 } from "@/lib/storyVoice";
 import type { DayPlan, Itinerary, Stop } from "@/lib/types";
+
+/** The spec's names for the narrators: `browser` is the platform's own voice. */
+const voiceLabel = (mode: string) => (mode === "browser" ? "platform" : mode);
 
 /**
  * Story mode — the itinerary played as a film.
@@ -457,6 +461,25 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    * top" — a new day, a seek, a replay — so those still shoot.
    */
   const shotRef = useRef<string | null>(null);
+  /**
+   * The film being watched, for `story_film_finished`: the furthest beat reached and the script's
+   * length. A ref, because the numbers are only read when the film ends and no render depends on them.
+   */
+  const filmRef = useRef<{ furthest: number; total: number } | null>(null);
+  const voiceModeRef = useRef(voiceMode);
+  useEffect(() => {
+    voiceModeRef.current = voiceMode;
+  }, [voiceMode]);
+  /** Ends the film in progress, if any: Esc, Plan, a day change, leaving the page or closing the tab all come here, once. */
+  const endFilm = useCallback(() => {
+    const film = filmRef.current;
+    filmRef.current = null;
+    if (film) track("story_film_finished", { beats_heard: film.furthest + 1, beats_total: film.total, voice: voiceLabel(voiceModeRef.current) });
+  }, []);
+  useEffect(() => {
+    window.addEventListener("pagehide", endFilm);
+    return () => window.removeEventListener("pagehide", endFilm);
+  }, [endFilm]);
 
   /**
    * Start the natural voice's download, if this browser can run it at all.
@@ -495,6 +518,10 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    *  below so that no render is triggered from inside an effect body. */
   const openDay = useCallback(
     (next: StoryRequest) => {
+      // The next day's film starts as the last one is left, and each is counted on its own.
+      endFilm();
+      filmRef.current = { furthest: -1, total: 0 };
+      track("story_film_played", { voice: voiceLabel(voiceModeRef.current) });
       setRequest(next);
       setScript(null);
       setBeatIndex(0);
@@ -512,12 +539,13 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       // on a second day costs nothing.
       ensureNaturalVoice();
     },
-    [ensureNaturalVoice, markSentence]
+    [ensureNaturalVoice, markSentence, endFilm]
   );
 
   const start = openDay;
 
   const exit = useCallback(() => {
+    endFilm();
     // Cleared before the card's own route effect re-runs (it depends on `story.active`), so the
     // redraw that restores the panel's framing restores the arcs with it.
     setRouteConnectorsHidden(false);
@@ -530,7 +558,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     markSentence(0, null);
     setPhase("loading");
     setActiveIndex(null);
-  }, [setActiveIndex, setRouteConnectorsHidden, markSentence]);
+  }, [setActiveIndex, setRouteConnectorsHidden, markSentence, endFilm]);
 
   const playDay = useCallback(
     (nextDay: number) => {
@@ -577,6 +605,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       )
       .then(({ resolved, failure }) => {
         if (!alive) return;
+        if (filmRef.current) filmRef.current.total = resolved.beats.length;
         setScript(resolved);
         setScriptFailure(failure);
         setPhase("playing");
@@ -753,6 +782,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     if (!request || !script || phase !== "playing") return;
     const beat = script.beats[beatIndex];
     if (!beat) return;
+    if (filmRef.current) filmRef.current.furthest = Math.max(filmRef.current.furthest, beatIndex);
 
     const advance = () => {
       markSentence(0, null);

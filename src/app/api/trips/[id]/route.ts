@@ -10,7 +10,7 @@ import { itineraryRejection } from "@/lib/itinerary";
 import { readableOwners, writableOwners } from "@/lib/owner";
 import { currentOwner } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
-import { attemptIdFrom, captureServer, whoFromRequest } from "@/lib/analytics/server";
+import { attemptIdFrom, captureServer, editByFrom, whoFromRequest } from "@/lib/analytics/server";
 import { stopChanges } from "@/lib/analytics/stopChanges";
 import type { Itinerary } from "@/lib/types";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
@@ -49,16 +49,6 @@ export async function GET(
 
 const ORIGINS = ["generated", "imported", "ready-made"] as const;
 
-/**
- * Who made an edit is something only the client knows (the trip page persists a chat edit, a hand
- * edit and a map-search add through this same route), so it says so in `X-Edit-By`. Anything else,
- * or nothing, is a hand edit.
- */
-function editBy(req: NextRequest): "chat" | "hand" | "search" {
-  const by = req.headers.get("x-edit-by");
-  return by === "chat" || by === "search" ? by : "hand";
-}
-
 /** Analytics for a PATCH that has already been applied: a plan kept, stops changed. Never throws. */
 async function reportPatch(
   req: NextRequest,
@@ -82,9 +72,10 @@ async function reportPatch(
     }
     // Hundredths of a day, so an edit minutes after the plan was written reads differently from one a day later.
     const days_since_written = Math.max(0, Math.round((sinceMs / 86_400_000) * 100) / 100);
-    if (itinerary) {
+    const by = editByFrom(req);
+    if (itinerary && by !== "revision") {
       for (const c of stopChanges(before, itinerary)) {
-        captureServer(who, "stop_changed", { ...c, by: editBy(req), days_since_written });
+        captureServer(who, "stop_changed", { ...c, by, days_since_written });
       }
     }
   } catch (err) {

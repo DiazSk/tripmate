@@ -23,11 +23,17 @@ import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/li
 import { devLabel } from "@/lib/devInspector";
 import { changedDayNumbers, clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
 import { onDraftRevision } from "@/lib/draftRevision";
+import { track } from "@/lib/analytics/client";
+import { attemptFor, notePath, previousPath, tripSource } from "@/lib/analytics/flow";
+import { todayInZone, tripPhase } from "@/lib/analytics/tripPhase";
 
 import "@/components/polar/PolarLanding.css";
 import "@/components/polar/trip/TripBoard.css";
 import "@/components/polar/trip/TripDrawer.css";
 import "@/components/polar/trip/TripSpotlight.css";
+
+/** Who made an edit, for the analytics event the server fires; the server treats anything else as a hand edit. */
+type EditBy = "chat" | "hand" | "search";
 
 /** Thrown by this page's requests so the catch knows what failed, never a sentence to print. */
 class RequestError extends Error {
@@ -153,7 +159,7 @@ export default function TripView({
   // Publishes the plan to surfaces mounted outside this tree. The map's own search now lives on this
   // page (`TripSpotlight`, handed `handleRearrange` directly); this still feeds the search's area,
   // which hugs the trip's stops. `handleRearrange` is the commit path the board's drag-and-drop uses.
-  usePublishItinerary(itinerary, handleRearrange);
+  usePublishItinerary(itinerary, (next) => handleRearrange(next, undefined, "search"));
   const [savingFocus, setSavingFocus] = useState(false);
   const [keeping, setKeeping] = useState(false);
 
@@ -201,6 +207,31 @@ export default function TripView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Once per mount of a real trip page, with where it was opened from and whether it is ahead of,
+  // under way or behind the traveller. The deps are the id alone: a keep or an edit swaps `trip`
+  // and must not count as another visit.
+  const openedRef = useRef<string | null>(null);
+  useEffect(() => {
+    // The ref survives development's simulated remount, which would otherwise count the visit twice.
+    if (!initialTrip || id === "preview" || openedRef.current === id) return;
+    openedRef.current = id;
+    notePath(location.pathname);
+    let referrer: string | null = null;
+    try {
+      const ref = document.referrer ? new URL(document.referrer) : null;
+      if (ref && ref.origin === location.origin) referrer = ref.pathname;
+    } catch {
+      // An unparseable referrer is a link.
+    }
+    const { startDate, endDate, timezone } = initialTrip;
+    track("trip_opened", {
+      source: tripSource(previousPath(), referrer),
+      phase: startDate && endDate ? tripPhase(startDate, endDate, todayInZone(timezone)) : null,
+      offline: navigator.onLine === false,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   /**
    * Warm the narration for the day on screen, so pressing Play starts a film instead of a wait.
    * There is no half-written plan here, only a trip that may still be loading (the `/preview`
@@ -231,13 +262,13 @@ export default function TripView({
   /** The last plan sent, so Try again saves what is on screen now: each save sends the whole plan. */
   const latestPlanRef = useRef<Itinerary | null>(null);
 
-  async function persist(updated: Itinerary) {
+  async function persist(updated: Itinerary, by: EditBy = "hand") {
     if (id === "preview") return;
     editedRef.current = true;
     latestPlanRef.current = updated;
     const res = await request(`/api/trips/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Edit-By": by },
       body: JSON.stringify({ itinerary: updated }),
     });
     // The whole plan just saved, so an amount that hadn't now has.
@@ -298,8 +329,8 @@ export default function TripView({
    * copy table's `{whatDidntSave}`. Nothing is reverted: the plan stays on screen, and Try again sends
    * whatever is on screen by then.
    */
-  function save(plan: Itinerary, what: string): Promise<void> {
-    return persist(plan).catch((e) => {
+  function save(plan: Itinerary, what: string, by: EditBy = "hand"): Promise<void> {
+    return persist(plan, by).catch((e) => {
       if (isAbort(e)) return;
       const f = failureOf(e);
       if (f.kind === "not_found") return setTripGone(true);
@@ -311,7 +342,7 @@ export default function TripView({
         });
         return;
       }
-      const again = { label: "Try again", onClick: () => save(latestPlanRef.current ?? plan, what) };
+      const again = { label: "Try again", onClick: () => save(latestPlanRef.current ?? plan, what, by) };
       if (f.kind === "offline") {
         // Mid-sentence, so "Your new stop order" reads "your new stop order"; a place name keeps its capital.
         const inline = what.replace(/^(Your|The) /, (m) => m.toLowerCase());
@@ -390,7 +421,8 @@ export default function TripView({
     try {
       await request(`/api/trips/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        // The attempt that wrote this plan, when this tab is the one that wrote it.
+        headers: { "Content-Type": "application/json", ...(attemptFor(id) ? { "X-Attempt-Id": attemptFor(id) } : {}) },
         // Status only, so Keep never writes this page's copy over a revision that landed after it
         // loaded. The one exception is a page that edited: its row already differs from the plan, so
         // no revision can land on it, and re-sending recovers an edit whose own save had failed.
@@ -439,9 +471,9 @@ export default function TripView({
   /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed
    *  every day it touched, so this only has to commit it — and it saves immediately rather than
    *  waiting for a Save button, matching how the actual-cost inputs on this page already behave. */
-  function handleRearrange(next: Itinerary, what = "Your new stop order") {
+  function handleRearrange(next: Itinerary, what = "Your new stop order", by: EditBy = "hand") {
     setItinerary(next);
-    save(next, what);
+    save(next, what, by);
   }
 
   function handleStopActualCostChange(value: number | undefined) {
@@ -523,7 +555,8 @@ export default function TripView({
     if (!committed) return;
     setSavingFocus(true);
     setItinerary(committed);
-    await save(committed, target?.scope === "day" ? `Your edits to day ${target.dayIndex + 1}` : "Your edits to the trip");
+    // The refine drawer is the chat and the element edit, so what it commits was asked of the model.
+    await save(committed, target?.scope === "day" ? `Your edits to day ${target.dayIndex + 1}` : "Your edits to the trip", "chat");
     setSavingFocus(false);
   }
 
@@ -619,7 +652,7 @@ export default function TripView({
             }
             setSearchOpen(next);
           }}
-          onChange={handleRearrange}
+          onChange={(next, what) => handleRearrange(next, what, "search")}
         />
       )}
 

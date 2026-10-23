@@ -15,6 +15,7 @@ import {
   SIGNED_IN_EVENT,
 } from "@/lib/analytics/client";
 import { consentPromptVisible } from "@/lib/analytics/clientConfig";
+import { notePath } from "@/lib/analytics/flow";
 import ConsentPrompt from "./ConsentPrompt";
 
 /**
@@ -70,6 +71,8 @@ function Gate() {
   }, []);
 
   useEffect(decide, [decide, pathname]);
+  // So a trip page can say where it was opened from; nothing is sent.
+  useEffect(() => notePath(pathname), [pathname]);
 
   useEffect(() => {
     // Answered elsewhere (the Profile switch): the prompt has nothing left to ask.

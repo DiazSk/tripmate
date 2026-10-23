@@ -9,7 +9,7 @@ export default function Callback() {
   const next = search.get("next") ?? "/trips";
   // Which provider this was, from the form's own redirect, so the form can name it (copy row S-14).
   const provider = search.get("provider");
-  const finish = `/signin/finish?next=${encodeURIComponent(next)}`;
+  const finish = `/signin/finish?next=${encodeURIComponent(next)}${provider ? `&method=${encodeURIComponent(provider)}` : ""}`;
   const backToForm = `/signin?next=${encodeURIComponent(next)}&error=sso${provider ? `&provider=${encodeURIComponent(provider)}` : ""}`;
   return (
     <HandleSSOCallback

@@ -35,6 +35,8 @@ export default function SignInForm() {
   const params = useSearchParams();
   const next = safeNextPath(params.get("next"));
   const finishUrl = `/signin/finish?next=${encodeURIComponent(next)}`;
+  /** The finish page reports the sign-in event, and only this form knows how the person came in. */
+  const finishVia = (method: string, kind?: "in" | "up") => `${finishUrl}&method=${method}${kind ? `&kind=${kind}` : ""}`;
 
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
@@ -70,9 +72,9 @@ export default function SignInForm() {
     }
   }
 
-  async function done(kind: "in" | "up") {
+  async function done(kind: "in" | "up", method: "password" | "email_code") {
     const resource = kind === "up" ? signUp : signIn;
-    if (await step(() => resource.finalize({ navigate: () => {} }))) router.push(finishUrl);
+    if (await step(() => resource.finalize({ navigate: () => {} }))) router.push(finishVia(method, kind));
   }
 
   async function submitPassword(e: React.FormEvent) {
@@ -87,11 +89,11 @@ export default function SignInForm() {
         (await step(() => signUp.password({ emailAddress: email, password, firstName: name.trim() || undefined }))) &&
         (signUp.status === "complete" || (await step(() => signUp.verifications.sendEmailCode())));
       if (ok) {
-        if (signUp.status === "complete") await done("up");
+        if (signUp.status === "complete") await done("up", "password");
         else setPurpose("verify-signup");
       }
     } else if (await step(() => signIn.password({ emailAddress: email, password }))) {
-      if (signIn.status === "complete") await done("in");
+      if (signIn.status === "complete") await done("in", "password");
       else if (signIn.status === "needs_client_trust") {
         if (await step(() => signIn.mfa.sendEmailCode())) setPurpose("client-trust");
       } else setError(unsupportedStepMessage(signIn));
@@ -148,7 +150,7 @@ export default function SignInForm() {
     // A step can succeed without finishing (sign-up missing fields, a second factor): say so
     // rather than re-enabling the button on nothing, as `submitPassword` does.
     if (ok) {
-      if (finished(kind)) await done(kind);
+      if (finished(kind)) await done(kind, purpose === "sign-in-code" ? "email_code" : "password");
       else setError(unsupportedStepMessage(kind === "up" ? signUp : signIn));
     }
     setBusy(false);
@@ -160,7 +162,7 @@ export default function SignInForm() {
       signIn.sso({
         strategy,
         redirectCallbackUrl: `/sso-callback?next=${encodeURIComponent(next)}&provider=${strategy === "oauth_apple" ? "apple" : "google"}`,
-        redirectUrl: finishUrl,
+        redirectUrl: finishVia(strategy === "oauth_apple" ? "apple" : "google"),
       }),
     );
   }

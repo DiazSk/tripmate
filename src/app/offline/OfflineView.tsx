@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Meridian from "@/components/Meridian";
+import { track } from "@/lib/analytics/client";
 
 import "@/components/polar/PolarLanding.css";
 import "./offline.css";
@@ -82,6 +83,16 @@ export default function OfflineView() {
   /** Null while the cache is being read, so the empty line never flashes before the list. */
   const [trips, setTrips] = useState<SavedTrip[] | null>(null);
   const [opening, setOpening] = useState<SavedTrip | null>(null);
+
+  // Once per visit to the screen. Offline the SDK is rarely up (the consent read needs the network),
+  // so this is mostly seen from the standing-in page being opened with a connection.
+  const shownRef = useRef(false);
+  useEffect(() => {
+    // The ref survives development's simulated remount, which would count the screen twice.
+    if (shownRef.current) return;
+    shownRef.current = true;
+    track("offline_screen_shown", { screen: "out_of_range" });
+  }, []);
 
   useEffect(() => {
     let alive = true;

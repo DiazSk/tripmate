@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
 import { devLabel } from "@/lib/devInspector";
 import { meriForChat } from "@/lib/meri";
+import { track } from "@/lib/analytics/client";
 import { formatWait, useHold } from "@/lib/actionHolds";
 import { failureFromResponse, failureFromThrown, formatResumeTime, holdFromFailure, isAbort, type Failure } from "@/lib/failure";
 import Meridian from "./Meridian";
@@ -29,7 +30,7 @@ function formatDays(days: number[]): string {
 }
 
 /** A turn that didn't land (copy rows T-45..T-50). `retry` offers Try again; `held` counts `{mm:ss}` down. */
-type ChatFailure = { text: string; retry?: boolean; held?: boolean };
+type ChatFailure = { text: string; retry?: boolean; held?: boolean; /** The failure kind, for `error_shown`. */ code?: string };
 
 function chatFailure(f: Failure): ChatFailure {
   switch (f.kind) {
@@ -228,6 +229,8 @@ export default function EditChatPanel({
     ];
     setMessages(nextMessages);
     setInput("");
+    // The length only: what a traveller typed to the planner is not for analytics.
+    track("chat_edit_sent", { chars: text.length });
     await ask(nextMessages);
   }
 
@@ -291,7 +294,7 @@ export default function EditChatPanel({
         setMessages((prev) => (prev[prev.length - 1] === last ? prev.slice(0, -1) : prev));
         setInput(last.content);
       }
-      setError(chatFailure(f));
+      setError({ ...chatFailure(f), code: f.kind });
     } finally {
       setBusy(false);
       onBusyChange?.(false);
@@ -450,11 +453,11 @@ export default function EditChatPanel({
             node that arrives with its own live region is not reliably announced. */}
         <div id="chat-send-note" className="td-note-slot" aria-live="polite">
           {error?.held ? (
-            <HeldNote size="item" bucket="edit" resolved="You can ask for changes again." live={false}>
+            <HeldNote size="item" bucket="edit" resolved="You can ask for changes again." live={false} surface="trip_chat">
               {error.text}
             </HeldNote>
           ) : (
-            <InlineNote size="item" tone="error" live={false} action={error?.retry ? { label: "Try again", onClick: () => ask(messages), busy } : undefined}>
+            <InlineNote size="item" tone="error" live={false} code={error?.code} surface="trip_chat" action={error?.retry ? { label: "Try again", onClick: () => ask(messages), busy } : undefined}>
               {error?.text ?? ""}
             </InlineNote>
           )}
