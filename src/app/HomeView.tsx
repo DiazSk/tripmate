@@ -1644,7 +1644,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           plan knows, and a closing form. Full-bleed sections with real scroll height, handing off
           through the same startPlanning as before — every "plan" on it opens this app's own
           multi-step form, prefilled where the landing knows what to fill. */}
-      {step === "landing" && <PolarLanding onPlan={(prefill) => startPlanning(prefill, "landing")} />}
+      {step === "landing" && <PolarLanding onPlan={(prefill, entry = "landing") => startPlanning(prefill, entry)} />}
 
       {/* The planner (src/components/polar/planner), from the canvas design "TripMate Planning flow
           (web)": four steps over the place being planned. Full-bleed like PolarLanding, so it cancels

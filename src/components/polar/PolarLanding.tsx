@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -10,9 +10,12 @@ import { planExamples, toPrefill, formatExampleParty, formatExampleSpan, resolve
 import { sceneBeats } from "@/lib/sceneBeats";
 import { LENSES, petraPrefill, petraSampleDate, type LensId } from "@/lib/petraDay";
 import { PLAN_EVENT } from "@/lib/planIntent";
+import { heroPlaceIn, heroScene } from "@/lib/heroScene";
+import type { IdeaRead } from "@/lib/ideaRead";
 import { scrollToTarget, useLandingMotion } from "./motion";
 import { Day, OpenSheet, useReveal, Ways } from "./ImagineDay";
 import { DateRangeFields, shortDate, todayISO } from "./DateRangeFields";
+import MeriPill, { type PlanEntry } from "./MeriPill";
 
 // The plan's globe pulls in MapLibre, which the landing's first viewport never needs.
 const PlanGlobe = dynamic(() => import("./PlanGlobe"), { ssr: false });
@@ -34,6 +37,7 @@ const PlanGlobe = dynamic(() => import("./PlanGlobe"), { ssr: false });
  * `planExamples`, the four beats from `sceneBeats`.
  */
 
+// heroScene's HERO_PLACES mirrors these ids and words in this order: an index into one is an index into the other.
 type Dest = { id: string; word: string; coord: string; img: string };
 const DESTS: Dest[] = [
   { id: "petra", word: "Petra", coord: "[ 30º 19’ 20” N, 35º 27’ 07” E ]", img: "/scenes/petra-treasury.webp" },
@@ -63,8 +67,11 @@ const FACTS = [
 
 const FOOT_PHOTO = "/scenes/wadi-rum-desert.webp";
 
-export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefill) => void }) {
+export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefill, entry?: PlanEntry | "landing") => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const askRef = useRef<HTMLDivElement>(null);
+  const wordRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLElement>(null);
   const scroller = useScrollContainer();
   // True only in the browser, without a setState-in-effect: the portal target is document.body.
@@ -78,9 +85,22 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
 
   const [destId, setDestId] = useState("petra");
   const [heroPaused, setHeroPaused] = useState(false);
+  // The pill: whether it is open, the hero place its settled text names (-1 for none), and what Meri read.
+  const [pillOpen, setPillOpen] = useState(false);
+  const [typed, setTyped] = useState(-1);
+  const [read, setRead] = useState<IdeaRead | null>(null);
+  // How it works opens the pill through this.
+  const pillFocus = useRef<{ focus(): void } | null>(null);
   const [plan, setPlan] = useState(0);
   const [howOpen, setHowOpen] = useState(false);
-  const dest = DESTS.find((d) => d.id === destId)!;
+  // The hero follows the sentence: a place it names (typed, or read) shows that place's photograph; a
+  // read place the hero has no photograph of is named over the night veil instead.
+  const scene = heroScene(read, typed, DESTS.findIndex((d) => d.id === destId));
+  const dest = DESTS[scene.index];
+  // A named hero place becomes the rotation's own place, so clearing the idea rotates on from it.
+  const follow = (i: number) => {
+    if (i >= 0) setDestId(DESTS[i].id);
+  };
 
   // The day: how it is travelled, the stop in focus, and the "open this day" sheet.
   const [lens, setLens] = useState<LensId>("slow");
@@ -99,17 +119,56 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
     return () => window.removeEventListener(PLAN_EVENT, plan);
   }, [onPlan]);
 
-  // The hero moves on every ROTATE_MS. Picking a place restarts the clock; resting on the hero, or
-  // tabbing into it, holds it; a hidden tab or reduced motion never rotates at all.
+  // The hero moves on every ROTATE_MS. Naming a place restarts the clock; resting on the hero, tabbing
+  // into it, or an open pill holds it; a hidden tab or reduced motion never rotates at all.
   useEffect(() => {
-    if (heroPaused || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (heroPaused || pillOpen || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const t = window.setTimeout(() => {
       if (document.hidden) return;
       const i = DESTS.findIndex((d) => d.id === destId);
       setDestId(DESTS[(i + 1) % DESTS.length].id);
     }, ROTATE_MS);
     return () => window.clearTimeout(t);
-  }, [destId, heroPaused]);
+  }, [destId, heroPaused, pillOpen]);
+
+  // What opens under the pill must never cover the monument word, and nothing may fade it. While
+  // something is open, the group lifts just enough to clear the word by 1em; if that would put it
+  // under the navbar it stops there and the hero grows instead, pushing the word down (and never
+  // letting the hero's overflow clip the card). At rest the pill keeps the hero's centre.
+  // Offsets, not rects: they ignore the GSAP scroll transforms on the wrappers and the lift itself.
+  useEffect(() => {
+    const hero = heroRef.current, ask = askRef.current, word = wordRef.current;
+    const group = ask?.firstElementChild as HTMLElement | null;
+    if (!hero || !ask || !word || !group) return;
+    let frame = 0;
+    const fit = () => {
+      const under = group.querySelector<HTMLElement>(".mp-under");
+      // Below 900px the pill is in the flow, above the word by construction.
+      if (getComputedStyle(ask).position !== "absolute" || !under?.offsetHeight) {
+        ask.style.removeProperty("--mp-lift");
+        hero.style.removeProperty("--hero-fit");
+        return;
+      }
+      const em = parseFloat(getComputedStyle(ask).fontSize);
+      const ceiling = parseFloat(getComputedStyle(hero).paddingTop) + em;
+      // Everything from the word down keeps its height as the hero grows, so this is stable.
+      const belowWord = hero.offsetHeight - word.offsetTop;
+      hero.style.setProperty("--hero-fit", `${ceiling + group.offsetHeight + em + belowWord}px`);
+      const top = group.offsetTop;
+      const want = Math.max(ceiling, Math.min(top, word.offsetTop - em - group.offsetHeight));
+      ask.style.setProperty("--mp-lift", `${top - want}px`);
+    };
+    // A frame later: writing the hero's height inside the observer's callback would resize what it observes.
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    });
+    [hero, group, word].forEach((el) => ro.observe(el));
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   useEffect(() => {
     if (!howOpen) return;
@@ -151,9 +210,9 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
 
         {/* ───── Hero ───── */}
         <section
-          className={`tm-hero${heroPaused ? " is-paused" : ""}`}
+          ref={heroRef}
+          className="tm-hero"
           aria-label="TripMate"
-          style={{ "--rotate-ms": `${ROTATE_MS}ms` } as CSSProperties}
           onPointerEnter={(e) => e.pointerType === "mouse" && setHeroPaused(true)}
           onPointerLeave={() => setHeroPaused(false)}
           onFocus={() => setHeroPaused(true)}
@@ -162,11 +221,12 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           {/* The page's one heading, stable. The destination rotating below is decoration, not the title. */}
           <h1 className="sr-only">TripMate — plan a day you can imagine</h1>
           <div className="tm-hero-media" aria-hidden="true">
-            {DESTS.map((d) => (
-              <Image key={d.id} src={d.img} alt="" fill sizes="100vw" priority={d.id === "petra"} className={`tm-hero-img${d.id === destId ? " is-on" : ""}`} />
+            {DESTS.map((d, i) => (
+              <Image key={d.id} src={d.img} alt="" fill sizes="100vw" priority={d.id === "petra"} className={`tm-hero-img${i === scene.index ? " is-on" : ""}`} />
             ))}
             <div className="tm-hero-scrim" />
             <div className="tm-hero-veil" />
+            <div className={`tm-hero-night${scene.elsewhere ? " is-elsewhere" : pillOpen ? " is-open" : ""}`} />
           </div>
 
           <div className="tm-hero-mid">
@@ -177,20 +237,30 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
             </button>
           </div>
 
-          <div className="tm-hero-foot">
-            <div className="tm-dest-row" role="radiogroup" aria-label="Destination">
-              {DESTS.map((d) => (
-                <button key={d.id} type="button" role="radio" aria-checked={d.id === destId} className="tm-dest" onClick={() => setDestId(d.id)}>
-                  {d.word}
-                </button>
-              ))}
-            </div>
-            <span className="tm-coord tm-on-dark">{dest.coord}</span>
+          <div className="tm-hero-ask" ref={askRef}>
+            <MeriPill
+              onPlan={onPlan}
+              onText={(t) => {
+                const i = heroPlaceIn(t);
+                setTyped(i);
+                follow(i);
+              }}
+              onRead={(r) => {
+                setRead(r);
+                if (r?.destination) follow(heroPlaceIn(r.destination));
+              }}
+              onOpenChange={setPillOpen}
+              focusRef={pillFocus}
+            />
           </div>
 
-          <div className="tm-monument-wrap">
-            <p className="tm-monument" key={dest.id} aria-hidden="true">
-              {dest.word}
+          <div className="tm-hero-foot">
+            <span className="tm-coord tm-on-dark">{scene.elsewhere ? `[ ${read?.destination} ]` : dest.coord}</span>
+          </div>
+
+          <div className="tm-monument-wrap" ref={wordRef}>
+            <p className="tm-monument" key={scene.elsewhere ?? dest.id} aria-hidden="true">
+              {scene.elsewhere ?? dest.word}
             </p>
           </div>
         </section>

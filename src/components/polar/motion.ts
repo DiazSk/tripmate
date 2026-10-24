@@ -167,7 +167,7 @@ function build(root: HTMLElement, scroller: HTMLElement) {
   const all = (s: string) => Array.from(root.querySelectorAll<HTMLElement>(s));
   const scrub = scrubFor(scroller);
 
-  heroParallax(q(".tm-hero"), scroller, ".tm-hero-mid, .tm-hero-foot");
+  heroParallax(q(".tm-hero"), scroller, ".tm-hero-mid, .tm-hero-ask, .tm-hero-foot");
 
   gsap.matchMedia().add(DESKTOP, () => {
     // Full-bleed sections arrive as an inset card and open to the edges (has-inset-effect).

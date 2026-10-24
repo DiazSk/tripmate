@@ -293,11 +293,13 @@
 /* ── Hero ── */
 .tm-hero {
   position: relative;
-  min-height: max(40em, 100svh);
+  /* --hero-fit: the height a reading card needs to stay clear of the word (PolarLanding). */
+  min-height: max(40em, 100svh, var(--hero-fit, 0px));
   overflow: hidden;
   display: grid;
   /* No nav row: the app's fixed glass navbar sits over the photograph, so the hero only clears it. */
-  grid-template-rows: 1fr auto auto;
+  /* The lead, the pill (out of the flow from 900px, where it is absolute), the coordinates, the word. */
+  grid-template-rows: 1fr auto auto auto;
   padding-top: var(--nav-h);
   color: #fff;
   background: var(--wd-ink);
@@ -308,11 +310,24 @@
   z-index: 0;
   will-change: transform, filter;
 }
-.tm-hero-veil {
+.tm-hero-veil,
+.tm-hero-night {
   position: absolute;
   inset: 0;
   background: var(--wd-night);
   opacity: 0;
+}
+/* The sentence's night, beside .tm-hero-veil rather than on it: GSAP scrubs that one's opacity inline
+   as the page scrolls, and an inline style outranks any class. An open pill dims the photograph a
+   touch; a place the hero has no photograph of all but hides it under the place's name. */
+.tm-hero-night {
+  transition: opacity 0.6s var(--wd-ease-out);
+}
+.tm-hero-night.is-open {
+  opacity: 0.22;
+}
+.tm-hero-night.is-elsewhere {
+  opacity: 0.9;
 }
 .tm-hero-img {
   position: absolute;
@@ -368,36 +383,36 @@
   position: relative;
   z-index: 2;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--wd-space-2);
   padding: 0 calc(var(--wd-pad) + 3em) 0 var(--wd-pad);
 }
-.tm-dest-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35em;
+/* Meri's pill and what it shows under it. In the flow under the lead on narrow screens; from 900px
+   the hero's centre, one group over the whole hero that only the pill itself catches pointers in. */
+.tm-hero-ask {
+  position: relative;
+  z-index: 3;
+  padding: var(--wd-space-4) 0;
 }
-.tm-dest {
-  height: 2.2em;
-  padding: 0 0.9em;
-  font-size: 0.8em;
-  font-weight: 600;
-  color: #fff;
-  border: 1px solid var(--wd-frost-20);
-  background: rgba(9, 11, 16, 0.18);
-  backdrop-filter: blur(5px);
-  border-radius: var(--wd-radius-hairline);
-  transition: background-color 0.3s var(--wd-ease-out), color 0.3s var(--wd-ease-out), border-color 0.3s var(--wd-ease-out);
-}
-.tm-dest:hover {
-  border-color: rgba(255, 255, 255, 0.6);
-}
-.tm-dest[aria-checked='true'] {
-  background: #fff;
-  color: var(--wd-ink);
-  border-color: #fff;
+@media (width >= 56.25rem) {
+  .tm-hero-ask {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: safe center;
+    /* The step-by-step row under the pill (MeriPill.css: 0.75em gap, 3.6em tall), so the resting
+       pill, not the middle of the group, sits on the hero's centre. What opens under it then grows
+       the group both ways, as one. */
+    padding: 4.35em 0 0;
+    pointer-events: none;
+  }
+  /* The lift off the monument word (PolarLanding). On the child: GSAP owns this layer's transform. */
+  .tm-hero-ask > * {
+    pointer-events: auto;
+    translate: 0 calc(-1 * var(--mp-lift, 0px));
+    transition: translate 0.45s var(--wd-ease-out);
+  }
 }
 .tm-monument {
   position: relative;
@@ -1110,37 +1125,6 @@
   align-items: center;
   gap: var(--wd-space-2) var(--wd-space-4);
   margin-bottom: var(--wd-space-4);
-}
-
-/* ── Hero rotation: the chosen place's chip fills over the interval, and holds while the hero is
-   paused (pointer resting on it, or focus inside). Keyed to the chip, so a new pick restarts it. ── */
-.tm-dest {
-  position: relative;
-  overflow: hidden;
-}
-.tm-dest[aria-checked='true']::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 2px;
-  width: 100%;
-  background: var(--wd-signal);
-  transform-origin: left;
-  animation: tm-dest-fill var(--rotate-ms, 6000ms) linear both;
-}
-.tm-hero.is-paused .tm-dest[aria-checked='true']::after {
-  animation-play-state: paused;
-}
-@keyframes tm-dest-fill {
-  from {
-    transform: scaleX(0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tm-dest[aria-checked='true']::after {
-    display: none;
-  }
 }
 
 /* ── Arriving / Leaving fields and the range calendar (DateRangeFields) ── */
