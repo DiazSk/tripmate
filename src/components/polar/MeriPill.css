@@ -1,0 +1,319 @@
+/* Meri's pill on the landing (MeriPill.tsx). Sized in em so it scales with .tm's --wd-base; the
+   hero places the group, this only sizes and draws it. */
+.mp {
+  width: min(38em, calc(100% - 2.5em));
+  margin-inline: auto;
+  color: #fff;
+}
+
+/* The pill */
+.mp-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  height: 3.6em;
+  padding: 0 0.45em 0 0.5em;
+  cursor: text;
+  background: rgba(9, 11, 16, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.55);
+  transition: background-color 0.35s var(--wd-ease-out), border-color 0.35s, box-shadow 0.35s, transform 0.35s var(--wd-ease-out);
+}
+.mp-pill:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+/* Focus is the edge brightening, not a ring: orange belongs to the one action, the → button. */
+.mp-pill.is-open {
+  background: rgba(9, 11, 16, 0.58);
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.7);
+  transform: translateY(-2px);
+}
+.mp-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+/* Out-specifies `.tm :focus-visible`, whose orange outline would otherwise ring the input. */
+.tm .mp-input,
+.tm .mp-input:focus-visible {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #fff;
+  font-size: 1.05em;
+  font-weight: 500;
+}
+.mp-ghost {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  font-size: 1.05em;
+  color: rgba(255, 255, 255, 0.6);
+}
+.mp-ghost.is-typing::after {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: mp-caret 1s steps(1) infinite;
+}
+@keyframes mp-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.mp-go {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.6em;
+  height: 2.6em;
+  border-radius: 999px;
+  background: var(--wd-signal);
+  color: var(--wd-ink);
+  font-size: 1.05em;
+  font-weight: 700;
+  transition: background-color 0.25s, transform 0.25s var(--wd-ease-out);
+}
+.mp-go:hover {
+  background: var(--wd-signal-hover);
+  transform: translateX(2px);
+}
+.mp-go[aria-busy='true'] {
+  cursor: progress;
+}
+.mp-spin {
+  width: 1em;
+  height: 1em;
+  border-radius: 999px;
+  border: 2px solid rgba(31, 42, 68, 0.3);
+  border-top-color: var(--wd-ink);
+  animation: mp-spin 0.8s linear infinite;
+}
+@keyframes mp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* What the pill shows under itself */
+/* Spacing is on what shows, not a gap: the live region and the alert stay mounted while empty. */
+.mp-nudge,
+.mp-prompts,
+.mp-card,
+.mp-fail.is-on {
+  margin-top: 0.75em;
+}
+.mp-nudge {
+  text-align: center;
+  font-size: 0.82em;
+  color: #ffb3b3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.mp-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5em;
+}
+/* Prompts sit on the photograph, so they carry their own dark glass: legible over sky or sandstone. */
+.mp-prompt {
+  height: 2.3em;
+  padding: 0 1em;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(9, 11, 16, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.25s, background-color 0.25s;
+}
+.mp-prompt:hover {
+  background: rgba(9, 11, 16, 0.82);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* The reading card, and the failure in its place */
+.mp-card,
+.mp-fail.is-on {
+  padding: 1.25em;
+  border-radius: 1em;
+  text-align: left;
+  background: rgba(9, 11, 16, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  animation: mp-rise 0.45s var(--wd-ease-reveal) both;
+}
+@keyframes mp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.mp-headline {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.45em;
+  line-height: 1.15;
+}
+.mp-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65em 1.25em;
+  margin: 0.8em 0 0;
+}
+@media (min-width: 640px) {
+  .mp-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.mp-kicker {
+  font-size: 0.7em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.mp-value {
+  margin: 0.15em 0 0;
+  font-size: 0.94em;
+  font-weight: 600;
+}
+.mp-close {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: 0.8em;
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.mp-trip {
+  padding: 0.3em 0.75em;
+  border-radius: 999px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background-color 0.25s;
+}
+.mp-trip:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.mp-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1em;
+  margin-top: 1em;
+}
+.mp-change {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.mp-change:hover {
+  color: #fff;
+}
+.mp-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 2.75em;
+  padding: 0 1.15em;
+  border-radius: var(--wd-radius-hairline);
+  font-size: 0.88em;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  transition: background-color 0.25s;
+}
+.mp-open:hover {
+  background: var(--wd-signal-hover);
+}
+/* Kept mounted for the alert to be announced; a flex box so the empty note inside takes no line. */
+.mp-fail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em 0.75em;
+}
+.mp-fail .err-btn-text {
+  color: #fff;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Plan step by step: the pill's own height, glass and curve, so neither reads as the fallback. */
+.mp-steps-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75em;
+}
+.mp-steps {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  height: 3.6em;
+  padding: 0 1.4em;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #fff;
+  background: rgba(9, 11, 16, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.55);
+  transition: background-color 0.3s var(--wd-ease-out), border-color 0.3s, transform 0.3s var(--wd-ease-out);
+}
+.mp-steps:hover {
+  background: rgba(9, 11, 16, 0.55);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+@media (max-width: 560px) {
+  .mp-steps {
+    width: 100%;
+  }
+}
+
+/* Nothing slides or lifts; the spinner and caret stand still. */
+@media (prefers-reduced-motion: reduce) {
+  .mp-pill,
+  .mp-steps,
+  .mp-go {
+    transition: none;
+  }
+  .mp-pill.is-open,
+  .mp-steps:hover,
+  .mp-go:hover {
+    transform: none;
+  }
+  .mp-spin,
+  .mp-ghost::after,
+  .mp-card,
+  .mp-fail.is-on {
+    animation: none;
+  }
+}
