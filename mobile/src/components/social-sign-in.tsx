@@ -13,6 +13,14 @@ import { useFinishAuth } from '@/lib/useFinishAuth';
 type Flow = () => Promise<{ createdSessionId: string | null; setActive?: (p: { session: string }) => Promise<void> }>;
 
 /**
+ * Off only in a build signed by a personal (free) Apple team, which cannot carry the Sign in with
+ * Apple capability: `EXPO_PUBLIC_APPLE_SIGN_IN=0` also drops the plugin in `app.config.ts`, and a
+ * button with no entitlement behind it would only fail when pressed. Read as the literal so Metro
+ * inlines it.
+ */
+const APPLE_SIGN_IN = process.env.EXPO_PUBLIC_APPLE_SIGN_IN !== '0';
+
+/**
  * Apple (iOS) and Google, at the head of sign-in: the first two choices on the glass over the night
  * (`glass-auth.tsx`), above "Continue with email".
  *
@@ -50,7 +58,7 @@ export function SocialSignIn({ disabled }: { disabled?: boolean }) {
 
   return (
     <View style={styles.group}>
-      {Platform.OS === 'ios' ? (
+      {Platform.OS === 'ios' && APPLE_SIGN_IN ? (
         <AppleAuthentication.AppleAuthenticationButton
           buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
           buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
