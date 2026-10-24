@@ -17,7 +17,7 @@ import PolarLanding from "@/components/polar/PolarLanding";
 import PlanningFlow, { type PlannerModel } from "@/components/polar/planner/PlanningFlow";
 import { suggestionLabel } from "@/lib/weather";
 import { setHomeScreen } from "@/lib/homeScreen";
-import type { PlanPrefill } from "@/lib/planExamples";
+import { plannerPatch, type PlanPrefill } from "@/lib/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import { capsuleDays } from "@/lib/planProgress";
 import { closestTier, perPersonBudget, tripDays, TierId, TIERS } from "@/lib/tiers";
@@ -1474,24 +1474,27 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * boot on this step anyway, and a missed geocode is non-blocking by design. The traveller
    * touching the field is what resolves it, exactly as when they type their own.
    */
-  function startPlanning(prefill?: PlanPrefill, entry: "step_by_step" | "landing" = "step_by_step") {
+  function startPlanning(
+    prefill?: PlanPrefill,
+    entry: "step_by_step" | "landing" | "meri" | "ready_made" = "step_by_step"
+  ) {
     // A new wizard is a new attempt; the id is shared with everything this attempt sends.
     attemptRef.current = newAttemptId();
     track("plan_started", { entry, attempt_id: attemptRef.current });
     if (prefill) {
-      if (prefill.destination !== undefined) setDestination(prefill.destination);
-      if (prefill.startDate !== undefined) setStartDate(prefill.startDate);
-      if (prefill.endDate !== undefined) setEndDate(prefill.endDate);
-      // Each guarded independently, because a partial prefill must leave everything it did not
-      // ask about exactly as the traveller's saved profile left it. See PlanPrefill for why the
-      // three money/party fields are optional rather than defaulted at the call site.
-      if (prefill.budgetUsd !== undefined) setBudget(prefill.budgetUsd);
-      if (prefill.adults !== undefined || prefill.children !== undefined) {
-        const adults = prefill.adults ?? 1;
-        const children = prefill.children ?? 0;
-        setParty({ adults, children, infants: 0 });
-        setGroup(children > 0 ? "family_with_kids" : adults === 1 ? "solo" : "couple");
-      }
+      // Only the keys the prefill spoke for: a partial prefill must leave everything it did not
+      // ask about exactly as the traveller's saved profile left it. See PlanPrefill.
+      const patch = plannerPatch(prefill);
+      if (patch.destination !== undefined) setDestination(patch.destination);
+      if (patch.startDate !== undefined) setStartDate(patch.startDate);
+      if (patch.endDate !== undefined) setEndDate(patch.endDate);
+      if (patch.budget !== undefined) setBudget(patch.budget);
+      if (patch.budgetBasis !== undefined) setBudgetBasis(patch.budgetBasis);
+      if (patch.party !== undefined) setParty(patch.party);
+      if (patch.group !== undefined) setGroup(patch.group);
+      if (patch.pace !== undefined) setPace(patch.pace);
+      if (patch.interests !== undefined) setInterests(patch.interests);
+      if (patch.mustInclude !== undefined) setMustInclude(patch.mustInclude);
     }
     // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
     // should see what it filled in before it prices anything.

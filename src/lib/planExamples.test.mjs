@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   formatExampleParty,
   formatExampleSpan,
+  plannerPatch,
   planExamples,
   resolveExampleDates,
   toPrefill,
@@ -99,4 +100,37 @@ test("every card carries a real destination and a plannable length", () => {
     assert.ok(e.destination.includes(","), `${e.id} destination lacks a country`);
     assert.ok(e.photo.src.startsWith("/scenes/"), `${e.id} photo is not a local asset`);
   }
+});
+
+test("plannerPatch: an absent field is not in the patch", () => {
+  assert.deepEqual(plannerPatch({ destination: "Kyoto, Japan" }), { destination: "Kyoto, Japan" });
+});
+
+test("plannerPatch: party sets group", () => {
+  const couple = plannerPatch({ adults: 2 });
+  assert.deepEqual(couple.party, { adults: 2, children: 0, infants: 0 });
+  assert.equal(couple.group, "couple");
+  const family = plannerPatch({ adults: 1, children: 1 });
+  assert.deepEqual(family.party, { adults: 1, children: 1, infants: 0 });
+  assert.equal(family.group, "family_with_kids");
+  assert.equal(plannerPatch({ children: 0 }).group, "solo");
+});
+
+test("plannerPatch: carries basis, pace, interests, mustInclude as given", () => {
+  assert.deepEqual(
+    plannerPatch({
+      budgetUsd: 2400,
+      budgetBasis: "per_person",
+      pace: "relaxed",
+      interests: ["food", "temples"],
+      mustInclude: "Fushimi Inari",
+    }),
+    {
+      budget: 2400,
+      budgetBasis: "per_person",
+      pace: "relaxed",
+      interests: ["food", "temples"],
+      mustInclude: "Fushimi Inari",
+    }
+  );
 });

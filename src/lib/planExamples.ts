@@ -1,4 +1,4 @@
-import type { PacePreference } from "./types";
+import type { GroupType, PacePreference } from "./types";
 
 export type PlanExample = {
   id: string;
@@ -139,6 +139,40 @@ export function formatExampleParty(adults: number, children: number): string {
   const a = `${adults} ${adults === 1 ? "adult" : "adults"}`;
   if (children <= 0) return a;
   return `${a}, ${children} ${children === 1 ? "child" : "children"}`;
+}
+
+/** What the planner's own fields should become for a prefill: a key is present only when the
+ *  prefill spoke for it, so applying the patch key by key leaves everything else as the traveller's
+ *  saved profile left it. `group` is derived from the party counts (not stored beside them), so the
+ *  two cannot disagree. */
+export function plannerPatch(p: PlanPrefill): {
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  budget?: number;
+  budgetBasis?: "per_person" | "whole_party";
+  party?: { adults: number; children: number; infants: 0 };
+  group?: GroupType;
+  pace?: PacePreference;
+  interests?: string[];
+  mustInclude?: string;
+} {
+  const patch: ReturnType<typeof plannerPatch> = {};
+  if (p.destination !== undefined) patch.destination = p.destination;
+  if (p.startDate !== undefined) patch.startDate = p.startDate;
+  if (p.endDate !== undefined) patch.endDate = p.endDate;
+  if (p.budgetUsd !== undefined) patch.budget = p.budgetUsd;
+  if (p.budgetBasis !== undefined) patch.budgetBasis = p.budgetBasis;
+  if (p.adults !== undefined || p.children !== undefined) {
+    const adults = p.adults ?? 1;
+    const children = p.children ?? 0;
+    patch.party = { adults, children, infants: 0 };
+    patch.group = children > 0 ? "family_with_kids" : adults === 1 ? "solo" : "couple";
+  }
+  if (p.pace !== undefined) patch.pace = p.pace;
+  if (p.interests !== undefined) patch.interests = p.interests;
+  if (p.mustInclude !== undefined) patch.mustInclude = p.mustInclude;
+  return patch;
 }
 
 /** The card's data as the wizard wants it. A card always knows where and when, so those stay required. */
