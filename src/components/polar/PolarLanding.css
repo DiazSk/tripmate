@@ -424,7 +424,7 @@
   text-transform: uppercase;
   /* Width sets it; height caps it, so a wide-but-short laptop does not get a word taller than its
      screen's share (1440x900 and up are still width-bound). */
-  font-size: clamp(5.5em, min(21vw, 37svh), 20em);
+  font-size: min(clamp(5.5em, min(21vw, 37svh), 20em), var(--fit, 20em));
   /* Oswald's ascent is 1.193em and its descent 0.289em, so at line-height 1 the half-leading is
      -0.241em and the baseline sits 0.048em above the box's bottom edge: the whole word shows,
      with a hairline under it. Below 1, or with a negative margin, the hero's overflow crops it. */
@@ -1157,7 +1157,7 @@
 /* ── Small screens ── */
 @media (width < 48rem) {
   .tm-monument {
-    font-size: 26vw;
+    font-size: min(26vw, var(--fit, 26vw));
   }
   .tm-hide-sm {
     display: none;

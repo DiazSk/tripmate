@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ideaToPrefill, readyTripToPrefill } from "./homeIdeas.ts";
+import { addDays, ideaToPrefill, LEAD_DAYS, readyTripToPrefill } from "./homeIdeas.ts";
 
 const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [] };
 
@@ -63,4 +63,19 @@ test("readyTripToPrefill: the reading's budget, basis and party ride along", () 
 test("readyTripToPrefill: no reading", () => {
   const p = readyTripToPrefill(trip, null, "2026-10-23");
   assert.deepEqual(Object.keys(p).sort(), ["destination", "endDate", "mustInclude", "pace", "startDate"]);
+});
+
+test("ideaToPrefill: clears a previous attempt's must-sees, since a sentence never names stops", () => {
+  assert.equal(ideaToPrefill({ ...none, destination: "Lisbon, Portugal" }, "2026-10-23").mustInclude, "");
+});
+
+test("a budget without a basis is the whole party's, so an earlier per-person basis cannot linger", () => {
+  assert.equal(ideaToPrefill({ ...none, budget: 3000 }, "2026-10-23").budgetBasis, "whole_party");
+  assert.equal(readyTripToPrefill(trip, { ...none, budget: 3000 }, "2026-10-23").budgetBasis, "whole_party");
+});
+
+test("addDays and LEAD_DAYS: the one date rule both clients share", () => {
+  assert.equal(LEAD_DAYS, 30);
+  assert.equal(addDays("2026-12-31", 1), "2027-01-01");
+  assert.equal(addDays("2026-03-08", 0), "2026-03-08");
 });

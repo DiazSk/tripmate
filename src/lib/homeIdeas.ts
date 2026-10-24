@@ -150,10 +150,10 @@ export function ideaHeadline(read: IdeaRead): string {
 }
 
 /** Calendar-date arithmetic on a 'YYYY-MM-DD' string, in UTC so no zone can roll it a day. */
-const addDays = (iso: string, n: number) => new Date(Date.parse(iso) + n * 86_400_000).toISOString().slice(0, 10);
+export const addDays = (iso: string, n: number) => new Date(Date.parse(iso) + n * 86_400_000).toISOString().slice(0, 10);
 
 /** How far ahead a read with a length but no date plans: far enough to book, near enough to mean it. */
-const LEAD_DAYS = 30;
+export const LEAD_DAYS = 30;
 
 /** Dates for a trip of `days` days, `LEAD_DAYS` out from `today`. */
 const leadDates = (today: string, days: number) => {
@@ -161,16 +161,21 @@ const leadDates = (today: string, days: number) => {
   return { startDate, endDate: addDays(startDate, days - 1) };
 };
 
+/** A read's budget and its basis, always together: a null basis is the whole party's, as the card's
+ *  headline and `matchTrips` read it, so an earlier attempt's per-person basis cannot linger. */
+const budgetFrom = (read: IdeaRead): Pick<PlanPrefill, "budgetUsd" | "budgetBasis"> =>
+  read.budget === null ? {} : { budgetUsd: read.budget, budgetBasis: read.budgetBasis ?? "whole_party" };
+
 /**
  * The planner's fields from a read, saying only what the sentence did: a field the reader did not
  * find is absent (not zero), so it cannot overwrite what the traveller's profile already holds.
  * Dates only when the length is known, since a start with no end says nothing.
  */
 export function ideaToPrefill(read: IdeaRead, today: string): PlanPrefill {
-  const out: PlanPrefill = { destination: read.destination ?? "", startDate: "", endDate: "" };
+  // mustInclude always: a sentence never names stops, and a trip chip's from an earlier attempt would ride along.
+  const out: PlanPrefill = { destination: read.destination ?? "", startDate: "", endDate: "", mustInclude: "" };
   if (read.days !== null) Object.assign(out, leadDates(today, read.days));
-  if (read.budget !== null) out.budgetUsd = read.budget;
-  if (read.budgetBasis) out.budgetBasis = read.budgetBasis;
+  Object.assign(out, budgetFrom(read));
   if (read.adults !== null) out.adults = read.adults;
   if (read.children !== null) out.children = read.children;
   if (read.pace) out.pace = read.pace;
@@ -189,8 +194,7 @@ export function readyTripToPrefill(trip: ReadyTrip, read: IdeaRead | null, today
   if (pace) out.pace = pace;
   const must = trip.itinerary.flatMap((d) => d.stops.map((s) => s.name)).join(", ");
   if (must) out.mustInclude = must;
-  if (read && read.budget !== null) out.budgetUsd = read.budget;
-  if (read && read.budgetBasis) out.budgetBasis = read.budgetBasis;
+  if (read) Object.assign(out, budgetFrom(read));
   if (read && read.adults !== null) out.adults = read.adults;
   if (read && read.children !== null) out.children = read.children;
   return out;

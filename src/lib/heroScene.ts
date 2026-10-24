@@ -23,6 +23,10 @@ export function heroPlaceIn(text: string): number {
   return TERMS.find((t) => padded.includes(t.term))?.index ?? -1;
 }
 
+/** The same, for a read: the reader writes "City, Country", and the country is the geocoder's padding,
+ *  not the traveller's word, so only the place before the comma counts. "Amman, Jordan" is not Petra. */
+export const heroPlaceInRead = (destination: string): number => heroPlaceIn(destination.split(",")[0]);
+
 /** What the hero shows: a read place beats typing, which beats the rotation. A read place that
  *  is not one of the five keeps the photo and is named instead. */
 export function heroScene(
@@ -32,9 +36,9 @@ export function heroScene(
 ): { index: number; elsewhere: string | null } {
   const dest = read?.destination;
   if (dest) {
-    const at = heroPlaceIn(dest);
+    const at = heroPlaceInRead(dest);
     if (at >= 0) return { index: at, elsewhere: null };
-    return { index: typedIndex >= 0 ? typedIndex : rotationIndex, elsewhere: dest.split(",")[0].trim() };
+    return { index: typedIndex >= 0 ? typedIndex : rotationIndex, elsewhere: dest.split(",")[0].trim() || null };
   }
   return { index: typedIndex >= 0 ? typedIndex : rotationIndex, elsewhere: null };
 }

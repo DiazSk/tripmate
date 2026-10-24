@@ -1456,11 +1456,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   }
 
   /**
-   * Opens the wizard, optionally filled in from a featured card.
+   * Opens the wizard, optionally filled in from a featured card, Meri's reading or a ready-made trip.
    *
-   * Only the six fields a card can honestly speak for are written. Everything else — energy,
-   * crowds, interests, explorer style — keeps whatever the traveller's saved profile put there,
-   * because a marketing example has no business overwriting a stated preference.
+   * Only the fields the prefill spoke for are written (`plannerPatch`): a featured card speaks for
+   * place, dates, budget and party; a reading or a ready-made trip can add the budget's basis, pace,
+   * interests and must-sees. Everything a prefill leaves out — energy, crowds, explorer style, and
+   * interests unless it names some — keeps whatever the traveller's saved profile put there, because
+   * an example has no business overwriting a stated preference. When it does name interests, the
+   * stars are trimmed to them.
    *
    * `tier` and `group` are derived rather than carried: `closestTier` already owns the
    * budget-to-tier mapping the tier cards use, and re-stating it in the card data would be a second
@@ -1493,7 +1496,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       if (patch.party !== undefined) setParty(patch.party);
       if (patch.group !== undefined) setGroup(patch.group);
       if (patch.pace !== undefined) setPace(patch.pace);
-      if (patch.interests !== undefined) setInterests(patch.interests);
+      const chosen = patch.interests;
+      if (chosen !== undefined) {
+        setInterests(chosen);
+        // A star on a tag no longer chosen would hold a top-priority slot invisibly (see the toggle above).
+        setStarredInterests((s) => s.filter((t) => chosen.includes(t)));
+      }
       if (patch.mustInclude !== undefined) setMustInclude(patch.mustInclude);
     }
     // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller

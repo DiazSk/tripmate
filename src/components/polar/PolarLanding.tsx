@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -10,7 +10,8 @@ import { planExamples, toPrefill, formatExampleParty, formatExampleSpan, resolve
 import { sceneBeats } from "@/lib/sceneBeats";
 import { LENSES, petraPrefill, petraSampleDate, type LensId } from "@/lib/petraDay";
 import { PLAN_EVENT } from "@/lib/planIntent";
-import { heroPlaceIn, heroScene } from "@/lib/heroScene";
+import { heroPlaceIn, heroPlaceInRead, heroScene } from "@/lib/heroScene";
+import { monumentEms } from "@/lib/monumentFit";
 import type { IdeaRead } from "@/lib/ideaRead";
 import { scrollToTarget, useLandingMotion } from "./motion";
 import { Day, OpenSheet, useReveal, Ways } from "./ImagineDay";
@@ -105,6 +106,11 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
   // read place the hero has no photograph of is named over the night veil instead.
   const scene = heroScene(read, typed, DESTS.findIndex((d) => d.id === destId));
   const dest = DESTS[scene.index];
+  // The five words were sized by eye; a read place is any length, so it is fitted to the measure from
+  // its real Oswald width (`--fit`, a ceiling the CSS takes the smaller of).
+  const fit = scene.elsewhere
+    ? ({ "--fit": `calc((100vw - 2 * var(--wd-pad)) / ${monumentEms(scene.elsewhere).toFixed(3)})` } as CSSProperties)
+    : undefined;
   // A named hero place becomes the rotation's own place, so clearing the idea rotates on from it.
   const follow = (i: number) => {
     if (i >= 0) setDestId(DESTS[i].id);
@@ -263,7 +269,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
               }}
               onRead={(r) => {
                 setRead(r);
-                if (r?.destination) follow(heroPlaceIn(r.destination));
+                if (r?.destination) follow(heroPlaceInRead(r.destination));
               }}
               onOpenChange={setPillOpen}
               focusRef={pillFocus}
@@ -275,7 +281,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           </div>
 
           <div className="tm-monument-wrap" ref={wordRef}>
-            <p className="tm-monument" key={scene.elsewhere ?? dest.id} aria-hidden="true">
+            <p className="tm-monument" key={scene.elsewhere ?? dest.id} aria-hidden="true" style={fit}>
               {scene.elsewhere ?? dest.word}
             </p>
           </div>

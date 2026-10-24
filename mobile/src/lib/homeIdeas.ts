@@ -1,19 +1,13 @@
 import type { IdeaRead } from '@shared/ideaRead';
 import { realDate } from '@shared/importedPlan';
 import type { ReadyTrip } from '@shared/readyTrips';
-import { paceFor } from '@shared/homeIdeas';
+import { addDays, LEAD_DAYS, paceFor } from '@shared/homeIdeas';
 
 import type { PlanPrefillParams } from '@/lib/planDraft';
 
 // The pure helpers moved to the web's lib so both clients read one copy.
 export { TYPEWRITER_IDEAS, QUICK_PROMPTS, typewriterTick, matchTrips, keywordTrips, ideaHeadline } from '@shared/homeIdeas';
 export type { Typewriter } from '@shared/homeIdeas';
-
-/** Calendar-date arithmetic on a 'YYYY-MM-DD' string, in UTC so no zone can roll it a day. */
-const addDays = (iso: string, n: number) => new Date(Date.parse(iso) + n * 86_400_000).toISOString().slice(0, 10);
-
-/** How far ahead a read with a length but no date plans: far enough to book, near enough to mean it. */
-const LEAD_DAYS = 30;
 
 /** The planner's fields from a read. Dates only when the length is known, since a start with no end says nothing. */
 export function ideaPrefill(read: IdeaRead, today: string): PlanPrefillParams {

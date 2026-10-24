@@ -166,6 +166,7 @@ export default function MeriPill({
     if (held) {
       const base = lastLimit.current ?? { kind: "rate_limited", bucket: "idea", retryAfterSeconds: 0, limit: 0, windowMinutes: 0 };
       setPhase({ kind: "failed", failure: { ...base, retryAfterSeconds: holdLeft } });
+      onRead(null); // the hold card replaces the read, so the hero must not keep its place
       return;
     }
     inflight.current?.abort();

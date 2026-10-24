@@ -3,6 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Make it mine plans from the same month out a read does.
+import { LEAD_DAYS } from '@shared/homeIdeas';
 import type { ReadyTrip } from '@shared/readyTrips';
 
 import { isoDaysFromNow } from '@/components/form';
@@ -12,12 +14,10 @@ import { Scrim } from '@/components/polar-landing/scrim';
 import { monumentFontSize, usePolarFonts } from '@/components/polar-ui';
 import { SymbolView } from '@/components/symbol';
 import { Polar, PolarFonts } from '@/constants/polar';
+
 import { prefillQuery, readyTripPrefill } from '@/lib/homeIdeas';
 import { formatMoney } from '@/lib/spend';
 import { useReadyTrips } from '@/lib/useReadyTrips';
-
-/** Make it mine plans from where Basics' own default would: a month out. */
-const LEAD_DAYS = 30;
 
 /**
  * A ready-made trip, opened from its card on Home (design D's preview sheet): the photograph with
