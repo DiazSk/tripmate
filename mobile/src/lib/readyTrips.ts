@@ -37,20 +37,7 @@ export function railsFor(trips: ReadyTrip[]): Rail[] {
   return RAILS.map(({ id, title, has }) => ({ id, title, trips: sorted.filter(has) })).filter((r) => r.trips.length > 0);
 }
 
-/** The catalogue's wording for pace, in the planner's three. `null` for a word it does not know. */
-export function paceFor(pace: string): 'relaxed' | 'balanced' | 'packed' | null {
-  switch (pace) {
-    case 'Easy pace':
-    case 'Slow':
-      return 'relaxed';
-    case 'Balanced':
-      return 'balanced';
-    case 'Full days':
-      return 'packed';
-    default:
-      return null;
-  }
-}
+export { paceFor } from '@shared/homeIdeas';
 
 /**
  * Whether Home gives way to the full-screen offline page. Only when the trip list could not be

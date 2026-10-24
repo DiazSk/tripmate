@@ -1,3 +1,5 @@
+import type { PacePreference } from "./types";
+
 export type PlanExample = {
   id: string;
   /** Where the trip goes. Set as the card's title, so it carries the place and the shape. */
@@ -69,9 +71,11 @@ export type PlanExample = {
  *  honestly speak for — everything else in the form keeps the traveller's saved profile defaults
  *  rather than being overwritten by a marketing example. */
 export type PlanPrefill = {
-  destination: string;
-  startDate: string;
-  endDate: string;
+  /** Every field is optional: the landing's sentence says only some of them, and an absent one
+   *  must leave what the planner already holds alone. */
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
   /** Optional so a *partial* prefill cannot overwrite a returning traveller's saved profile.
    *
    *  A featured-plan card knows all six values and sends all six. The hero's entry capsule knows
@@ -83,6 +87,11 @@ export type PlanPrefill = {
   budgetUsd?: number;
   adults?: number;
   children?: number;
+  budgetBasis?: "per_person" | "whole_party";
+  pace?: PacePreference;
+  interests?: string[];
+  /** Stops to see, comma-joined as the planner's must-include field takes them. */
+  mustInclude?: string;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -132,8 +141,11 @@ export function formatExampleParty(adults: number, children: number): string {
   return `${a}, ${children} ${children === 1 ? "child" : "children"}`;
 }
 
-/** The card's data as the wizard wants it. */
-export function toPrefill(example: PlanExample, todayISO: string): PlanPrefill {
+/** The card's data as the wizard wants it. A card always knows where and when, so those stay required. */
+export function toPrefill(
+  example: PlanExample,
+  todayISO: string
+): PlanPrefill & Required<Pick<PlanPrefill, "destination" | "startDate" | "endDate">> {
   const { startDate, endDate } = resolveExampleDates(
     example.startMonthDay,
     example.days,

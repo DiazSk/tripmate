@@ -1479,9 +1479,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     attemptRef.current = newAttemptId();
     track("plan_started", { entry, attempt_id: attemptRef.current });
     if (prefill) {
-      setDestination(prefill.destination);
-      setStartDate(prefill.startDate);
-      setEndDate(prefill.endDate);
+      if (prefill.destination !== undefined) setDestination(prefill.destination);
+      if (prefill.startDate !== undefined) setStartDate(prefill.startDate);
+      if (prefill.endDate !== undefined) setEndDate(prefill.endDate);
       // Each guarded independently, because a partial prefill must leave everything it did not
       // ask about exactly as the traveller's saved profile left it. See PlanPrefill for why the
       // three money/party fields are optional rather than defaulted at the call site.

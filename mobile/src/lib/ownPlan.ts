@@ -1,4 +1,5 @@
 import type { Anchor, ImportedPlan } from '@/api/types';
+import { fold } from '@shared/homeIdeas';
 
 /**
  * The confirm screen of bring-your-own-itinerary, as logic it can be tested without. There is no
@@ -68,14 +69,7 @@ export function looseAnchors(plan: ImportedPlan): Anchor[] {
 export const isFound = (stop: { lat?: number; lng?: number }) =>
   typeof stop.lat === 'number' && typeof stop.lng === 'number';
 
-/** Lowercase, accents off, punctuation to spaces: "Jerónimos, Monastery!" and "jeronimos monastery" are one. */
-export const fold = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+export { fold } from '@shared/homeIdeas';
 
 /**
  * Which line of the pasted text each stop was read from, or null when it cannot be said.
