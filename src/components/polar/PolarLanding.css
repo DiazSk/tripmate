@@ -996,7 +996,7 @@
   right: 0;
   bottom: 0;
   z-index: 31;
-  width: min(100%, 30em);
+  width: min(100%, 34em);
   display: flex;
   flex-direction: column;
   gap: var(--wd-space-5);
@@ -1044,8 +1044,114 @@
 .tm-steps .tm-body {
   color: var(--wd-charcoal);
 }
-.tm-sheet .tm-signal {
-  align-self: flex-start;
+.tm-sheet-title {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 2em;
+  line-height: 1.05;
+}
+.tm-sheet-lead {
+  margin-top: 0.4em;
+  color: var(--wd-charcoal);
+}
+.tm-ways {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75em;
+  margin-top: 1.1em;
+}
+.tm-way {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  padding: 1.1em;
+  border: 1px solid var(--wd-rule);
+  border-radius: 6px;
+  background: var(--wd-paper);
+}
+.tm-way-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65em;
+}
+.tm-way-title {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.5em;
+  line-height: 1;
+}
+.tm-way-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--wd-ink);
+  color: #fff;
+}
+.tm-way .tm-body {
+  font-size: 0.88em;
+  line-height: 1.45;
+}
+.tm-way-example {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.1em;
+  line-height: 1.25;
+  padding: 0.55em 0.75em;
+  border-left: 2px solid var(--wd-signal);
+  background: #fff;
+}
+.tm-way-steps {
+  display: grid;
+  gap: 0.35em;
+  font-size: 0.88em;
+}
+.tm-way-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+.tm-way-steps span {
+  display: grid;
+  place-items: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 999px;
+  font-size: 0.8em;
+  font-weight: 700;
+  background: #fff;
+  border: 1px solid var(--wd-rule);
+}
+/* Both buttons sit at the card's foot, the same size, whatever the cards above them hold. */
+.tm-way .tm-signal {
+  margin-top: auto;
+  align-self: stretch;
+}
+/* The arrow is printed in the label here: these two buttons name a direction, and touch has no hover. */
+.tm-way .tm-signal::after {
+  display: none;
+}
+.tm-way .tm-signal:hover:not(:disabled) .tm-signal-label {
+  transform: none;
+}
+.tm-either {
+  font-size: 0.75em;
+  color: var(--wd-charcoal);
+}
+@media (width < 35rem) {
+  .tm-ways {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm-sheet,
+  .tm-sheet-scrim {
+    transition: none;
+  }
 }
 
 /* ── Small screens ── */

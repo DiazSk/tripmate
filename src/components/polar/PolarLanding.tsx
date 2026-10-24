@@ -16,6 +16,7 @@ import { scrollToTarget, useLandingMotion } from "./motion";
 import { Day, OpenSheet, useReveal, Ways } from "./ImagineDay";
 import { DateRangeFields, shortDate, todayISO } from "./DateRangeFields";
 import MeriPill, { type PlanEntry } from "./MeriPill";
+import Meridian from "@/components/Meridian";
 
 // The plan's globe pulls in MapLibre, which the landing's first viewport never needs.
 const PlanGlobe = dynamic(() => import("./PlanGlobe"), { ssr: false });
@@ -51,13 +52,16 @@ const ROTATE_MS = 6000;
 // The four journeys' seasons, as the strip prints them. Presentation copy, keyed by the plan's id.
 const SEASON: Record<string, string> = { tuscany: "Early autumn", jaipur: "Cool season", sinaia: "Deep winter", "wadi-rum": "Spring" };
 
-// The same four steps HowItWorks states, in the same words.
+// "Then, either way" in the How it works sheet: what happens after both ways in.
 const STEPS = [
-  { n: "01", title: "You set the constraints", prose: "Where, when, how much, and who is going. The budget is a ceiling: the plan stays inside it rather than spending up to it." },
+  { n: "01", title: "Your budget is a ceiling", prose: "However you start, the plan stays inside what you said you would spend rather than spending up to it." },
   { n: "02", title: "Real data goes in first", prose: "Forecast for your actual dates, public holidays, opening hours and travel times, fetched before a single word is written." },
   { n: "03", title: "Written, then critiqued", prose: "A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with." },
   { n: "04", title: "Every place is checked", prose: "Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed." },
 ];
+
+// The planner's own step names (the chips in planner/PlanningFlow.tsx), in order.
+const PLANNER_STEPS = ["Where and when", "Who’s going", "What you’re after", "Review"];
 
 const FACTS = [
   ["Forecast", "For your actual dates, up to 16 days out"],
@@ -93,6 +97,10 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
   const pillFocus = useRef<{ focus(): void } | null>(null);
   const [plan, setPlan] = useState(0);
   const [howOpen, setHowOpen] = useState(false);
+  const howTab = useRef<HTMLButtonElement>(null);
+  const howClose = useRef<HTMLButtonElement>(null);
+  // Set by "Ask Meri" so the sheet's focus return does not take the caret back from the pill.
+  const askMeri = useRef(false);
   // The hero follows the sentence: a place it names (typed, or read) shows that place's photograph; a
   // read place the hero has no photograph of is named over the night veil instead.
   const scene = heroScene(read, typed, DESTS.findIndex((d) => d.id === destId));
@@ -170,11 +178,21 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
     };
   }, []);
 
+  // The sheet is a modal dialog: Escape closes it, focus moves in on open and returns to the tab on close.
   useEffect(() => {
     if (!howOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setHowOpen(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    howClose.current?.focus({ preventScroll: true });
+    const tab = howTab.current;
+    const pill = pillFocus; // a stable handle, not a node React swaps
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (askMeri.current) {
+        askMeri.current = false;
+        pill.current?.focus();
+      } else tab?.focus({ preventScroll: true });
+    };
   }, [howOpen]);
 
   /** "See this stop in the plan": the slow way, that stop in focus, its row a third of the way down. */
@@ -194,8 +212,6 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
     // Where and when only: money and party were not asked, so they are not sent (see PlanPrefill).
     if (Object.keys(next).length === 0) onPlan({ destination: where.trim(), startDate: dates.start, endDate: dates.end });
   }
-
-  const toForm = () => scrollToTarget(formRef.current);
 
   return (
     // Cancels <main>'s padding exactly, as ScrollStory's wrapper did: every band here is full-bleed,
@@ -456,7 +472,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         {sheet && <OpenSheet lens={lens} when={sampleDay} onClose={closeSheet} onOpen={(adults) => onPlan(petraPrefill(today, adults))} />}
 
         {/* ───── How it works sheet ───── */}
-        <button type="button" className="tm-tab" onClick={() => setHowOpen(true)} aria-haspopup="dialog" aria-expanded={howOpen}>
+        <button ref={howTab} type="button" className="tm-tab" onClick={() => setHowOpen(true)} aria-haspopup="dialog" aria-expanded={howOpen}>
           How it works <span aria-hidden="true">+</span>
         </button>
         {/* The sheet and its scrim are portalled to <body>. Rendered here they sit inside AppShell's
@@ -470,30 +486,82 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
               <aside data-lenis-prevent className={`tm-sheet${howOpen ? " is-on" : ""}`} role="dialog" aria-modal="true" aria-label="How it works" aria-hidden={!howOpen}>
                 <div className="tm-sheet-head">
                   <h2 className="tm-eyebrow">How it works</h2>
-                  <button type="button" className="tm-quiet" onClick={() => setHowOpen(false)} tabIndex={howOpen ? 0 : -1}>
+                  <button ref={howClose} type="button" className="tm-quiet" onClick={() => setHowOpen(false)} tabIndex={howOpen ? 0 : -1}>
                     Close
                   </button>
                 </div>
-                <ol className="tm-steps">
-                  {STEPS.map((s) => (
-                    <li key={s.n}>
-                      <span className="tm-step-n">{s.n}.</span>
-                      <h3 className="tm-step-title">{s.title}</h3>
-                      <p className="tm-body">{s.prose}</p>
-                    </li>
-                  ))}
-                </ol>
-                <button
-                  type="button"
-                  className="tm-signal tm-signal-lg"
-                  tabIndex={howOpen ? 0 : -1}
-                  onClick={() => {
-                    setHowOpen(false);
-                    toForm();
-                  }}
-                >
-                  <span className="tm-signal-label">Plan a trip</span>
-                </button>
+                <section aria-labelledby="tm-ways-title">
+                  <h3 id="tm-ways-title" className="tm-sheet-title">
+                    Two ways to start
+                  </h3>
+                  <p className="tm-body tm-sheet-lead">Both end in the same planner, and you check every field before a day is written.</p>
+                  <div className="tm-ways">
+                    <article className="tm-way">
+                      <div className="tm-way-head">
+                        <Meridian state="idle" size={30} />
+                        <h4 className="tm-way-title">Tell Meri</h4>
+                      </div>
+                      <p className="tm-body">Say it in a sentence, the way you would to a friend.</p>
+                      <p className="tm-way-example">“4 slow days in Lisbon under $2,000 for two”</p>
+                      <p className="tm-body">Meri fills in the planner’s fields from it. Anything you didn’t say stays yours to choose.</p>
+                      <button
+                        type="button"
+                        className="tm-signal"
+                        tabIndex={howOpen ? 0 : -1}
+                        onClick={() => {
+                          askMeri.current = true;
+                          setHowOpen(false);
+                        }}
+                      >
+                        <span className="tm-signal-label">Ask Meri →</span>
+                      </button>
+                    </article>
+                    <article className="tm-way">
+                      <div className="tm-way-head">
+                        <span className="tm-way-icon" aria-hidden="true">
+                          <svg viewBox="0 0 16 16" width="16" height="16">
+                            <path d="M3 4h10M3 8h7M3 12h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          </svg>
+                        </span>
+                        <h4 className="tm-way-title">Step by step</h4>
+                      </div>
+                      <p className="tm-body">Choose every detail yourself, in four short steps:</p>
+                      <ol className="tm-way-steps">
+                        {PLANNER_STEPS.map((t, i) => (
+                          <li key={t}>
+                            <span aria-hidden="true">{i + 1}</span>
+                            {t}
+                          </li>
+                        ))}
+                      </ol>
+                      <button
+                        type="button"
+                        className="tm-signal"
+                        tabIndex={howOpen ? 0 : -1}
+                        onClick={() => {
+                          setHowOpen(false);
+                          onPlan(undefined, "step_by_step");
+                        }}
+                      >
+                        <span className="tm-signal-label">Plan step by step →</span>
+                      </button>
+                    </article>
+                  </div>
+                </section>
+                <section aria-labelledby="tm-either-title">
+                  <h3 id="tm-either-title" className="tm-eyebrow tm-either">
+                    Then, either way
+                  </h3>
+                  <ol className="tm-steps">
+                    {STEPS.map((s) => (
+                      <li key={s.n}>
+                        <span className="tm-step-n">{s.n}.</span>
+                        <h4 className="tm-step-title">{s.title}</h4>
+                        <p className="tm-body">{s.prose}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
               </aside>
             </div>,
             document.body
