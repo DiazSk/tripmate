@@ -3,22 +3,35 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { IdeaRead } from '@shared/ideaRead';
+import type { MeriAnswer } from '@shared/meriAnswer';
 import type { ReadyTrip } from '@shared/readyTrips';
 
-import { readIdea } from '@/api/tripMateApi';
+import { readIdea, type ReadWithAnswer } from '@/api/tripMateApi';
 import { isoDaysFromNow } from '@/components/form';
 import { RailPostcard } from '@/components/home/postcard';
 import { Meridian } from '@/components/meridian';
 import { usePolarFonts } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
-import { ideaHeadline, ideaPrefill, keywordTrips, matchTrips, prefillQuery } from '@/lib/homeIdeas';
+import {
+  answerPlanLabel,
+  answerToPrefill,
+  ideaHeadline,
+  ideaPrefill,
+  keywordTrips,
+  matchTrips,
+  NOTHING_CHECKED,
+  planPrefillParams,
+  prefillQuery,
+} from '@/lib/homeIdeas';
 import { useReadyTrips } from '@/lib/useReadyTrips';
 
 /** `undefined` while Meri reads; `null` when she could not be asked (no signal). */
-type Answer = IdeaRead | { error: string; limited: boolean } | null | undefined;
+type Answer = ReadWithAnswer | { error: string; limited: boolean } | null | undefined;
 
-const isRead = (a: Answer): a is IdeaRead => !!a && !('error' in a);
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const ENTRY_NOTE = 'Meri doesn’t answer entry questions from memory.';
+
+const isRead = (a: Answer): a is ReadWithAnswer => !!a && !('error' in a);
 
 /**
  * Meri's answer to a sentence typed on Home (spec, "Sending the Meri search").
@@ -29,7 +42,9 @@ const isRead = (a: Answer): a is IdeaRead => !!a && !('error' in a);
  * to the box (Home keeps the text). Where the reader could not be asked, the catalogue is still
  * searched for the words typed, since that needs no server.
  *
- * Home sends `offline=1` when it already knows the last request never reached the server, and then
+ * A question about a place ("when's the best time to go to Lisbon?") comes back with an `answer`,
+ * drawn in the reading's place: the evidence's places, months and sources, and a button that carries
+ * the answer into the planner. Home sends `offline=1` when it already knows the last request never reached the server, and then
  * nothing is asked at all.
  */
 export default function IdeaSheet() {
@@ -52,6 +67,9 @@ export default function IdeaSheet() {
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const open = (slug: string) => router.replace(`/ready/${slug}`);
+  const meri = isRead(answer) ? answer.answer : undefined;
+  // One day for the label and the prefill, so the button never names a month the planner will not open on.
+  const today = isoDaysFromNow(0);
   const understood = isRead(answer) && (answer.destination !== null || answer.kind !== null || answer.days !== null);
 
   // What is said beside Meri, and which trips follow, for every answer but a read that understood.
@@ -67,14 +85,15 @@ export default function IdeaSheet() {
     said = answer.error;
     // A throttle or the daily cap is a wait, not a no: the words alone can still find a trip.
     if (answer.limited) matches = keywordTrips(trips, text);
-  } else if (!understood) {
+  } else if (!understood && !meri) {
     said = 'Meri couldn’t tell where or how long. Say a place, or how many days.';
     matches = keywordTrips(trips, text);
   } else {
-    matches = matchTrips(trips, answer);
+    // An answer takes the reading's place, so the catalogue's close-to trips have nowhere to show.
+    matches = meri ? [] : matchTrips(trips, answer);
     // A named place no ready-made trip covers: say so, or the sheet below the actions reads as broken.
     const place = answer.destination?.split(',')[0].trim();
-    if (!matches.length && place && trips.length) none = `No ready-made trip goes to ${place} yet. Build this trip and TripMate writes one for you.`;
+    if (!meri && !matches.length && place && trips.length) none = `No ready-made trip goes to ${place} yet. Build this trip and TripMate writes one for you.`;
   }
 
   return (
@@ -90,7 +109,7 @@ export default function IdeaSheet() {
         )}
       </View>
 
-      {understood ? (
+      {understood && !meri ? (
         <Text maxFontSizeMultiplier={1.3} style={[styles.headline, fonts && styles.headlineFont]} accessibilityRole="header" accessibilityLiveRegion="polite">
           {ideaHeadline(answer)}
         </Text>
@@ -101,11 +120,23 @@ export default function IdeaSheet() {
         </Text>
       ) : null}
 
+      {isRead(answer) && meri ? <AnswerCard answer={meri} read={answer} today={today} /> : null}
+
       {answer === undefined ? null : (
         <View style={styles.actions}>
-          {understood ? (
+          {isRead(answer) && meri ? (
+            showPlan(answer, meri) ? (
+              <Pressable
+                onPress={() => router.replace(`/plan/basics?${prefillQuery(planPrefillParams(answerToPrefill(answer, meri, today)))}`)}
+                accessibilityRole="button"
+                accessibilityLabel={answerPlanLabel(answer, meri, today)}
+                style={({ pressed }) => [styles.primary, pressed && styles.primaryPressed]}>
+                <Text maxFontSizeMultiplier={1.6} style={styles.primaryText}>{answerPlanLabel(answer, meri, today)}</Text>
+              </Pressable>
+            ) : null
+          ) : understood ? (
             <Pressable
-              onPress={() => router.replace(`/plan/basics?${prefillQuery(ideaPrefill(answer, isoDaysFromNow(0)))}`)}
+              onPress={() => router.replace(`/plan/basics?${prefillQuery(ideaPrefill(answer, today))}`)}
               accessibilityRole="button"
               style={({ pressed }) => [styles.primary, pressed && styles.primaryPressed]}>
               <Text maxFontSizeMultiplier={1.6} style={styles.primaryText}>Build this trip</Text>
@@ -135,6 +166,71 @@ export default function IdeaSheet() {
   );
 }
 
+/** The button shows for a named place, or for a checked answer that is not about entry. */
+const showPlan = (read: ReadWithAnswer, a: MeriAnswer) =>
+  Boolean(read.destination ?? read.question?.place) || (!a.nothingChecked && read.question?.kind !== 'entry');
+
+/**
+ * Meri's answer: the places, months and sources are the evidence records the server rendered,
+ * never the answer's prose. Nothing checked says so and shows nothing else.
+ */
+function AnswerCard({ answer, read, today }: { answer: MeriAnswer; read: ReadWithAnswer; today: string }) {
+  const kind = read.question?.kind;
+  const checked = !answer.nothingChecked;
+  const good = [...answer.months].sort((a, b) => a - b);
+  // The planner's real start month, which is not always the first the answer named.
+  const goes = kind === 'best_time' && good.length ? Number(answerToPrefill(read, answer, today).startDate?.slice(5, 7)) : null;
+  return (
+    <View style={styles.card}>
+      <Text maxFontSizeMultiplier={1.6} style={styles.answerText} accessibilityLiveRegion="polite">
+        {checked ? answer.answer : NOTHING_CHECKED}
+      </Text>
+
+      {checked && good.length ? (
+        <View accessible accessibilityLabel={`Good months: ${good.map((m) => MONTH_NAMES[m - 1]).join(', ')}.${goes ? ` ${MONTH_NAMES[goes - 1]} goes into the plan.` : ''}`}>
+          <View style={styles.monthRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {MONTH_NAMES.map((name, i) => (
+              <View key={name} style={[styles.month, good.includes(i + 1) && styles.monthOn, goes === i + 1 && styles.monthBest]}>
+                <Text maxFontSizeMultiplier={1.2} style={[styles.monthText, good.includes(i + 1) && styles.monthTextOn]}>{name[0]}</Text>
+              </View>
+            ))}
+          </View>
+          {goes ? (
+            <Text maxFontSizeMultiplier={1.6} style={styles.monthKey} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {`${MONTH_NAMES[goes - 1]} goes into the plan`}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {checked && answer.places.length ? (
+        <View style={styles.places}>
+          {answer.places.map((p, i) => (
+            <View key={p.id} style={styles.place}>
+              <Text maxFontSizeMultiplier={1.6} style={styles.placeIdx}>{String(i + 1).padStart(2, '0')}</Text>
+              <View style={styles.placeBody}>
+                <Text maxFontSizeMultiplier={1.6} style={styles.placeName}>{p.name}</Text>
+                {p.detail ? <Text maxFontSizeMultiplier={1.6} style={styles.placeDetail}>{p.detail}</Text> : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {kind === 'entry' && checked ? (
+        <Text maxFontSizeMultiplier={1.6} style={styles.note}>{ENTRY_NOTE}</Text>
+      ) : null}
+
+      {checked && answer.sources.length ? (
+        <Text maxFontSizeMultiplier={1.6} style={styles.from}>
+          <Text style={styles.fromKicker}>From </Text>
+          {answer.sources.map((s) => s.label).join(' · ')}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const GROUND = '#F2F2F7';
 
 const styles = StyleSheet.create({
@@ -146,6 +242,24 @@ const styles = StyleSheet.create({
   headline: { marginTop: 12, fontSize: 30, lineHeight: 34, color: Polar.ink },
   headlineFont: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 35 },
   quote: { marginTop: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, overflow: 'hidden', backgroundColor: GROUND, fontFamily: PolarFonts.sansRegular, fontSize: 14, lineHeight: 19, color: Polar.secondary },
+  card: { marginTop: 12, padding: 16, borderRadius: 16, backgroundColor: GROUND, gap: 14 },
+  answerText: { fontFamily: PolarFonts.sans, fontSize: 16, lineHeight: 22, color: Polar.ink },
+  monthRow: { flexDirection: 'row', gap: 4 },
+  month: { flex: 1, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  monthOn: { backgroundColor: Polar.signal },
+  monthBest: { borderWidth: 2, borderColor: Polar.ink },
+  monthText: { fontFamily: PolarFonts.sansRegular, fontSize: 12, color: Polar.secondary },
+  monthTextOn: { fontFamily: PolarFonts.sansSemi, color: Polar.ink },
+  monthKey: { marginTop: 6, fontFamily: PolarFonts.sansRegular, fontSize: 12, color: Polar.secondary },
+  places: { gap: 10 },
+  place: { flexDirection: 'row', gap: 10 },
+  placeIdx: { width: 22, fontFamily: PolarFonts.sansSemi, fontSize: 13, lineHeight: 20, color: Polar.secondary },
+  placeBody: { flex: 1 },
+  placeName: { fontFamily: PolarFonts.sansSemi, fontSize: 15, lineHeight: 20, color: Polar.ink },
+  placeDetail: { fontFamily: PolarFonts.sansRegular, fontSize: 13, lineHeight: 18, color: Polar.secondary },
+  note: { fontFamily: PolarFonts.sansRegular, fontSize: 13, lineHeight: 18, color: Polar.secondary },
+  from: { fontFamily: PolarFonts.sansRegular, fontSize: 13, lineHeight: 18, color: Polar.secondary },
+  fromKicker: { fontFamily: PolarFonts.sansSemi, color: Polar.ink },
   actions: { marginTop: 20, gap: 8 },
   primary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
   primaryPressed: { backgroundColor: Polar.signalPressed },

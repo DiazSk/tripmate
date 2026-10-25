@@ -2,10 +2,12 @@ import type { IdeaRead } from '@shared/ideaRead';
 import type { ReadyTrip } from '@shared/readyTrips';
 
 import {
+  answerToPrefill,
   ideaHeadline,
   ideaPrefill,
   keywordTrips,
   matchTrips,
+  planPrefillParams,
   prefillQuery,
   readyTripPrefill,
   suggestedBudget,
@@ -184,6 +186,18 @@ describe('ideaPrefill', () => {
   });
   test('the budget keeps what it was a budget for', () => {
     expect(ideaPrefill({ ...none, budget: 1000, budgetBasis: 'per_person' }, '2026-10-21')).toEqual({ budget: '1000', basis: 'per_person' });
+  });
+});
+
+describe('planPrefillParams', () => {
+  const answer = { answer: '', places: [], months: [5, 6], sources: [], nothingChecked: false };
+  test('a best-time answer opens the planner on its month, with the question\'s place', () => {
+    const read: IdeaRead = { ...none, destination: 'Lisbon, Portugal', days: 3, question: { kind: 'best_time', place: 'Lisbon, Portugal', diet: null } };
+    expect(planPrefillParams(answerToPrefill(read, answer, '2026-10-21'))).toEqual({ destination: 'Lisbon, Portugal', start: '2027-05-01', end: '2027-05-03' });
+  });
+  test('a food answer carries the diet; the web\'s cleared fields are dropped', () => {
+    const read: IdeaRead = { ...none, question: { kind: 'food', place: 'Austin, United States', diet: 'Halal' } };
+    expect(planPrefillParams(answerToPrefill(read, answer, '2026-10-21'))).toEqual({ destination: 'Austin, United States', diet: 'Halal' });
   });
 });
 

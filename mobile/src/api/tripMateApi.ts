@@ -36,6 +36,7 @@ import type {
   TripStatus,
 } from "./types";
 import type { IdeaRead } from "@shared/ideaRead";
+import type { MeriAnswer } from "@shared/meriAnswer";
 import type { ReadyTrip } from "@shared/readyTrips";
 import type { RawFetch } from "@shared/types";
 
@@ -218,12 +219,15 @@ export async function getReadyTrips(): Promise<{ available: boolean; trips: Read
   }
 }
 
+/** A travel question comes back with Meri's grounded answer beside the usual reading. */
+export type ReadWithAnswer = IdeaRead & { answer?: MeriAnswer };
+
 /**
  * `POST /api/read-idea` — Meri's read of a free-text idea. A non-2xx carries the server's own
  * sentence, and `limited` marks the two the traveller can only wait out (429 throttle, 503 daily
  * cap) so the caller can say "later" rather than "try again". `undefined` is only a fetch that threw.
  */
-export async function readIdea(idea: string): Promise<IdeaRead | { error: string; limited: boolean } | undefined> {
+export async function readIdea(idea: string): Promise<ReadWithAnswer | { error: string; limited: boolean } | undefined> {
   try {
     const res = await fetchWithSession("/api/read-idea", {
       method: "POST",
@@ -232,7 +236,7 @@ export async function readIdea(idea: string): Promise<IdeaRead | { error: string
     });
     // Not the planner's sentence: nothing was being generated, and "try generating again" would say it was.
     if (!res.ok) return { error: await errorMessage(res, IDEA_FAILURE), limited: res.status === 429 || res.status === 503 };
-    return (await res.json()) as IdeaRead;
+    return (await res.json()) as ReadWithAnswer;
   } catch {
     return undefined;
   }

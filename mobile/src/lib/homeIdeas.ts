@@ -1,4 +1,5 @@
 import type { IdeaRead } from '@shared/ideaRead';
+import type { PlanPrefill } from '@shared/planExamples';
 import { realDate } from '@shared/importedPlan';
 import type { ReadyTrip } from '@shared/readyTrips';
 import { addDays, LEAD_DAYS, paceFor } from '@shared/homeIdeas';
@@ -8,6 +9,7 @@ import type { PlanPrefillParams } from '@/lib/planDraft';
 // The pure helpers moved to the web's lib so both clients read one copy.
 export { TYPEWRITER_IDEAS, QUICK_PROMPTS, typewriterTick, matchTrips, keywordTrips, ideaHeadline } from '@shared/homeIdeas';
 export type { Typewriter } from '@shared/homeIdeas';
+export { answerPlanLabel, answerToPrefill, NOTHING_CHECKED } from '@shared/meriAnswer';
 
 /** The planner's fields from a read. Dates only when the length is known, since a start with no end says nothing. */
 export function ideaPrefill(read: IdeaRead, today: string): PlanPrefillParams {
@@ -25,6 +27,29 @@ export function ideaPrefill(read: IdeaRead, today: string): PlanPrefillParams {
   if (read.interests.length) out.into = read.interests.join(',');
   // `?? []`: a read from a server older than the field.
   if ((read.dietary ?? []).length) out.diet = read.dietary.join(',');
+  return out;
+}
+
+/**
+ * The web's `PlanPrefill` (what `answerToPrefill` returns) as the phone's query params. Empty
+ * strings are left out: the web prefill uses them to clear a field, and a missing param already
+ * leaves it alone.
+ */
+export function planPrefillParams(p: PlanPrefill): PlanPrefillParams {
+  const out: PlanPrefillParams = {};
+  if (p.destination) out.destination = p.destination;
+  if (p.startDate && p.endDate) {
+    out.start = p.startDate;
+    out.end = p.endDate;
+  }
+  if (p.budgetUsd !== undefined) out.budget = String(p.budgetUsd);
+  if (p.budgetBasis) out.basis = p.budgetBasis;
+  if (p.adults !== undefined) out.adults = String(p.adults);
+  if (p.children !== undefined) out.children = String(p.children);
+  if (p.pace) out.pace = p.pace;
+  if (p.mustInclude) out.must = p.mustInclude;
+  if (p.interests?.length) out.into = p.interests.join(',');
+  if (p.dietary?.length) out.diet = p.dietary.join(',');
   return out;
 }
 
