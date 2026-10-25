@@ -361,27 +361,21 @@ function Hero({
 }) {
   const insets = useSafeAreaInsets();
   const [destId, setDestId] = useState('petra');
-  // Bumped by every tap, so picking the place already showing still restarts its clock.
-  const [picks, setPicks] = useState(0);
   const dest = DESTS.find((d) => d.id === destId)!;
   const size = Math.min(width * 0.27, 150);
   const H = Math.max(height, 640);
   const { y, reduce } = useMotion();
 
-  // Moves on every ROTATE_MS; picking a place restarts the clock; reduced motion never rotates.
-  // The active chip fills along its bottom edge over the interval, on the UI thread.
-  const fill = useSharedValue(0);
+  // Moves on every ROTATE_MS on its own: there are no destination chips to pick from, the hero is a
+  // slideshow of the places. Reduced motion never rotates.
   useEffect(() => {
     if (reduce) return;
-    fill.set(0);
-    fill.set(withTiming(1, { duration: ROTATE_MS, easing: Easing.linear }));
     const t = setTimeout(() => {
       const i = DESTS.findIndex((d) => d.id === destId);
       setDestId(DESTS[(i + 1) % DESTS.length].id);
     }, ROTATE_MS);
     return () => clearTimeout(t);
-  }, [destId, picks, reduce, fill]);
-  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: fill.value }] }));
+  }, [destId, reduce]);
 
   // The reference's [data-reveal]: 1.4s on its reveal curve, out of the hero's clipped bottom edge.
   const rise = useSharedValue(reduce ? 1 : 0);
@@ -413,10 +407,10 @@ function Hero({
       <View style={[styles.nav, { paddingTop: insets.top + PolarSpace.s2 }]}>
         <Wordmark light />
         <View style={styles.row}>
-          {/* The way into the app, as iOS onboarding puts it: plain text in the top bar, quieter than
-              the two buttons beside it. Skip on the welcome, Close on the tour. */}
-          <Pressable onPress={onLeave} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.leave, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel={welcome ? 'Skip to the app' : 'Close'}>
-            <Text style={styles.leaveText}>{welcome ? 'Skip' : 'Close'}</Text>
+          {/* The way back into the app, as a button the size of Menu's: as quiet plain text it read
+              as a label, and testers found no way out. Skip on the welcome, Close on the tour. */}
+          <Pressable onPress={onLeave} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel={welcome ? 'Skip to the app' : 'Close'}>
+            <Text style={styles.glassText}>{welcome ? 'Skip' : 'Close'}</Text>
           </Pressable>
           <Pressable onPress={onMenu} hitSlop={TOP_BAR_SLOP} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Open menu">
             <Text style={styles.glassText}>Menu</Text>
@@ -436,29 +430,12 @@ function Hero({
               <Text style={styles.ghostText}>↓</Text>
             </Pressable>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Destination">
-            {DESTS.map((d) => {
-              const on = d.id === destId;
-              return (
-                <Pressable
-                  key={d.id}
-                  onPress={() => {
-                    setDestId(d.id);
-                    setPicks((n) => n + 1);
-                  }}
-                  style={[styles.chip, on && styles.chipOn]}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}>
-                  <Text style={[styles.chipText, on && { color: Polar.ink }]}>{d.word}</Text>
-                  {on && !reduce && <Animated.View style={[styles.chipFill, fillStyle]} />}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
           <Text style={[PolarType.coord, styles.heroCoord]}>{dest.coord}</Text>
         </Animated.View>
         <Animated.View style={mon}>
-          <Text style={[PolarType.monument, styles.monument, { fontSize: size, lineHeight: size * 1.02 }]} accessibilityRole="header" numberOfLines={1}>
+          {/* No lineHeight: Oswald's ascent is taller than its size, and a tight line box clips the caps
+              flat on iOS (the postcard's monument says the same). */}
+          <Text style={[PolarType.monument, styles.monument, { fontSize: size }]} accessibilityRole="header" numberOfLines={1}>
             {dest.word}
           </Text>
         </Animated.View>
@@ -771,7 +748,7 @@ function PlanFooter({
 
       <Animated.View style={mon}>
         <Text
-          style={[PolarType.monument, styles.fbMonument, { fontSize: size, lineHeight: size * 1.02, marginBottom: bottom }]}
+          style={[PolarType.monument, styles.fbMonument, { fontSize: size, marginBottom: bottom }]}
           numberOfLines={1}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants">
@@ -802,8 +779,6 @@ const styles = StyleSheet.create({
 
   glass: { minHeight: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil20, borderWidth: 1, borderColor: Polar.frost20 },
   glassText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ice },
-  leave: { minHeight: 36, minWidth: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  leaveText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.frost68 },
   signal: { minHeight: 36, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, borderRadius: PolarRadius.hairline, backgroundColor: Polar.signal },
   signalPressed: { backgroundColor: Polar.signalPressed },
   signalLg: { minHeight: 46, paddingHorizontal: 22 },
@@ -820,11 +795,6 @@ const styles = StyleSheet.create({
   heroMid: { paddingHorizontal: PolarSpace.pad, gap: PolarSpace.s3, marginBottom: PolarSpace.s3 },
   heroLead: { color: Polar.ice, maxWidth: 280, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 12 },
   heroFoot: { gap: PolarSpace.s2 },
-  chips: { paddingHorizontal: PolarSpace.pad, gap: 6 },
-  chip: { minHeight: 32, paddingHorizontal: 13, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.22)', overflow: 'hidden' },
-  chipOn: { backgroundColor: Polar.ice, borderColor: Polar.ice },
-  chipText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
-  chipFill: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: Polar.signal, transformOrigin: 'left' },
   heroCoord: { color: Polar.ice, paddingHorizontal: PolarSpace.pad },
   monument: { color: Polar.ice, textAlign: 'center', marginTop: PolarSpace.s2 },
 

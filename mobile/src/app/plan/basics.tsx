@@ -254,7 +254,7 @@ export default function Basics() {
   const savingRef = useRef(false);
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
 
-  /** Use this plan: the trip's stops, in order, saved as a draft with the answers beside them. */
+  /** Save to my trips: the trip's stops, in order, saved as a draft with the answers beside them. */
   async function saveReadyPlan(trip: ReadyTrip) {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -502,7 +502,7 @@ export default function Basics() {
             accessibilityRole="button"
             accessibilityState={{ busy: saving, disabled: saving }}
             style={({ pressed }) => [styles.plan, pressed && styles.planPressed]}>
-            {saving ? <ActivityIndicator color={Polar.ink} /> : <Text style={styles.planText}>Use this plan</Text>}
+            {saving ? <ActivityIndicator color={Polar.ink} /> : <Text style={styles.planText}>Save to my trips</Text>}
           </Pressable>
         ) : (
           <Pressable
