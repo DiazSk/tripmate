@@ -11,7 +11,7 @@ import { analyticsIdFor, distinctIdFromCookies, isInternalUser } from "./ids";
  */
 
 export type ServerEvent =
-  | "plan_written" | "plan_failed" | "trip_kept" | "idea_read"
+  | "plan_written" | "plan_failed" | "trip_kept" | "idea_read" | "meri_question_asked" | "meri_question_answered"
   | "chat_edit_answered" | "stop_changed" | "trip_shared" | "shared_trip_opened" | "trips_claimed";
 
 export type Platform = "web" | "phone";

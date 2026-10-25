@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addDays, LEAD_DAYS } from "./homeIdeas.ts";
-import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer } from "./meriAnswer.ts";
+import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip } from "./meriAnswer.ts";
 import { tagUserText } from "./promptScope.ts";
 
 const evidence = {
@@ -144,4 +144,25 @@ test("a lead time that falls into the next best month names that month", () => {
   const r = readOf("best_time");
   assert.equal(answerToPrefill(r, answerOf([10, 11]), "2026-10-24").startDate, "2026-11-23");
   assert.equal(answerPlanLabel(r, answerOf([10, 11]), "2026-10-24"), "Plan Petra in November");
+});
+
+const trip = (o) => ({ slug: "x", title: "T", destination: "X", country: "C", region: "", order: 0, ...o });
+const catalogue = [
+  trip({ slug: "bucharest", title: "Bucharest in bloom", destination: "Bucharest, Romania", country: "Romania", order: 1 }),
+  trip({ slug: "petra", title: "Petra by lantern", destination: "Petra, Jordan", country: "Jordan", order: 2 }),
+  trip({ slug: "rum", title: "Wadi Rum nights", destination: "Wadi Rum, Jordan", country: "Jordan", order: 3 }),
+];
+
+test("pickReadyTrip finds the trip to the place, in whole words", () => {
+  assert.equal(pickReadyTrip(catalogue, "Petra, Jordan")?.slug, "petra");
+  assert.equal(pickReadyTrip(catalogue, "Oman"), null);
+  assert.equal(pickReadyTrip(catalogue, "Jordan")?.slug, "petra");
+  assert.equal(pickReadyTrip(catalogue, ""), null);
+});
+
+test("an id echoed with its label still resolves to the evidence record", () => {
+  const a = parseMeriAnswer(reply({ sources: ["osm · OpenStreetMap"], places: ["p1 · Al-Rawda"] }), evidence);
+  assert.equal(a.nothingChecked, false);
+  assert.deepEqual(a.sources.map((s) => s.id), ["osm"]);
+  assert.deepEqual(a.places.map((p) => p.id), ["p1"]);
 });

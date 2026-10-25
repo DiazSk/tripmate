@@ -72,7 +72,7 @@ const words = (s: string) => fold(s).split(" ").filter(Boolean);
  * Whole words with a space either side, so containment is whole-word: " bucharest romania " does
  * not contain " oman ". `''` for text with no words at all.
  */
-const phrase = (s: string) => {
+export const phrase = (s: string) => {
   const w = words(s);
   return w.length ? ` ${w.join(" ")} ` : "";
 };

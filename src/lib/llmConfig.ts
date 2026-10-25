@@ -42,6 +42,8 @@ export type ClaudeCallType =
   | "plan-fill"
   /** Reads a traveller's one-sentence trip idea into planner fields (the phone's Home). */
   | "idea-read"
+  /** Answers a travel question from facts fetched for it (Meri, on Home). */
+  | "meri-answer"
   /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
   | "judge";
 
@@ -254,6 +256,7 @@ export function apiModelFor(type: ClaudeCallType): string {
       return sketchModel();
     case "plan-fill":
     case "idea-read":
+    case "meri-answer":
     case "element-edit":
     case "place-detail":
     case "context":
@@ -334,6 +337,9 @@ export function maxTokensFor(type: ClaudeCallType): number {
     // Ten short fields, most of them null. A bound on a runaway.
     case "idea-read":
       return 1_000;
+    // A short answer, its cited ids and a flag. A bound on a runaway.
+    case "meri-answer":
+      return 2_000;
     // One short object per day, at most 14 days.
     case "sketch":
       return 6_000;

@@ -1,6 +1,7 @@
-import { LEAD_DAYS, addDays, ideaToPrefill } from "./homeIdeas";
+import { LEAD_DAYS, addDays, ideaToPrefill, phrase } from "./homeIdeas";
 import type { IdeaRead } from "./ideaRead";
 import type { PlanPrefill } from "./planExamples";
+import type { ReadyTrip } from "./readyTrips";
 import { SCOPE_BLOCK_WITH_REFUSAL, tagUserText } from "./promptScope";
 
 /**
@@ -61,6 +62,21 @@ export function entryAnswer(place: string): MeriAnswer {
   return { answer: ENTRY_LINE.replace("{place}", place), places: [], months: [], sources: [], nothingChecked: false };
 }
 
+/**
+ * The catalogue trip a question is about, for `best_time` to lean on its set months. Whole-word
+ * containment either way round, as `matchTrips` does, so "Petra, Jordan" finds the Petra trip and
+ * "Oman" never finds Bucharest, Romania. The country alone does not count: a Wadi Rum trip is not
+ * evidence about Petra.
+ */
+export function pickReadyTrip(trips: ReadyTrip[], place: string): ReadyTrip | null {
+  const wanted = phrase(place);
+  if (!wanted) return null;
+  const hits = trips.filter((t) =>
+    [t.destination, t.region, t.title].map(phrase).some((f) => f !== "" && (f.includes(wanted) || wanted.includes(f)))
+  );
+  return hits.sort((a, b) => a.order - b.order)[0] ?? null;
+}
+
 const KIND_LINES: Record<QuestionKind, string> = {
   best_time: "When is the best time to go.",
   food: "Where to eat.",
@@ -98,7 +114,7 @@ Return exactly one JSON object and nothing else:
 Rules:
 - answer is 1 to 4 sentences. Use only what the evidence says; add nothing from memory.
 - Mention a place only if it is listed above, by its exact name, and put its id in places. Put a month number in months only if the facts cover it.
-- sources lists the id of every source you used. An answer that used none is not an answer.
+- sources lists the id of every source you used: the short id before the ·, such as osm, not the label. places likewise lists ids such as p1. An answer that used none is not an answer.
 - If the evidence does not answer the question, return {"answer": "", "places": [], "months": [], "sources": [], "nothing": true}.`;
 }
 
@@ -128,7 +144,9 @@ export function parseMeriAnswer(raw: string, evidence: Evidence): MeriAnswer {
   if (o.refused !== undefined || o.nothing === true) return nothingCheckedAnswer();
 
   const answer = typeof o.answer === "string" ? o.answer.trim() : "";
-  const ids = (x: unknown): string[] | null => (x === undefined ? [] : Array.isArray(x) && x.every((i) => typeof i === "string") ? (x as string[]) : null);
+  // A model sometimes echoes the whole "id · label" line; the id before the dot is still looked up in the evidence.
+  const ids = (x: unknown): string[] | null =>
+    x === undefined ? [] : Array.isArray(x) && x.every((i) => typeof i === "string") ? (x as string[]).map((i) => i.split("·")[0].trim()) : null;
   const placeIds = ids(o.places);
   const sourceIds = ids(o.sources);
   const months = o.months === undefined ? [] : Array.isArray(o.months) ? (o.months as unknown[]) : null;
