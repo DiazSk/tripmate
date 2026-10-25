@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addDays, LEAD_DAYS } from "./homeIdeas.ts";
-import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip } from "./meriAnswer.ts";
+import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, buildLookupAnswerPrompt, entryAnswer, groundAnswer, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip, planEvidence } from "./meriAnswer.ts";
 import { tagUserText } from "./promptScope.ts";
 
 const evidence = {
@@ -165,4 +165,36 @@ test("an id echoed with its label still resolves to the evidence record", () => 
   assert.equal(a.nothingChecked, false);
   assert.deepEqual(a.sources.map((s) => s.id), ["osm"]);
   assert.deepEqual(a.places.map((p) => p.id), ["p1"]);
+});
+
+const stop = (name, lat, lng, time = "9:00 AM") => ({ name, lat, lng, cost: 0, note: "", time, durationLabel: "1 hour" });
+const twoDays = (weather) => ({
+  tier: "mid-range",
+  days: [
+    { date: "2026-11-02", weather, stops: [stop("Treasury", 30.3222, 35.4513), stop("Unlocated", 0, 0)] },
+    { date: "2026-11-03", weather: "", stops: [stop("Monastery", 30.3364, 35.4329, "10:00 AM")] },
+  ],
+});
+
+test("planEvidence lists the plan's located stops and adds the forecast only when there is one", () => {
+  const bare = planEvidence(twoDays(""));
+  assert.deepEqual(bare.places.map((p) => p.name), ["Treasury", "Monastery"]);
+  assert.ok(bare.places.every((p) => p.sourceId === "plan"));
+  assert.deepEqual(bare.sources, [{ id: "plan", label: "Your plan" }]);
+  const withWeather = planEvidence(twoDays("Sunny, 24°C"));
+  assert.deepEqual(withWeather.sources.map((s) => s.id), ["plan", "forecast"]);
+});
+
+test("buildLookupAnswerPrompt lists the evidence ids and asks for no ops", () => {
+  const p = buildLookupAnswerPrompt("food", "Petra", evidence);
+  for (const id of ["p1", "p2", "osm", "climate", "Al-Rawda", "Petra"]) assert.ok(p.includes(id), id);
+  assert.ok(p.includes(`"ops":[]`));
+  assert.match(p, /at most two/i);
+});
+
+test("groundAnswer holds a chat reply to the same rules as a Home answer", () => {
+  assert.equal(groundAnswer({ answer: "Try Al-Rawda.", places: ["p1"], sources: ["osm"] }, evidence).nothingChecked, false);
+  assert.equal(groundAnswer({ answer: "Try Al-Rawda.", places: ["p9"], sources: ["osm"] }, evidence).nothingChecked, true);
+  assert.equal(groundAnswer({ answer: "Try “Nowhere”.", sources: ["osm"] }, evidence).nothingChecked, true);
+  assert.equal(groundAnswer({ answer: "Try Al-Rawda.", sources: [] }, evidence).nothingChecked, true);
 });

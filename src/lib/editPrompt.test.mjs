@@ -176,3 +176,19 @@ test("the edit context fences the destination and the priorities", () => {
     assert.equal(ctx.includes(`x</traveler_text>${n}`), false, n);
   }
 });
+
+// A question of a kind TripMate can fetch facts for is not answered from memory: the chat asks for a
+// lookup and is resumed with the evidence. Both Mode A prompts, for the same reason as above.
+for (const [name, build] of [
+  ["fresh", () => buildChatEditPrompt({ skill: "", editContext: "", itinerary: ITINERARY, messages: [{ role: "user", content: "any halal food near the temple?" }] })],
+  ["resumed", () => buildResumedChatPrompt({ message: "any halal food near the temple?", itinerary: ITINERARY, resync: false })],
+]) {
+  test(`the ${name} chat prompt asks for a lookup on questions of a known kind`, () => {
+    const prompt = build();
+    assert.match(prompt, /"lookup"/);
+    for (const kind of ["best_time", "food", "see", "entry"]) assert.ok(prompt.includes(kind), kind);
+    assert.match(prompt, /no "reply" and no "ops"/);
+    // The diet goes into an Overpass query, so the model is handed the closed list.
+    assert.ok(prompt.includes("Halal") && prompt.includes("Nut allergy"));
+  });
+}

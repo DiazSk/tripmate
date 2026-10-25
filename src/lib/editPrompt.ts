@@ -3,6 +3,7 @@ import { dayActiveSpan } from "./itinerary";
 import type { DayPlan, Itinerary, Stop } from "./types";
 import { NO_EM_DASH_RULE } from "./writingStyle";
 import { SCOPE_BLOCK_WITH_REFUSAL, fenceUserText } from "./promptScope";
+import { IDEA_DIETS } from "./ideaRead";
 
 /** The stop payload every op that writes a stop carries. */
 const STOP_SHAPE = `{"name":"...","lat":0.0,"lng":0.0,"cost":0,"why":"one line","note":"one line","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
@@ -120,6 +121,24 @@ thing this conversation can produce: it is the kind a traveler acts on and finds
 Offer a change only when it actually follows from what you said, and never more than one. A
 question answered and left alone is a complete turn.`
 
+/**
+ * The questions the chat must not answer from memory. A lookup turn is a request for facts, not an
+ * answer: the route fetches evidence for it and resumes this same session once with
+ * `buildLookupAnswerPrompt`, so the traveller hears an answer built from what was checked. The diet
+ * is a closed list because it ends up inside an Overpass query.
+ */
+const CHAT_LOOKUP = `**Some questions are looked up, not answered from memory.** When their latest message is a
+question of one of these kinds, return ONLY {"lookup":{"kind":"food","place":"the Treasury","diet":"Halal"}},
+with no "reply" and no "ops". TripMate fetches the facts and asks you again with them.
+- best_time: when is the best time to go, or to visit somewhere.
+- food: where to eat, or where to find food for a diet ("any halal food near the Treasury?").
+- see: what is worth seeing or doing around somewhere.
+- entry: visas, passports or entry rules.
+"place" is the stop or area the question is about, as they named it, or null for the trip as a
+whole. "diet" is one of ${IDEA_DIETS.map((d) => `"${d}"`).join(", ")}, or null.
+A question about the plan itself (its costs, times, distances, what is on a day) is not a lookup,
+and neither is a request to change the plan: answer or make it as above.`;
+
 /** Trimmed view of the itinerary: enough to reason about geography, timing and sequence without
  *  spending tokens on fields an edit never consults. */
 function compactDay(day: DayPlan, dayIndex: number): string {
@@ -211,6 +230,8 @@ You are helping the traveler with this itinerary through conversation: answering
 Answer their latest message.
 
 ${CHAT_ANSWERING}
+
+${CHAT_LOOKUP}
 
 Only return operations when the traveler has actually ASKED FOR A CHANGE. If they asked a question, wondered aloud, or invited an opinion ("is day 1 too packed?", "what do you think of..."), answer it and return an EMPTY ops array. You may suggest what you would change and offer to do it, but do not change their plan until they say yes. Changing a plan someone only asked about is worse than being unhelpful.
 
@@ -308,6 +329,8 @@ Continue helping the traveler with the itinerary you planned for them: answering
 about it, and changing it when they ask you to. Scope: ${scope}.
 
 ${CHAT_ANSWERING}
+
+${CHAT_LOOKUP}
 
 The planning rules, trip context and traveler profile from earlier in this conversation remain in
 force. Don't ask them for anything they've already told you.

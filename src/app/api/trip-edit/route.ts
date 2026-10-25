@@ -43,12 +43,27 @@ import {
   offTopicResponse,
   prefilterRefusal,
 } from "@/lib/limitResponse";
-import { llmMode } from "@/lib/llmConfig";
+import { cheapModel, llmMode } from "@/lib/llmConfig";
 import { checkEditReply, MAX_REPLY_CHARS } from "@/lib/promptScope";
 import { loadSkill } from "@/lib/skill";
 import { dailyCapResumesAt } from "@/lib/spendCap";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
 import { captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server";
+import { IDEA_DIETS } from "@/lib/ideaRead";
+import {
+  NOTHING_CHECKED,
+  buildLookupAnswerPrompt,
+  entryAnswer,
+  groundAnswer,
+  pickReadyTrip,
+  planEvidence,
+  type EvidencePlace,
+  type EvidenceSource,
+  type QuestionKind,
+} from "@/lib/meriAnswer";
+import { gatherEvidence } from "@/lib/meriEvidence";
+import { fetchReadyTrips } from "@/lib/readyTrips";
+import { geocodeDestination } from "@/lib/weather";
 
 interface EditResponse {
   reply?: string;
@@ -60,7 +75,15 @@ interface EditResponse {
   why?: string;
   knockOn?: string | null;
   ops?: PatchOp[];
+  /** Instead of a reply: the traveller asked a question of a kind TripMate can fetch facts for. */
+  lookup?: { kind: QuestionKind; place: string | null; diet: string | null };
 }
+
+/** The lookup answer's budget, as on Home: the facts get 10s, the answer call 30s. */
+const EVIDENCE_BUDGET_MS = 10_000;
+const ANSWER_TIMEOUT_MS = 30_000;
+/** ~100km: a geocoded name further than this from every stop is another place with the same name. */
+const NEAR_PLAN_DEGREES = 1;
 
 /**
  * Which days the traveler's plan actually changed on, as 1-based day numbers.
@@ -322,6 +345,44 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
       return offTopicResponse(mode === "chat" ? "chat" : "element");
     }
 
+    // A lookup turn: fetch the facts, then resume the same session once to answer from them. It
+    // rides this request's one allowance, and it changes nothing, so any ops either reply carried
+    // are dropped. Whatever happens, the traveller gets a reply and the turn is stored.
+    let found: { sources: EvidenceSource[]; places: EvidencePlace[] } = { sources: [], places: [] };
+    if (mode === "chat" && parsed.lookup && typeof parsed.lookup === "object") {
+      const startedAt = Date.now();
+      const who = await whoFromRequest(req);
+      const kind = (["best_time", "food", "see", "entry"] as const).find((k) => k === parsed.lookup?.kind) ?? "other";
+      captureServer(who, "meri_question_asked", { surface: "trip", kind });
+      const answered = await answerLookup({
+        lookup: parsed.lookup,
+        kind,
+        itinerary,
+        destination: stored?.destination ?? trip.destination,
+        session: servedBy,
+        runId,
+      });
+      const outcome = "refused" in answered ? "refused" : kind === "entry" ? "entry" : answered.reply === NOTHING_CHECKED ? "nothing_checked" : "answered";
+      captureServer(who, "meri_question_answered", {
+        surface: "trip",
+        kind,
+        outcome,
+        sources: "refused" in answered ? 0 : answered.sources.length,
+        duration_ms: Date.now() - startedAt,
+      });
+      if ("refused" in answered) {
+        markTraceRefused(answered.refused.traceId, answered.refused.reason);
+        if (rollback) truncateLlmSession(rollback.id, rollback.keep);
+        return offTopicResponse("chat");
+      }
+      // A lookup the session holds no shown answer to would sit in its memory as a question left
+      // hanging; a resumed API session is cut back to before it. A CLI file can't be, as above.
+      if (!answered.inSession && rollback) truncateLlmSession(rollback.id, rollback.keep);
+      if (answered.sessionId) servedBy = answered.sessionId;
+      parsed = { reply: answered.reply, options: answered.options };
+      found = { sources: answered.sources, places: answered.places };
+    }
+
     const ops = parsed.ops ?? [];
     const { itinerary: updated, rejected } = applyPatch(itinerary, ops, scope);
     seen.ops = ops.length - rejected.length;
@@ -367,6 +428,8 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
             daysModified: daysModified(ops, rejected),
             knockOn: parsed.knockOn ?? null,
             rejected: rejected.map((r) => r.reason),
+            sources: found.sources,
+            places: found.places,
           },
         });
       } catch (err) {
@@ -396,6 +459,9 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
       // Non-empty only when the model tried to reach outside its scope — worth surfacing rather
       // than silently dropping, since it means the edit did less than it claimed.
       rejected: rejected.map((r) => r.reason),
+      // Where a lookup answer came from, rendered from the evidence records. Empty on other turns.
+      sources: found.sources,
+      places: found.places,
     });
   } catch (err) {
     // Logged, not returned — see the same guard in `/api/trip-generate`. A raw `err.message` from
@@ -403,4 +469,106 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
     console.error("[trip-edit]", err);
     return modelFailureResponse(err, "Edit failed", "edit");
   }
+}
+
+type LookupAnswer =
+  | { refused: { traceId: string; reason: string } }
+  | {
+      reply: string;
+      options: string[];
+      sources: EvidenceSource[];
+      places: EvidencePlace[];
+      /** Whether the session now holds the answer the traveller is shown. When it does not, a
+       *  resumed API session is cut back to before the lookup. */
+      inSession: boolean;
+      sessionId?: string;
+    };
+
+/**
+ * Answers a chat turn's `lookup` from fetched facts and the plan. Only the reply check's refusal is
+ * passed back up; everything else that goes wrong (no facts, a failed or ungrounded answer) is the
+ * honest line, so the turn is never empty.
+ *
+ * The place that reaches the prompt is always app-derived: a stop's own name, the geocoder's name
+ * for it, or the trip's destination. The traveller's (or the model's) wording only chooses which.
+ */
+async function answerLookup(input: {
+  lookup: NonNullable<EditResponse["lookup"]>;
+  kind: QuestionKind;
+  itinerary: Itinerary;
+  destination: string;
+  session: string | undefined;
+  runId: string;
+}): Promise<LookupAnswer> {
+  const { lookup, kind, itinerary, destination } = input;
+  const nothing = { reply: NOTHING_CHECKED, options: [], sources: [], places: [] };
+  // Entry rules never reach a model, as on Home.
+  if (kind === "entry") return { ...nothing, reply: entryAnswer(destination).answer, inSession: false };
+  if (!input.session) return { ...nothing, inSession: false };
+
+  const plan = planEvidence(itinerary);
+  const named = typeof lookup.place === "string" ? lookup.place.trim().toLowerCase() : "";
+  let anchor: { place: string; lat: number; lng: number } | null = null;
+  const stop = named ? plan.places.find((p) => p.name.toLowerCase() === named) : undefined;
+  if (stop) anchor = { place: stop.name, lat: stop.lat, lng: stop.lng };
+  else if (named) {
+    const geo = await geocodeDestination(`${lookup.place}, ${destination}`).catch(() => null);
+    const near = (g: { lat: number; lon: number }) =>
+      plan.places.length === 0 ||
+      plan.places.some((p) => Math.abs(p.lat - g.lat) < NEAR_PLAN_DEGREES && Math.abs(p.lng - g.lon) < NEAR_PLAN_DEGREES);
+    if (geo && near(geo)) anchor = { place: geo.name, lat: geo.lat, lng: geo.lon };
+  }
+  if (!anchor && plan.places[0]) anchor = { place: destination, lat: plan.places[0].lat, lng: plan.places[0].lng };
+  const place = anchor?.place ?? destination;
+
+  // The diet is interpolated into an Overpass query, so only a value from the closed list goes on.
+  const diet = IDEA_DIETS.find((d) => d.toLowerCase() === String(lookup.diet ?? "").toLowerCase()) ?? null;
+  const base = { place, diet, readyTrip: null, extraSources: plan.sources, extraPlaces: plan.places };
+  // With no point to search around, or past the budget, the plan is still evidence.
+  const planOnly = () => gatherEvidence({ ...base, kind: "other", point: { lat: 0, lng: 0 } });
+  const gathered = anchor
+    ? (async () => {
+        const readyTrip = kind === "best_time" ? pickReadyTrip((await fetchReadyTrips()) ?? [], place) : null;
+        return gatherEvidence({ ...base, kind, readyTrip, point: { lat: anchor.lat, lng: anchor.lng } });
+      })()
+    : planOnly();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const evidence =
+    (await Promise.race([gathered, new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), EVIDENCE_BUDGET_MS)))])) ??
+    (await planOnly());
+  clearTimeout(timer);
+
+  let r: Awaited<ReturnType<typeof runClaude>>;
+  try {
+    r = await runClaude(buildLookupAnswerPrompt(kind, place, evidence), "meri-answer", ANSWER_TIMEOUT_MS, {
+      runId: input.runId,
+      model: cheapModel(),
+      session: { resume: input.session, persist: true },
+    });
+  } catch (err) {
+    console.error("[trip-edit] lookup answer failed", err);
+    return { ...nothing, inSession: false };
+  }
+  let answer: EditResponse & { refused?: unknown; places?: unknown; months?: unknown; sources?: unknown; nothing?: unknown };
+  try {
+    answer = parseJsonResponse(r.result);
+  } catch {
+    // Prose where JSON was asked for is not an answer the session should keep.
+    return { ...nothing, inSession: false, sessionId: r.sessionId };
+  }
+  const check = checkEditReply(answer, MAX_REPLY_CHARS);
+  if (check.refused) return { refused: { traceId: r.traceId, reason: check.reason } };
+
+  const grounded = groundAnswer({ ...answer, answer: answer.reply }, evidence);
+  // The session keeps only an answer the traveller was shown: one that failed grounding is cut
+  // back out with the rest, so a later turn never builds on a place nobody checked.
+  if (grounded.nothingChecked) return { ...nothing, inSession: false, sessionId: r.sessionId };
+  return {
+    reply: grounded.answer,
+    options: (Array.isArray(answer.options) ? answer.options : []).filter((o): o is string => typeof o === "string").slice(0, 2),
+    sources: grounded.sources,
+    places: grounded.places,
+    inSession: true,
+    sessionId: r.sessionId,
+  };
 }

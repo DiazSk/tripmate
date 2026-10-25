@@ -2,6 +2,7 @@ import { LEAD_DAYS, addDays, ideaToPrefill, phrase } from "./homeIdeas";
 import type { IdeaRead } from "./ideaRead";
 import type { PlanPrefill } from "./planExamples";
 import type { ReadyTrip } from "./readyTrips";
+import type { Itinerary } from "./types";
 import { SCOPE_BLOCK_WITH_REFUSAL, tagUserText } from "./promptScope";
 
 /**
@@ -85,17 +86,12 @@ const KIND_LINES: Record<QuestionKind, string> = {
   other: "A travel question.",
 };
 
-export function buildAnswerPrompt(question: string, kind: QuestionKind, place: string, evidence: Evidence): string {
+/** The evidence as both answer prompts show it: every id the model may cite, with what it names. */
+function evidenceBlock(evidence: Evidence): string {
   const sourceLabel = (id: string) => evidence.sources.find((s) => s.id === id)?.label ?? id;
   const places = evidence.places.map((p) => `${p.id} · ${p.name}${p.detail ? ` · ${p.detail}` : ""} (${sourceLabel(p.sourceId)})`);
   const facts = evidence.facts.map((f) => `${f.text} (${sourceLabel(f.sourceId)})`);
-  return `${SCOPE_BLOCK_WITH_REFUSAL}
-
-Answer the traveller's question about ${place}, using only the evidence below. Kind of question: ${KIND_LINES[kind]}
-
-${tagUserText(question)}
-
-<evidence>
+  return `<evidence>
 Sources:
 ${evidence.sources.map((s) => `${s.id} · ${s.label}`).join("\n") || "(none)"}
 
@@ -106,7 +102,17 @@ Months with climate data: ${evidence.months.join(", ") || "(none)"}
 
 Facts:
 ${facts.join("\n") || "(none)"}
-</evidence>
+</evidence>`;
+}
+
+export function buildAnswerPrompt(question: string, kind: QuestionKind, place: string, evidence: Evidence): string {
+  return `${SCOPE_BLOCK_WITH_REFUSAL}
+
+Answer the traveller's question about ${place}, using only the evidence below. Kind of question: ${KIND_LINES[kind]}
+
+${tagUserText(question)}
+
+${evidenceBlock(evidence)}
 
 Return exactly one JSON object and nothing else:
 {"answer": string, "places": string[], "months": number[], "sources": string[], "nothing": boolean}
@@ -140,7 +146,14 @@ export function parseMeriAnswer(raw: string, evidence: Evidence): MeriAnswer {
     return nothingCheckedAnswer();
   }
   if (typeof v !== "object" || v === null || Array.isArray(v)) return nothingCheckedAnswer();
-  const o = v as Record<string, unknown>;
+  return groundAnswer(v as Record<string, unknown>, evidence);
+}
+
+/**
+ * The grounding rules, for any reply that cites evidence by id: Home's answer call and the trip
+ * chat's lookup answer (which carries its prose in `reply`, so the route passes it as `answer`).
+ */
+export function groundAnswer(o: Record<string, unknown>, evidence: Evidence): MeriAnswer {
   if (o.refused !== undefined || o.nothing === true) return nothingCheckedAnswer();
 
   const answer = typeof o.answer === "string" ? o.answer.trim() : "";
@@ -167,6 +180,46 @@ export function parseMeriAnswer(raw: string, evidence: Evidence): MeriAnswer {
     sources: [...new Set(sources as EvidenceSource[])],
     nothingChecked: false,
   };
+}
+
+/**
+ * On the trip page the plan is evidence too: "where do I eat near Pienza?" can be answered from
+ * its own stops. Stops at 0,0 are unlocated (see `located` in guardrails.ts) and are left out.
+ */
+export function planEvidence(itinerary: Itinerary): { sources: EvidenceSource[]; places: EvidencePlace[] } {
+  const places: EvidencePlace[] = itinerary.days.flatMap((d, di) =>
+    d.stops.flatMap((s, si) =>
+      Number.isFinite(s.lat) && Number.isFinite(s.lng) && !(s.lat === 0 && s.lng === 0)
+        ? [{ id: `plan${di}-${si}`, name: s.name, lat: s.lat, lng: s.lng, detail: `day ${di + 1}${s.time ? `, ${s.time}` : ""}`, sourceId: "plan" }]
+        : []
+    )
+  );
+  const sources: EvidenceSource[] = [{ id: "plan", label: "Your plan" }];
+  if (itinerary.days.some((d) => d.weather?.trim())) sources.push({ id: "forecast", label: "Forecast" });
+  return { sources, places };
+}
+
+/**
+ * The trip chat's second turn: its own lookup, answered. Sent into the session that asked, so the
+ * plan and the traveller's question are already in the conversation and only the evidence is new.
+ * The reply is the chat's normal JSON, so the edit parser and the reply check read it unchanged.
+ */
+export function buildLookupAnswerPrompt(kind: QuestionKind, place: string, evidence: Evidence): string {
+  return `TripMate looked up the traveller's last question about ${place}. Kind of question: ${KIND_LINES[kind]}
+
+${evidenceBlock(evidence)}
+
+Answer their question now, using only this evidence and the plan. Add nothing from memory.
+
+Respond with ONLY valid JSON, no markdown fences:
+{"reply": string, "options": string[], "places": string[], "months": number[], "sources": string[], "ops":[]}
+
+Rules:
+- reply is 1 to 4 sentences.
+- Mention a place only if it is listed above, by its exact name, and put its id in places. Put a month number in months only if the facts cover it.
+- sources lists the id of every source you used: the short id before the ·, such as plan or osm, not the label. An answer that used none is not an answer.
+- "ops" is an empty array: this turn changes nothing. "options" offers at most two changes to the plan that follow from the answer, each under 8 words and tappable as their next message, such as "Add Al-Rawda to day 2". Empty when nothing follows.
+- If the evidence does not answer the question, return {"reply":"","options":[],"places":[],"months":[],"sources":[],"ops":[],"nothing":true}.`;
 }
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
