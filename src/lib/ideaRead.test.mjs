@@ -4,12 +4,12 @@ import { buildIdeaReadPrompt, ideaFieldCount, parseIdeaRead } from "./ideaRead.t
 
 test("a full idea reads into every field it gave", () => {
   const r = parseIdeaRead(JSON.stringify({ destination: "Lisbon, Portugal", kind: null, days: 4, budget: 2000, budgetBasis: "whole_party", adults: 2, children: 0, pace: "relaxed", interests: ["Food"], tags: ["Food", "City"], avoidTags: ["Wine"], dietary: ["Halal"] }));
-  assert.deepEqual(r, { destination: "Lisbon, Portugal", kind: null, days: 4, budget: 2000, budgetBasis: "whole_party", adults: 2, children: 0, pace: "relaxed", interests: ["Food"], tags: ["Food", "City"], avoidTags: ["Wine"], dietary: ["Halal"] });
+  assert.deepEqual(r, { destination: "Lisbon, Portugal", kind: null, days: 4, budget: 2000, budgetBasis: "whole_party", adults: 2, children: 0, pace: "relaxed", interests: ["Food"], tags: ["Food", "City"], avoidTags: ["Wine"], dietary: ["Halal"], question: null });
 });
 
 test("a field the sentence did not give stays empty, and nothing out of range survives", () => {
   const r = parseIdeaRead('```json\n{"destination":"","kind":"somewhere warm","days":45,"budget":-3,"budgetBasis":"each","adults":0,"children":30,"pace":"fast","interests":["Food","Skydiving"],"tags":["Coast","Beach"]}\n```');
-  assert.deepEqual(r, { destination: null, kind: "somewhere warm", days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: ["Food"], tags: ["Coast"], avoidTags: [], dietary: [] });
+  assert.deepEqual(r, { destination: null, kind: "somewhere warm", days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: ["Food"], tags: ["Coast"], avoidTags: [], dietary: [], question: null });
 });
 
 test("a tag the traveller ruled out is avoided, and never also wanted", () => {
@@ -44,4 +44,37 @@ test("ideaFieldCount counts the fields that were read, and an empty list is not 
   const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [] };
   assert.equal(ideaFieldCount(none), 0);
   assert.equal(ideaFieldCount({ ...none, destination: "Lisbon, Portugal", days: 4, tags: ["food"], interests: [] }), 3);
+});
+
+test("a question is kept with its kind, its place and the diet it names", () => {
+  const q = (question) => parseIdeaRead(JSON.stringify({ destination: "Petra, Jordan", question })).question;
+  assert.deepEqual(q({ kind: "food", place: "Amman, Jordan", diet: "Halal" }), { kind: "food", place: "Amman, Jordan", diet: "Halal" });
+  assert.deepEqual(q({ kind: "best_time", place: "Petra, Jordan" }), { kind: "best_time", place: "Petra, Jordan", diet: null });
+});
+
+test("a question of an unknown kind is an other, and a diet outside the planner's list is dropped", () => {
+  const r = parseIdeaRead(JSON.stringify({ question: { kind: "weather", place: "Oslo", diet: "Paleo" } }));
+  assert.deepEqual(r.question, { kind: "other", place: "Oslo", diet: null });
+});
+
+test("a question's place is clamped like a destination", () => {
+  const r = parseIdeaRead(JSON.stringify({ question: { kind: "see", place: "x".repeat(300), diet: null } }));
+  assert.equal(r.question.place.length, 200);
+});
+
+test("no question, a null one, or something that is not an object reads as null", () => {
+  assert.equal(parseIdeaRead("{}").question, null);
+  assert.equal(parseIdeaRead('{"question":null}').question, null);
+  assert.equal(parseIdeaRead('{"question":"best_time"}').question, null);
+  assert.equal(parseIdeaRead('{"question":[]}').question, null);
+});
+
+test("the prompt teaches the question shape", () => {
+  const p = buildIdeaReadPrompt("when should I go to Petra?", "2026-10-21");
+  for (const word of ['"question"', "best_time", "entry", "even if it ends in"]) assert.ok(p.includes(word), word);
+});
+
+test("ideaFieldCount does not count a question", () => {
+  const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [], question: null };
+  assert.equal(ideaFieldCount({ ...none, destination: "Petra, Jordan", question: { kind: "best_time", place: "Petra, Jordan", diet: null } }), 1);
 });

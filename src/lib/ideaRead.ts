@@ -1,4 +1,5 @@
 import { SCOPE_BLOCK_WITH_REFUSAL, tagUserText } from "./promptScope";
+import type { QuestionKind } from "./meriAnswer";
 import { MAX_TRIP_DAYS } from "./tiers";
 
 /**
@@ -53,7 +54,12 @@ export interface IdeaRead {
   avoidTags: IdeaTag[];
   /** What the traveller must eat or avoid ("halal food", "no nuts"), from `IDEA_DIETS`. */
   dietary: string[];
+  /** Set when the sentence asks about a place rather than describing a trip to plan. `destination`
+   *  still holds the same place, so the idea path works if the answer step is skipped. */
+  question: { kind: QuestionKind; place: string | null; diet: string | null } | null;
 }
+
+const QUESTION_KINDS = ["best_time", "food", "see", "entry", "other"] as const;
 
 /** What the box takes. The route checks it before the model sees a character. */
 export const IDEA_MAX_CHARS = 500;
@@ -69,7 +75,7 @@ Read the traveller's one-sentence trip idea into planner fields. Today is ${toda
 ${tagUserText(idea)}
 
 Return exactly one JSON object and nothing else:
-{"destination": string|null, "kind": string|null, "days": integer|null, "budget": number|null, "budgetBasis": "per_person"|"whole_party"|null, "adults": integer|null, "children": integer|null, "pace": "relaxed"|"balanced"|"packed"|null, "interests": string[], "tags": string[], "avoidTags": string[], "dietary": string[]}
+{"destination": string|null, "kind": string|null, "days": integer|null, "budget": number|null, "budgetBasis": "per_person"|"whole_party"|null, "adults": integer|null, "children": integer|null, "pace": "relaxed"|"balanced"|"packed"|null, "interests": string[], "tags": string[], "avoidTags": string[], "dietary": string[], "question": {"kind": "best_time"|"food"|"see"|"entry"|"other", "place": string|null, "diet": string|null}|null}
 
 Rules:
 - Use null (or [] for the lists) for anything the sentence did not say. Never guess a field it did not give.
@@ -80,7 +86,8 @@ Rules:
 - interests: choose only from ${IDEA_INTERESTS.map((i) => `"${i}"`).join(", ")}.
 - tags: choose only from ${IDEA_TAGS.map((t) => `"${t}"`).join(", ")}.
 - avoidTags: from the same list, only the ones the traveller ruled out ("no food tours" is Food, "anything but a city" is City, "nothing historic" is History). A ruled-out tag never goes in tags.
-- dietary: choose only from ${IDEA_DIETS.map((d) => `"${d}"`).join(", ")}, and only what the traveller said they must eat or avoid ("halal food" is Halal, "no nuts" is Nut allergy). A cuisine they would enjoy is an interest, not a diet.`;
+- dietary: choose only from ${IDEA_DIETS.map((d) => `"${d}"`).join(", ")}, and only what the traveller said they must eat or avoid ("halal food" is Halal, "no nuts" is Nut allergy). A cuisine they would enjoy is an interest, not a diet.
+- question is null when the sentence describes a trip to plan, even if it ends in "?". Otherwise it is a travel question: kind is "best_time" (when to go), "food" (where or what to eat), "see" (what to see or do), "entry" (visas, passports, entry rules) or "other" (any other travel question). place is the place asked about, as a geocoder reads it, or null. diet is from the dietary list above when the question names one. A question still fills destination with the same place.`;
 }
 
 const int = (v: unknown, min: number, max: number): number | null =>
@@ -97,9 +104,17 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[]): T | null =>
 const subset = <T extends string>(v: unknown, allowed: readonly T[]): T[] =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is T => pick(x, allowed) !== null))] : [];
 
+/** Null when absent or not an object; an unknown kind is "other", since it was still a question. */
+function parseQuestion(v: unknown): IdeaRead["question"] {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const q = v as Record<string, unknown>;
+  return { kind: pick(q.kind, QUESTION_KINDS) ?? "other", place: text(q.place), diet: pick(q.diet, IDEA_DIETS) };
+}
+
 /** How much of the sentence was understood: fields with a value plus lists with something in them. Counts only, for analytics. */
 export function ideaFieldCount(read: IdeaRead): number {
-  return Object.values(read).filter((v) => (Array.isArray(v) ? v.length > 0 : v !== null)).length;
+  // The question is not a trip field: it says what the sentence is, not what it asked for.
+  return Object.entries(read).filter(([k, v]) => k !== "question" && (Array.isArray(v) ? v.length > 0 : v !== null)).length;
 }
 
 /** Null when the reply is not a JSON object or is the refusal shape; otherwise every field validated. */
@@ -129,5 +144,6 @@ export function parseIdeaRead(raw: string): IdeaRead | null {
     tags: subset(o.tags, IDEA_TAGS).filter((t) => !avoidTags.includes(t)),
     avoidTags,
     dietary: subset(o.dietary, IDEA_DIETS),
+    question: parseQuestion(o.question),
   };
 }

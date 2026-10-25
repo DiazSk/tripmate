@@ -12,7 +12,7 @@ import {
   typewriterTick,
 } from './homeIdeas';
 
-const none: IdeaRead = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [] };
+const none: IdeaRead = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [], question: null };
 
 const trip = (o: Partial<ReadyTrip> & { slug: string }): ReadyTrip => ({
   title: o.slug,
