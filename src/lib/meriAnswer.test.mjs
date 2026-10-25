@@ -122,7 +122,26 @@ test("an answer with no months says nothing about dates", () => {
 });
 
 test("the plan button names the place, and the month only for a best-time answer", () => {
-  assert.equal(answerPlanLabel(readOf("best_time"), answerOf([4, 5])), "Plan Petra in April");
-  assert.equal(answerPlanLabel(readOf("food", { destination: "Jaipur, India" }), answerOf()), "Plan a trip to Jaipur");
-  assert.equal(answerPlanLabel(readOf("best_time", { destination: "Jaipur, India" }), answerOf()), "Plan a trip to Jaipur");
+  assert.equal(answerPlanLabel(readOf("best_time"), answerOf([4, 5]), "2026-10-24"), "Plan Petra in April");
+  assert.equal(answerPlanLabel(readOf("food", { destination: "Jaipur, India" }), answerOf(), "2026-10-24"), "Plan a trip to Jaipur");
+  assert.equal(answerPlanLabel(readOf("best_time", { destination: "Jaipur, India" }), answerOf(), "2026-10-24"), "Plan a trip to Jaipur");
+});
+
+test("unordered best months open on the earliest one ahead, and the button names that month", () => {
+  const r = readOf("best_time");
+  const p = answerToPrefill(r, answerOf([10, 4]), "2026-11-15");
+  assert.equal(p.startDate, "2027-04-01");
+  assert.equal(answerPlanLabel(r, answerOf([10, 4]), "2026-11-15"), "Plan Petra in April");
+});
+
+test("a lead time that falls out of the only best month opens on its next visit", () => {
+  const r = readOf("best_time");
+  assert.equal(answerToPrefill(r, answerOf([10]), "2026-10-24").startDate, "2027-10-01");
+  assert.equal(answerPlanLabel(r, answerOf([10]), "2026-10-24"), "Plan Petra in October");
+});
+
+test("a lead time that falls into the next best month names that month", () => {
+  const r = readOf("best_time");
+  assert.equal(answerToPrefill(r, answerOf([10, 11]), "2026-10-24").startDate, "2026-11-23");
+  assert.equal(answerPlanLabel(r, answerOf([10, 11]), "2026-10-24"), "Plan Petra in November");
 });

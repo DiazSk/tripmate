@@ -154,12 +154,19 @@ export function parseMeriAnswer(raw: string, evidence: Evidence): MeriAnswer {
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DEFAULT_DAYS = 4;
 
-/** First day of the earliest best month still ahead; a month already under way starts a lead time out, as an idea's dates do. */
+/**
+ * Where a trip for these best months opens, always inside one. A month already under way starts a
+ * lead time out, as an idea's dates do, unless that lands past the month's end in a month that is not
+ * best; then it is the 1st of the next best month. Otherwise the 1st of the earliest one ahead.
+ */
 function bestMonthStart(months: number[], today: string): string {
   const now = Number(today.slice(5, 7));
-  if (months.includes(now)) return addDays(today, LEAD_DAYS);
-  const ahead = Math.min(...months.map((m) => (m - now + 12) % 12));
-  return new Date(Date.UTC(Number(today.slice(0, 4)), now - 1 + ahead, 1)).toISOString().slice(0, 10);
+  const first = (ahead: number) => new Date(Date.UTC(Number(today.slice(0, 4)), now - 1 + ahead, 1)).toISOString().slice(0, 10);
+  if (!months.includes(now)) return first(Math.min(...months.map((m) => (m - now + 12) % 12)));
+  const lead = addDays(today, LEAD_DAYS);
+  if (months.includes(Number(lead.slice(5, 7)))) return lead;
+  // `|| 12`: the month under way is the only best month, so the next one is a year out.
+  return first(Math.min(...months.map((m) => (m - now + 12) % 12 || 12)));
 }
 
 /** The planner's fields from a question and what Meri answered: the idea's own, plus what the answer settled. */
@@ -178,9 +185,10 @@ export function answerToPrefill(read: IdeaRead, answer: MeriAnswer, today: strin
 }
 
 /** The button that carries an answer into the planner. */
-export function answerPlanLabel(read: IdeaRead, answer: MeriAnswer): string {
+export function answerPlanLabel(read: IdeaRead, answer: MeriAnswer, today: string): string {
   const place = (read.destination ?? read.question?.place ?? "").split(",")[0].trim();
   if (!place) return "Plan a trip";
-  // ponytail: names the first month the answer gave; the prefill starts at the earliest one ahead, which may differ.
-  return read.question?.kind === "best_time" && answer.months.length ? `Plan ${place} in ${MONTH_NAMES[answer.months[0] - 1]}` : `Plan a trip to ${place}`;
+  // The month the planner will open on, which is not always the first the answer named.
+  if (read.question?.kind !== "best_time" || !answer.months.length) return `Plan a trip to ${place}`;
+  return `Plan ${place} in ${MONTH_NAMES[Number(bestMonthStart(answer.months, today).slice(5, 7)) - 1]}`;
 }
