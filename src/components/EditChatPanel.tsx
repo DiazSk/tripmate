@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
+import type { EvidencePlace, EvidenceSource } from "@/lib/meriAnswer";
 import { devLabel } from "@/lib/devInspector";
 import { meriForChat } from "@/lib/meri";
 import { track } from "@/lib/analytics/client";
@@ -76,6 +77,10 @@ interface ChatMessage {
   /** Tappable answers the model offered with a question. Cleared once one is used, so an old
    *  turn's options can't be answered after the conversation has moved on. */
   options?: string[];
+  /** A lookup turn's evidence (copy row MA-03): the places the answer named and where each fact
+   *  came from. Both are rendered from the server's records, never from the reply's prose. */
+  places?: EvidencePlace[];
+  sources?: EvidenceSource[];
 }
 
 /**
@@ -279,6 +284,8 @@ export default function EditChatPanel({
           rejected: data.rejected ?? [],
           knockOn: data.knockOn ?? null,
           options: data.options ?? [],
+          places: data.places ?? [],
+          sources: data.sources ?? [],
         },
       ]);
       setJustReplied(true);
@@ -426,6 +433,35 @@ export default function EditChatPanel({
               <p className={k("mt-1 text-xs text-alert/80", "td-alert-line")}>
                 {m.rejected.length} of the changes TripMate suggested weren&rsquo;t made: {m.rejected.join("; ")}. The rest went
                 through. Ask again in other words to try once more.
+              </p>
+            )}
+            {/* Copy row MA-03. Places and sources come from the lookup's evidence; a change turn has
+                neither, so this stays out of its way. */}
+            {m.role === "assistant" && m.places && m.places.length > 0 && (
+              <ul className={k("mt-1.5 space-y-0.5", "td-places")}>
+                {m.places.map((p) => (
+                  <li key={p.id} className={k("text-xs text-foreground/80", "")}>
+                    <span className={k("font-medium text-foreground", "td-place-name")}>{p.name}</span>
+                    {p.detail && <span className={k("text-muted", "")}> · {p.detail}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {m.role === "assistant" && m.sources && m.sources.length > 0 && (
+              <p className={k("mt-1 text-xs text-muted", "td-from")}>
+                From{" "}
+                {m.sources.map((src, si) => (
+                  <span key={src.id}>
+                    {si > 0 && " · "}
+                    {src.url ? (
+                      <a href={src.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+                        {src.label}
+                      </a>
+                    ) : (
+                      src.label
+                    )}
+                  </span>
+                ))}
               </p>
             )}
             {/* Tap-to-answer. The model is told to supply these whenever it asks something, so
