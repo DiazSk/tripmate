@@ -1,4 +1,5 @@
 import type { Located } from '@shared/evidence';
+import type { EvidencePlace, EvidenceSource } from '@shared/meriAnswer';
 import type { HomeCity } from '@shared/travelerProfile';
 import type { CompletePlanRequest as SharedCompletePlanRequest } from '@shared/importedPlan';
 
@@ -626,6 +627,13 @@ export interface ChatTurn {
    * they were sent wide.
    */
   scope?: number | null;
+  /**
+   * A lookup turn's evidence ("where should I eat?"): the places the answer named and where each
+   * fact came from. Rendered from the server's records, never from the reply's prose; a change
+   * turn, or a turn saved before lookups, has neither.
+   */
+  places?: EvidencePlace[];
+  sources?: EvidenceSource[];
 }
 
 /** What `POST /api/trip-edit` answers in chat mode. `itinerary` is the whole updated plan. */
@@ -640,6 +648,9 @@ export interface TripEdit {
    *  is the server saying its picture is stale, and echoing the null is what forces a resync. */
   sessionId: string | null;
   syncedHash: string | null;
+  /** A lookup turn's evidence; absent from a server older than lookups. */
+  places?: EvidencePlace[];
+  sources?: EvidenceSource[];
 }
 
 /** An airport or station near the destination, from `GET /api/arrival-points`. */

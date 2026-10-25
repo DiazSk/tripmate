@@ -948,6 +948,8 @@ function useChat(
           content: edit.reply ?? '',
           warnings: edit.warnings,
           rejected: edit.rejected,
+          places: edit.places,
+          sources: edit.sources,
         },
       ]);
 

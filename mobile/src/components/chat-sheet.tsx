@@ -109,6 +109,25 @@ function Turn({ turn, days }: { turn: ChatTurn; days: { date: string }[] }) {
           {warning}
         </ThemedText>
       ))}
+      {/* A lookup's evidence. No map pins: a Yelp place carries the search point's coordinates,
+          not its own. A change turn has neither list, so this stays out of its way. */}
+      {!mine && turn.places?.length ? (
+        <View style={styles.places}>
+          {turn.places.map((place) => (
+            <ThemedText key={place.id} type="detail">
+              {place.name}
+              {place.detail ? (
+                <ThemedText type="detail" themeColor="muted">{` · ${place.detail}`}</ThemedText>
+              ) : null}
+            </ThemedText>
+          ))}
+        </View>
+      ) : null}
+      {!mine && turn.sources?.length ? (
+        <ThemedText type="caption" themeColor="muted">
+          {`From ${turn.sources.map((source) => source.label).join(' · ')}`}
+        </ThemedText>
+      ) : null}
       {/* Silence here would read as "done" for a turn that partly wasn't. */}
       {turn.rejected?.map((reason, i) => (
         <ThemedText key={i} type="detail" themeColor="muted">
@@ -145,6 +164,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.tight,
   },
   bubbleMine: { backgroundColor: Colors.accent, borderColor: 'transparent' },
+  places: { gap: 2 },
   warning: { color: Colors.alert },
   failure: { color: Colors.alert },
 });
