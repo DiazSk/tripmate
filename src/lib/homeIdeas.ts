@@ -102,7 +102,9 @@ export function matchTrips(trips: ReadyTrip[], read: IdeaRead): ReadyTrip[] {
         place !== "" &&
         [t.destination, t.country, t.region, t.title].map(phrase).some((f) => f !== "" && (f.includes(place) || place.includes(f)));
       const shared = t.tags.filter((tag) => (read.tags as string[]).includes(tag)).length;
-      return { t, score: (placeHit ? 3 : 0) + shared, candidate: placeHit || shared > 0 };
+      // A named place decides: "California, food" is not answered with a food trip in Italy. Tags
+      // alone only choose when the sentence named no place ("somewhere warm, good food").
+      return { t, score: (placeHit ? 3 : 0) + shared, candidate: place !== "" ? placeHit : shared > 0 };
     })
     .filter(({ t, candidate }) => candidate && (read.days === null || Math.abs(t.days - read.days) <= 2) && (perPerson === null || t.priceFrom <= perPerson))
     .sort((a, b) => b.score - a.score || byOrder(a.t, b.t))

@@ -72,6 +72,9 @@ export default function IdeaSheet() {
     matches = keywordTrips(trips, text);
   } else {
     matches = matchTrips(trips, answer);
+    // A named place no ready-made trip covers: say so, or the sheet below the actions reads as broken.
+    const place = answer.destination?.split(',')[0].trim();
+    if (!matches.length && place && trips.length) none = `No ready-made trip goes to ${place} yet. Build this trip and TripMate writes one for you.`;
   }
 
   return (

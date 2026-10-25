@@ -106,6 +106,11 @@ describe('matchTrips', () => {
     delete (old as { avoidTags?: unknown }).avoidTags;
     expect(matchTrips(trips, old).map((t) => t.slug)).toEqual(['petra', 'kyoto']);
   });
+  test('a named place no trip covers matches nothing, however many tags it shares', () => {
+    // "5 day trip to California, food halal": a food trip in Italy is not a start on California.
+    expect(matchTrips(trips, { ...none, destination: 'California, United States', tags: ['Food'] })).toEqual([]);
+    expect(matchTrips(trips, { ...none, destination: 'Kyoto', tags: ['History'] }).map((t) => t.slug)).toEqual(['kyoto']);
+  });
   test('nothing known matches nothing', () => {
     expect(matchTrips(trips, none)).toEqual([]);
   });
