@@ -1,10 +1,14 @@
 import { failureFromResponse, failureFromThrown, formatResumeTime, isAbort, type Failure } from "./failure";
 import type { IdeaRead } from "./ideaRead";
+import type { MeriAnswer } from "./meriAnswer";
 import type { ReadyTrip } from "./readyTrips";
 
 /** What the landing's Meri pill needs from the server: reading a sentence, and the ready-made trips. */
 
-export type IdeaOutcome = { ok: true; read: IdeaRead } | { ok: false; failure: Failure } | { ok: false; aborted: true };
+/** A travel question comes back with Meri's grounded answer beside the usual reading. */
+export type ReadWithAnswer = IdeaRead & { answer?: MeriAnswer };
+
+export type IdeaOutcome = { ok: true; read: ReadWithAnswer } | { ok: false; failure: Failure } | { ok: false; aborted: true };
 
 export async function readIdea(idea: string, signal?: AbortSignal): Promise<IdeaOutcome> {
   try {
@@ -16,7 +20,7 @@ export async function readIdea(idea: string, signal?: AbortSignal): Promise<Idea
     });
     if (!res.ok) return { ok: false, failure: await failureFromResponse(res, "idea") };
     // The route has already run parseIdeaRead; nothing else reaches a 200.
-    return { ok: true, read: (await res.json()) as IdeaRead };
+    return { ok: true, read: (await res.json()) as ReadWithAnswer };
   } catch (e) {
     return isAbort(e) ? { ok: false, aborted: true } : { ok: false, failure: failureFromThrown(e) };
   }

@@ -251,6 +251,159 @@
 .mp-open:hover {
   background: var(--wd-signal-hover);
 }
+/* The answer card: the reading card's glass, a shade darker so a paragraph reads over any photograph. */
+.mp-answer {
+  background: rgba(9, 11, 16, 0.64);
+}
+.mp-answer-text {
+  max-width: 34em;
+  font-size: 1.02em;
+  line-height: 1.55;
+}
+.mp-months {
+  margin-top: 1em;
+}
+.mp-month-row {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 3px;
+}
+.mp-month {
+  display: grid;
+  place-items: center;
+  height: 2em;
+  border-radius: 2px;
+  font-size: 0.75em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.mp-month.is-on {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.mp-month.is-best {
+  color: var(--wd-ink);
+  background: #fff;
+  border-color: #fff;
+}
+.mp-month-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em 1.2em;
+  margin-top: 0.55em;
+  font-size: 0.75em;
+  color: rgba(255, 255, 255, 0.75);
+}
+.mp-month-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+}
+.mp-month-key i {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 2px;
+}
+.mp-key-on {
+  background: rgba(255, 255, 255, 0.3);
+}
+.mp-key-best {
+  background: #fff;
+}
+.mp-places {
+  margin-top: 0.9em;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+.mp-places li {
+  display: grid;
+  grid-template-columns: 2em minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.75em;
+  padding: 0.55em 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.mp-idx {
+  font-size: 0.75em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+.mp-pname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.94em;
+  font-weight: 600;
+}
+.mp-pdetail {
+  font-size: 0.82em;
+  text-align: right;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.72);
+}
+.mp-honest {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-top: 0.8em;
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.75);
+}
+.mp-answer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em 1em;
+  margin-top: 1em;
+}
+.mp-answer-foot .mp-card-foot {
+  margin: 0 0 0 auto;
+}
+.mp-answer .mp-change {
+  min-height: 2.75em;
+}
+.mp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em;
+  min-width: 0;
+}
+.mp-tags .mp-kicker {
+  margin-right: 0.25em;
+}
+.mp-tag {
+  display: inline-block;
+  padding: 0.3em 0.7em;
+  border-radius: 999px;
+  font-size: 0.75em;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+a.mp-tag {
+  transition: background-color 0.25s;
+}
+a.mp-tag:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+@media (max-width: 560px) {
+  .mp-answer-foot .mp-card-foot {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .mp-answer .mp-open {
+    flex: 1;
+    justify-content: center;
+  }
+}
 /* Kept mounted for the alert to be announced; a flex box so the empty note inside takes no line. */
 .mp-fail {
   display: flex;

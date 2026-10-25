@@ -6,7 +6,7 @@ import Meridian from "@/components/Meridian";
 import { useHold } from "@/lib/actionHolds";
 import { track } from "@/lib/analytics/client";
 import { holdFromFailure, type Failure } from "@/lib/failure";
-import { ideaFailureCopy, loadReadyTrips, readIdea, understoodNothing, type IdeaOutcome } from "@/lib/ideaClient";
+import { ideaFailureCopy, loadReadyTrips, readIdea, understoodNothing, type IdeaOutcome, type ReadWithAnswer } from "@/lib/ideaClient";
 import { IDEA_MAX_CHARS, type IdeaRead } from "@/lib/ideaRead";
 import {
   ideaHeadline,
@@ -19,6 +19,7 @@ import {
   type Typewriter,
 } from "@/lib/homeIdeas";
 import type { MeridianState } from "@/lib/meri";
+import { answerPlanLabel, answerToPrefill, type MeriAnswer } from "@/lib/meriAnswer";
 import type { PlanPrefill } from "@/lib/planExamples";
 import type { ReadyTrip } from "@/lib/readyTrips";
 import "./MeriPill.css";
@@ -30,7 +31,7 @@ type Phase =
   | { kind: "blank" }
   | { kind: "reading" }
   /** `trips` is null until the catalogue has answered, and stays [] when it is unavailable. */
-  | { kind: "read"; read: IdeaRead; trips: ReadyTrip[] | null }
+  | { kind: "read"; read: ReadWithAnswer; trips: ReadyTrip[] | null }
   | { kind: "nothing" }
   | { kind: "failed"; failure: Failure };
 
@@ -145,6 +146,11 @@ export default function MeriPill({
     }
     setPhase({ kind: "read", read, trips: null });
     onRead(read);
+    // An answer takes the reading card's place, so the catalogue's close-to trips have nowhere to show.
+    if (read.answer) {
+      track("idea_answered", { branch: "read", matches: 0 });
+      return;
+    }
     void loadReadyTrips().then((all) => {
       // A send or Escape before the catalogue answers drops this read's idea_answered: accepted drift.
       if (inflight.current !== c) return;
@@ -292,7 +298,15 @@ export default function MeriPill({
           </div>
         )}
         <div aria-live="polite">
-          {phase.kind === "read" && (
+          {phase.kind === "read" && phase.read.answer && (
+            <Answer
+              read={phase.read}
+              answer={phase.read.answer}
+              onChange={change}
+              onPlan={(prefill) => onPlan(prefill, "meri")}
+            />
+          )}
+          {phase.kind === "read" && !phase.read.answer && (
             <Reading
               read={phase.read}
               trips={phase.trips ?? []}
@@ -407,5 +421,109 @@ function Reading({
         </button>
       </div>
     </div>
+  );
+}
+
+/** MA-05: under an entry answer, which is a fixed line rather than anything fetched. */
+const ENTRY_NOTE = "Meri doesn’t answer entry questions from memory.";
+
+const monthName = (m: number) => new Date(Date.UTC(2000, m - 1, 1)).toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+
+/**
+ * Meri's answer to a travel question, in the reading card's place (copy rows MA-01..MA-05). The
+ * places, months and sources are the evidence records the server rendered, never the answer's prose.
+ */
+function Answer({
+  read,
+  answer,
+  onChange,
+  onPlan,
+}: {
+  read: ReadWithAnswer;
+  answer: MeriAnswer;
+  onChange: () => void;
+  onPlan: (prefill: PlanPrefill) => void;
+}) {
+  // One day for the label and the prefill, so the button never names a month the planner will not open on.
+  const day = today();
+  const kind = read.question?.kind;
+  const checked = !answer.nothingChecked;
+  const place = read.destination ?? read.question?.place;
+  const showPlan = Boolean(place) || (checked && kind !== "entry");
+  const prefill = answerToPrefill(read, answer, day);
+  // The planner's real start month, which is not always the first the answer named.
+  const goes = kind === "best_time" && answer.months.length ? Number(prefill.startDate?.slice(5, 7)) : null;
+  return (
+    <article className="mp-card mp-answer" aria-label="Meri’s answer">
+      <p className="mp-answer-text">{answer.answer}</p>
+
+      {checked && answer.months.length > 0 && (
+        <div className="mp-months">
+          <p className="sr-only">Good months: {[...answer.months].sort((a, b) => a - b).map(monthName).join(", ")}.</p>
+          <ol className="mp-month-row" aria-hidden="true">
+            {Array.from({ length: 12 }, (_, i) => (
+              <li key={i} className={`mp-month${answer.months.includes(i + 1) ? " is-on" : ""}${goes === i + 1 ? " is-best" : ""}`}>
+                {monthName(i + 1)[0]}
+              </li>
+            ))}
+          </ol>
+          <div className="mp-month-key" aria-hidden="true">
+            <span><i className="mp-key-on" />Good months</span>
+            {goes && <span><i className="mp-key-best" />{monthName(goes)} goes into the plan</span>}
+          </div>
+        </div>
+      )}
+
+      {checked && answer.places.length > 0 && (
+        <ol className="mp-places">
+          {answer.places.map((p, i) => (
+            <li key={p.id}>
+              <span className="mp-idx">{String(i + 1).padStart(2, "0")}</span>
+              <span className="mp-pname">{p.name}</span>
+              {p.detail && <span className="mp-pdetail">{p.detail}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {kind === "entry" && checked && (
+        <p className="mp-honest">
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M8 7v4M8 4.6v.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          {ENTRY_NOTE}
+        </p>
+      )}
+
+      <div className="mp-answer-foot">
+        {checked && answer.sources.length > 0 && (
+          <ul className="mp-tags" aria-label="Sources">
+            <li className="mp-kicker">From</li>
+            {answer.sources.map((s) => (
+              <li key={s.id}>
+                {s.url ? (
+                  <a className="mp-tag" href={s.url} target="_blank" rel="noopener noreferrer">
+                    {s.label}
+                  </a>
+                ) : (
+                  <span className="mp-tag">{s.label}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mp-card-foot">
+          <button type="button" className="mp-change" onClick={onChange}>
+            Change something
+          </button>
+          {showPlan && (
+            <button type="button" className="mp-open" onClick={() => onPlan(prefill)}>
+              {answerPlanLabel(read, answer, day)} <span aria-hidden="true">→</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
