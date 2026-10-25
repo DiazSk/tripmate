@@ -27,6 +27,21 @@ const SOURCE_LABELS: Record<string, string> = {
   climate: "Open-Meteo weather history",
 };
 
+/**
+ * Each provider's public home page, fixed here. A provider's own per-place URL is never used: it is
+ * outside data, and a link is the one thing in an answer a traveller acts on without reading.
+ * The ready-made trip, the plan and the forecast are TripMate's own, so they carry no link.
+ */
+export const SOURCE_URLS: Record<string, string> = {
+  osm: "https://www.openstreetmap.org",
+  climate: "https://open-meteo.com",
+  opentripmap: "https://opentripmap.io",
+  yelp: "https://www.yelp.com",
+  google: "https://maps.google.com",
+};
+
+const source = (id: string): EvidenceSource => ({ id, label: SOURCE_LABELS[id] ?? id, ...(SOURCE_URLS[id] ? { url: SOURCE_URLS[id] } : {}) });
+
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const realDeps: EvidenceDeps = {
@@ -86,18 +101,25 @@ export async function gatherEvidence(
 
   if (kind === "best_time") {
     if (readyTrip && readyTrip.bestMonths.length) {
-      sources.push({ id: "trip", label: `Our ${readyTrip.title} trip` });
-      facts.push({ text: `Our ${readyTrip.title} trip is set for ${readyTrip.bestMonths.map((m) => MONTH_NAMES[m - 1]).join(", ")}.`, sourceId: "trip" });
+      // Worded as TripMate's suggestion, not "our trip is set for": the model once read that as the
+      // traveller's own booking and answered "your trip is scheduled for March through May".
+      sources.push({ id: "trip", label: `TripMate's ready-made ${readyTrip.title} trip` });
+      facts.push({
+        text: `TripMate's ready-made ${readyTrip.title} trip suggests going in ${readyTrip.bestMonths.map((m) => MONTH_NAMES[m - 1]).join(", ")}; it is a suggestion, not the traveller's own trip.`,
+        sourceId: "trip",
+      });
       readyTrip.bestMonths.forEach((m) => months.add(m));
     }
     const climate = await attempt(() => deps.climate(point));
     if (climate?.length) {
-      sources.push({ id: "climate", label: SOURCE_LABELS.climate });
+      sources.push(source("climate"));
+      // Every month stays a fact, but only the good ones may be named: a 40°C July is covered by the
+      // data and is still not an answer to "when should I go".
       for (const c of climate) {
-        months.add(c.month);
         facts.push({ text: `${MONTH_NAMES[c.month - 1]}: ${c.highC}°C average high, ${c.rainDays} rain days`, sourceId: "climate" });
       }
       const best = bestMonthsFromClimate(climate);
+      best.forEach((m) => months.add(m));
       if (best.length) facts.push({ text: `Mildest and driest months: ${best.map((m) => MONTH_NAMES[m - 1]).join(", ")}.`, sourceId: "climate" });
     }
   } else if (kind === "see") {
@@ -123,7 +145,7 @@ export async function gatherEvidence(
     used.add(p.sourceId);
   }
   for (const id of used) {
-    if (!sources.some((s) => s.id === id)) sources.push({ id, label: SOURCE_LABELS[id] ?? id });
+    if (!sources.some((s) => s.id === id)) sources.push(source(id));
   }
 
   return { sources, places, months: [...months].sort((a, b) => a - b), facts };
