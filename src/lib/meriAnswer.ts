@@ -199,6 +199,40 @@ export function planEvidence(itinerary: Itinerary): { sources: EvidenceSource[];
   return { sources, places };
 }
 
+/** ~100km: a geocoded name further than this from every stop is another place with the same name. */
+const NEAR_PLAN_DEGREES = 1;
+
+/**
+ * Where a trip-chat lookup searches, and the name its prompt uses: a plan stop the question named,
+ * else the geocoder's hit for it if it lies near the plan, else the plan's first located stop. The
+ * name is always the stop's or the geocoder's, never the question's wording. Null when the plan has
+ * no located stop: then there is nothing to search around and nothing to answer from.
+ */
+export async function lookupAnchor(
+  places: EvidencePlace[],
+  named: string | null,
+  geocode: (name: string) => Promise<{ name: string; lat: number; lon: number } | null>
+): Promise<{ place: string; lat: number; lng: number } | null> {
+  if (places.length === 0) return null;
+  const want = named?.trim().toLowerCase() ?? "";
+  const stop = want ? places.find((p) => p.name.toLowerCase() === want) : undefined;
+  if (stop) return { place: stop.name, lat: stop.lat, lng: stop.lng };
+  const geo = want ? await geocode(named as string).catch(() => null) : null;
+  if (geo && places.some((p) => Math.abs(p.lat - geo.lat) < NEAR_PLAN_DEGREES && Math.abs(p.lng - geo.lon) < NEAR_PLAN_DEGREES)) {
+    return { place: geo.name, lat: geo.lat, lng: geo.lon };
+  }
+  return { place: places[0].name, lat: places[0].lat, lng: places[0].lng };
+}
+
+/**
+ * A lookup answer's offers, kept only when they name a place the answer was grounded in: an offer
+ * is shown to the traveller as a button, so "Add Trattoria X to day 2" is as unchecked as the prose.
+ */
+export function groundedOptions(options: string[], places: EvidencePlace[]): string[] {
+  const names = places.map((p) => p.name.toLowerCase());
+  return options.filter((o) => names.some((n) => o.toLowerCase().includes(n)));
+}
+
 /**
  * The trip chat's second turn: its own lookup, answered. Sent into the session that asked, so the
  * plan and the traveller's question are already in the conversation and only the evidence is new.
@@ -218,7 +252,7 @@ Rules:
 - reply is 1 to 4 sentences.
 - Mention a place only if it is listed above, by its exact name, and put its id in places. Put a month number in months only if the facts cover it.
 - sources lists the id of every source you used: the short id before the ·, such as plan or osm, not the label. An answer that used none is not an answer.
-- "ops" is an empty array: this turn changes nothing. "options" offers at most two changes to the plan that follow from the answer, each under 8 words and tappable as their next message, such as "Add Al-Rawda to day 2". Empty when nothing follows.
+- "ops" is an empty array: this turn changes nothing. "options" offers at most two changes to the plan that follow from the answer, each naming a place listed above by its exact name, under 8 words and tappable as their next message, such as "Add Al-Rawda to day 2". Empty when nothing follows.
 - If the evidence does not answer the question, return {"reply":"","options":[],"places":[],"months":[],"sources":[],"ops":[],"nothing":true}.`;
 }
 

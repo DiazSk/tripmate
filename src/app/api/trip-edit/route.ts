@@ -55,6 +55,8 @@ import {
   buildLookupAnswerPrompt,
   entryAnswer,
   groundAnswer,
+  groundedOptions,
+  lookupAnchor,
   pickReadyTrip,
   planEvidence,
   type EvidencePlace,
@@ -82,8 +84,6 @@ interface EditResponse {
 /** The lookup answer's budget, as on Home: the facts get 10s, the answer call 30s. */
 const EVIDENCE_BUDGET_MS = 10_000;
 const ANSWER_TIMEOUT_MS = 30_000;
-/** ~100km: a geocoded name further than this from every stop is another place with the same name. */
-const NEAR_PLAN_DEGREES = 1;
 
 /**
  * Which days the traveler's plan actually changed on, as 1-based day numbers.
@@ -489,8 +489,8 @@ type LookupAnswer =
  * passed back up; everything else that goes wrong (no facts, a failed or ungrounded answer) is the
  * honest line, so the turn is never empty.
  *
- * The place that reaches the prompt is always app-derived: a stop's own name, the geocoder's name
- * for it, or the trip's destination. The traveller's (or the model's) wording only chooses which.
+ * The place that reaches the prompt is always app-derived (see `lookupAnchor`): a stop's own name
+ * or the geocoder's name for it. The traveller's (or the model's) wording only chooses which.
  */
 async function answerLookup(input: {
   lookup: NonNullable<EditResponse["lookup"]>;
@@ -507,35 +507,26 @@ async function answerLookup(input: {
   if (!input.session) return { ...nothing, inSession: false };
 
   const plan = planEvidence(itinerary);
-  const named = typeof lookup.place === "string" ? lookup.place.trim().toLowerCase() : "";
-  let anchor: { place: string; lat: number; lng: number } | null = null;
-  const stop = named ? plan.places.find((p) => p.name.toLowerCase() === named) : undefined;
-  if (stop) anchor = { place: stop.name, lat: stop.lat, lng: stop.lng };
-  else if (named) {
-    const geo = await geocodeDestination(`${lookup.place}, ${destination}`).catch(() => null);
-    const near = (g: { lat: number; lon: number }) =>
-      plan.places.length === 0 ||
-      plan.places.some((p) => Math.abs(p.lat - g.lat) < NEAR_PLAN_DEGREES && Math.abs(p.lng - g.lon) < NEAR_PLAN_DEGREES);
-    if (geo && near(geo)) anchor = { place: geo.name, lat: geo.lat, lng: geo.lon };
-  }
-  if (!anchor && plan.places[0]) anchor = { place: destination, lat: plan.places[0].lat, lng: plan.places[0].lng };
-  const place = anchor?.place ?? destination;
+  // The destination only narrows the geocoder's search; it never reaches the prompt.
+  const anchor = await lookupAnchor(plan.places, typeof lookup.place === "string" ? lookup.place : null, (name) =>
+    geocodeDestination(`${name}, ${destination}`)
+  );
+  if (!anchor) return { ...nothing, inSession: false };
+  const { place } = anchor;
 
   // The diet is interpolated into an Overpass query, so only a value from the closed list goes on.
   const diet = IDEA_DIETS.find((d) => d.toLowerCase() === String(lookup.diet ?? "").toLowerCase()) ?? null;
   const base = { place, diet, readyTrip: null, extraSources: plan.sources, extraPlaces: plan.places };
-  // With no point to search around, or past the budget, the plan is still evidence.
-  const planOnly = () => gatherEvidence({ ...base, kind: "other", point: { lat: 0, lng: 0 } });
-  const gathered = anchor
-    ? (async () => {
-        const readyTrip = kind === "best_time" ? pickReadyTrip((await fetchReadyTrips()) ?? [], place) : null;
-        return gatherEvidence({ ...base, kind, readyTrip, point: { lat: anchor.lat, lng: anchor.lng } });
-      })()
-    : planOnly();
+  const point = { lat: anchor.lat, lng: anchor.lng };
+  const gathered = (async () => {
+    const readyTrip = kind === "best_time" ? pickReadyTrip((await fetchReadyTrips()) ?? [], place) : null;
+    return gatherEvidence({ ...base, kind, readyTrip, point });
+  })();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Past the budget the plan is still evidence: "other" fetches nothing.
   const evidence =
     (await Promise.race([gathered, new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), EVIDENCE_BUDGET_MS)))])) ??
-    (await planOnly());
+    (await gatherEvidence({ ...base, kind: "other", point }));
   clearTimeout(timer);
 
   let r: Awaited<ReturnType<typeof runClaude>>;
@@ -565,7 +556,7 @@ async function answerLookup(input: {
   if (grounded.nothingChecked) return { ...nothing, inSession: false, sessionId: r.sessionId };
   return {
     reply: grounded.answer,
-    options: (Array.isArray(answer.options) ? answer.options : []).filter((o): o is string => typeof o === "string").slice(0, 2),
+    options: groundedOptions((Array.isArray(answer.options) ? answer.options : []).filter((o): o is string => typeof o === "string"), grounded.places).slice(0, 2),
     sources: grounded.sources,
     places: grounded.places,
     inSession: true,

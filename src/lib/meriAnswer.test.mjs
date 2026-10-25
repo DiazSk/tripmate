@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addDays, LEAD_DAYS } from "./homeIdeas.ts";
-import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, buildLookupAnswerPrompt, entryAnswer, groundAnswer, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip, planEvidence } from "./meriAnswer.ts";
+import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, buildLookupAnswerPrompt, entryAnswer, groundAnswer, groundedOptions, lookupAnchor, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip, planEvidence } from "./meriAnswer.ts";
 import { tagUserText } from "./promptScope.ts";
 
 const evidence = {
@@ -197,4 +197,24 @@ test("groundAnswer holds a chat reply to the same rules as a Home answer", () =>
   assert.equal(groundAnswer({ answer: "Try Al-Rawda.", places: ["p9"], sources: ["osm"] }, evidence).nothingChecked, true);
   assert.equal(groundAnswer({ answer: "Try “Nowhere”.", sources: ["osm"] }, evidence).nothingChecked, true);
   assert.equal(groundAnswer({ answer: "Try Al-Rawda.", sources: [] }, evidence).nothingChecked, true);
+});
+
+test("groundedOptions keeps only offers that name a grounded place", () => {
+  const kept = groundedOptions(["Add Al-Rawda to day 2", "Add Trattoria X to day 2", "Show me more"], [evidence.places[0]]);
+  assert.deepEqual(kept, ["Add Al-Rawda to day 2"]);
+});
+
+test("lookupAnchor names a stop or the geocoder's hit, never the question's wording", async () => {
+  const plan = planEvidence(twoDays("")).places;
+  const nowhere = async () => null;
+  const near = async () => ({ name: "Siq", lat: 30.32, lon: 35.45 });
+  const far = async () => ({ name: "Treasury Hill", lat: 42.5, lon: -71.6 });
+  assert.equal((await lookupAnchor(plan, "monastery", nowhere)).place, "Monastery");
+  assert.equal((await lookupAnchor(plan, "the siq", near)).place, "Siq");
+  // A miss, a hit on another continent, or no place at all: the first located stop, not "the treasury".
+  for (const [named, geo] of [["the treasury", nowhere], ["the treasury", far], [null, nowhere]]) {
+    assert.deepEqual(await lookupAnchor(plan, named, geo), { place: "Treasury", lat: 30.3222, lng: 35.4513 });
+  }
+  // A plan with no located stop has nothing to search around: no anchor, so no model call.
+  assert.equal(await lookupAnchor([], "the treasury", near), null);
 });
