@@ -1,3 +1,6 @@
+import { LEAD_DAYS, addDays, ideaToPrefill } from "./homeIdeas";
+import type { IdeaRead } from "./ideaRead";
+import type { PlanPrefill } from "./planExamples";
 import { SCOPE_BLOCK_WITH_REFUSAL, tagUserText } from "./promptScope";
 
 /**
@@ -146,4 +149,38 @@ export function parseMeriAnswer(raw: string, evidence: Evidence): MeriAnswer {
     sources: [...new Set(sources as EvidenceSource[])],
     nothingChecked: false,
   };
+}
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DEFAULT_DAYS = 4;
+
+/** First day of the earliest best month still ahead; a month already under way starts a lead time out, as an idea's dates do. */
+function bestMonthStart(months: number[], today: string): string {
+  const now = Number(today.slice(5, 7));
+  if (months.includes(now)) return addDays(today, LEAD_DAYS);
+  const ahead = Math.min(...months.map((m) => (m - now + 12) % 12));
+  return new Date(Date.UTC(Number(today.slice(0, 4)), now - 1 + ahead, 1)).toISOString().slice(0, 10);
+}
+
+/** The planner's fields from a question and what Meri answered: the idea's own, plus what the answer settled. */
+export function answerToPrefill(read: IdeaRead, answer: MeriAnswer, today: string): PlanPrefill {
+  const out = ideaToPrefill(read, today);
+  const q = read.question;
+  if (!out.destination && q?.place) out.destination = q.place;
+  if (q?.kind === "best_time" && answer.months.length) {
+    out.startDate = bestMonthStart(answer.months, today);
+    out.endDate = addDays(out.startDate, (read.days ?? DEFAULT_DAYS) - 1);
+  }
+  if (q?.kind === "food" && q.diet) out.dietary = [...new Set([...(out.dietary ?? []), q.diet])];
+  // There is no Sightseeing chip; Culture & History is the one a "what to see" answer is about.
+  if (q?.kind === "see") out.interests = [...new Set([...(out.interests ?? []), "Culture & History"])];
+  return out;
+}
+
+/** The button that carries an answer into the planner. */
+export function answerPlanLabel(read: IdeaRead, answer: MeriAnswer): string {
+  const place = (read.destination ?? read.question?.place ?? "").split(",")[0].trim();
+  if (!place) return "Plan a trip";
+  // ponytail: names the first month the answer gave; the prefill starts at the earliest one ahead, which may differ.
+  return read.question?.kind === "best_time" && answer.months.length ? `Plan ${place} in ${MONTH_NAMES[answer.months[0] - 1]}` : `Plan a trip to ${place}`;
 }

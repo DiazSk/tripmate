@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ENTRY_LINE, NOTHING_CHECKED, buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer } from "./meriAnswer.ts";
+import { addDays, LEAD_DAYS } from "./homeIdeas.ts";
+import { ENTRY_LINE, NOTHING_CHECKED, answerPlanLabel, answerToPrefill, buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer } from "./meriAnswer.ts";
 import { tagUserText } from "./promptScope.ts";
 
 const evidence = {
@@ -84,4 +85,44 @@ test("buildAnswerPrompt fences the question and lists only evidence", () => {
   // Entry questions never reach the model.
   assert.ok(!p.includes(ENTRY_LINE.replace("{place}", "Petra")));
   assert.ok(!p.includes(ENTRY_LINE.split("{place}")[0]));
+});
+
+const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [], question: null };
+const readOf = (kind, extra = {}) => ({ ...none, destination: "Petra, Jordan", question: { kind, place: "Petra, Jordan", diet: null }, ...extra });
+const answerOf = (months = []) => ({ ...nothingCheckedAnswer(), nothingChecked: false, answer: "Go in spring.", months });
+
+test("a best-time answer starts the trip in the earliest upcoming best month", () => {
+  const p = answerToPrefill(readOf("best_time"), answerOf([4, 5]), "2026-10-24");
+  assert.deepEqual([p.destination, p.startDate, p.endDate], ["Petra, Jordan", "2027-04-01", "2027-04-04"]);
+});
+
+test("a best month already under way starts a lead time out, not on the 1st", () => {
+  const p = answerToPrefill(readOf("best_time"), answerOf([10, 11]), "2026-10-24");
+  assert.equal(p.startDate, addDays("2026-10-24", LEAD_DAYS));
+});
+
+test("a best month early next year rolls into it", () => {
+  assert.equal(answerToPrefill(readOf("best_time"), answerOf([1]), "2026-12-10").startDate, "2027-01-01");
+});
+
+test("the traveller's own length wins over the four-day default", () => {
+  const p = answerToPrefill(readOf("best_time", { days: 6 }), answerOf([4]), "2026-10-24");
+  assert.deepEqual([p.startDate, p.endDate], ["2027-04-01", "2027-04-06"]);
+});
+
+test("a food answer carries the diet the question named, a see answer asks for culture", () => {
+  const food = readOf("food", { question: { kind: "food", place: "Amman", diet: "Halal" } });
+  assert.deepEqual(answerToPrefill(food, answerOf(), "2026-10-24").dietary, ["Halal"]);
+  assert.ok(answerToPrefill(readOf("see"), answerOf(), "2026-10-24").interests.includes("Culture & History"));
+});
+
+test("an answer with no months says nothing about dates", () => {
+  const p = answerToPrefill(readOf("best_time"), answerOf(), "2026-10-24");
+  assert.deepEqual([p.startDate, p.endDate], ["", ""]);
+});
+
+test("the plan button names the place, and the month only for a best-time answer", () => {
+  assert.equal(answerPlanLabel(readOf("best_time"), answerOf([4, 5])), "Plan Petra in April");
+  assert.equal(answerPlanLabel(readOf("food", { destination: "Jaipur, India" }), answerOf()), "Plan a trip to Jaipur");
+  assert.equal(answerPlanLabel(readOf("best_time", { destination: "Jaipur, India" }), answerOf()), "Plan a trip to Jaipur");
 });
