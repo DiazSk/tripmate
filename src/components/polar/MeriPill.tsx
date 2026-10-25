@@ -57,6 +57,7 @@ function readFields(r: IdeaRead): [string, string][] {
     ["Who", who || false],
     ["Pace", r.pace ? r.pace[0].toUpperCase() + r.pace.slice(1) : false],
     ["Into", r.interests.join(", ") || false],
+    ["Food", (r.dietary ?? []).join(", ") || false],
   ];
   return rows.filter((row): row is [string, string] => Boolean(row[1]));
 }

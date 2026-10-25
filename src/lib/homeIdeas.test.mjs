@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { addDays, ideaToPrefill, LEAD_DAYS, readyTripToPrefill } from "./homeIdeas.ts";
 
-const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [] };
+const none = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [] };
 
 const trip = {
   slug: "x", title: "X", destination: "Petra, Jordan", country: "", region: "", monument: "", days: 3, priceFrom: 1000,
@@ -25,7 +25,15 @@ test("ideaToPrefill: only what the sentence said", () => {
   assert.equal(p.destination, "");
   assert.equal(p.startDate, "");
   assert.equal(p.endDate, "");
-  for (const k of ["budgetUsd", "adults", "children", "pace", "interests", "budgetBasis"]) assert.equal(k in p, false, k);
+  for (const k of ["budgetUsd", "adults", "children", "pace", "interests", "budgetBasis", "dietary"]) assert.equal(k in p, false, k);
+});
+
+test("ideaToPrefill: a dietary need said in the sentence reaches the planner", () => {
+  assert.deepEqual(ideaToPrefill({ ...none, destination: "California, United States", dietary: ["Halal"] }, "2026-10-23").dietary, ["Halal"]);
+  // A read from a server older than the field.
+  const old = { ...none };
+  delete old.dietary;
+  assert.equal("dietary" in ideaToPrefill(old, "2026-10-23"), false);
 });
 
 test("ideaToPrefill: budget, basis, party, pace, interests carried", () => {

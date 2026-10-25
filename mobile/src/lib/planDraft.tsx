@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 
 import { IDEA_INTERESTS } from '@shared/ideaRead';
-import { legacyExplorerStyle } from '@shared/userAnswers';
+import { legacyExplorerStyle, travelStyleOf } from '@shared/userAnswers';
 
 import type {
   CrowdPreference,
@@ -184,6 +184,8 @@ export type PlanPrefillParams = {
   must?: string;
   /** `INTERESTS` labels, comma-separated; unknown ones are dropped. */
   into?: string;
+  /** `DIETARY_TAGS` labels, comma-separated; unknown ones are dropped. Never the free-text note. */
+  diet?: string;
 };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -203,6 +205,43 @@ const count = (raw: string | undefined, min: number, max: number) => {
  */
 export function draftFromPrefill(params: PlanPrefillParams): PlanDraft {
   return { ...emptyDraft(), ...prefillPatch(params) };
+}
+
+/**
+ * The saved profile over a draft's untouched fields, once it loads: what the traveller has told
+ * TripMate about themselves (a halal diet, step-free routes, their pace and interests) without
+ * saying it again on every trip, as the web's planner does from its first render.
+ *
+ * Untouched means still `emptyDraft`'s value, so a prefill (Meri's reading, a ready-made trip) or
+ * an edit made before the profile arrived always wins. This also matters on the way out: the
+ * generating screen saves the draft back as the profile, so a planner that started blank wrote a
+ * blank diet over a saved one.
+ */
+export function profileSeed(profile: TravelerProfile, prev: PlanDraft): Partial<PlanDraft> {
+  const base = emptyDraft();
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const seed: Partial<PlanDraft> = {};
+  const take = <K extends keyof PlanDraft>(key: K, value: PlanDraft[K] | undefined) => {
+    if (value !== undefined && same(prev[key], base[key]) && !same(value, base[key])) seed[key] = value;
+  };
+  const style = travelStyleOf(profile);
+  take('group', profile.group);
+  if (seed.group && same(prev.party, base.party)) {
+    const party = partyForGroup(seed.group);
+    if (party) seed.party = party;
+  }
+  take('pace', style.pace);
+  take('discovery', style.discovery);
+  take('energy', profile.energy);
+  take('crowds', profile.crowds);
+  // The stars were picked from the profile's list, so they come with it or not at all.
+  if (same(prev.interests, base.interests) && same(prev.starredInterests, base.starredInterests)) {
+    take('interests', profile.priorities);
+    take('starredInterests', profile.topPriorities);
+  }
+  take('dietary', profile.dietary);
+  take('accessibility', profile.accessibility);
+  return seed;
 }
 
 /** Only the fields a link speaks for, and only the ones that parse: `{}` for a link that says nothing. */
@@ -230,6 +269,8 @@ export function prefillPatch(params: PlanPrefillParams): Partial<PlanDraft> {
   if (must) patch.mustInclude = must;
   const into = params.into?.split(',').map((s) => s.trim()).filter((s) => INTERESTS.includes(s));
   if (into?.length) patch.interests = into;
+  const diet = params.diet?.split(',').map((s) => s.trim()).filter((s) => DIETARY_TAGS.includes(s));
+  if (diet?.length) patch.dietary = { tags: diet, note: '' };
   return patch;
 }
 
@@ -253,10 +294,13 @@ const PlanDraftContext = createContext<Ctx | null>(null);
 export function PlanDraftProvider({
   children,
   prefill,
+  profile,
 }: {
   children: React.ReactNode;
   /** Applied once: the wizard starts from it and the traveller's edits win from then on. */
   prefill?: PlanPrefillParams;
+  /** The saved profile, once it loads: laid over the fields nothing has set yet (`profileSeed`), once. */
+  profile?: TravelerProfile | null;
 }) {
   const [draft, setDraft] = useState<PlanDraft>(() => (prefill ? draftFromPrefill(prefill) : emptyDraft()));
   /**
@@ -281,6 +325,11 @@ export function PlanDraftProvider({
       setApplied(true);
       setDraft((prev) => ({ ...prev, ...changes }));
     }
+  }
+  const [seeded, setSeeded] = useState(false);
+  if (!seeded && profile) {
+    setSeeded(true);
+    setDraft((prev) => ({ ...prev, ...profileSeed(profile, prev) }));
   }
   const value = useMemo<Ctx>(
     () => ({

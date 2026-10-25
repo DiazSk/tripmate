@@ -1,5 +1,9 @@
 import { Stack, useGlobalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
+
+import { getProfile } from '@/api/tripMateApi';
+import type { TravelerProfile } from '@/api/types';
 
 import { SymbolView } from '@/components/symbol';
 import { SettingsColors } from '@/components/settings-list';
@@ -59,8 +63,18 @@ export default function PlanLayout() {
   // A link into the wizard — the landing's "Plan one like it" and its closing form — carries the
   // fields it can speak for as params on /plan/basics. The provider reads them once, at mount.
   const params = useGlobalSearchParams<PlanPrefillParams>();
+  // The traveller's saved profile (diet, access, pace, interests), fetched once per planner: the
+  // provider fills only what nothing else has set. Signed out or offline, it stays null.
+  const [profile, setProfile] = useState<TravelerProfile | null>(null);
+  useEffect(() => {
+    let live = true;
+    void getProfile().then((p) => live && p && setProfile(p));
+    return () => {
+      live = false;
+    };
+  }, []);
   return (
-    <PlanDraftProvider prefill={params}>
+    <PlanDraftProvider prefill={params} profile={profile}>
       <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
         <Stack.Screen name="basics" options={{ headerShown: false }} />
         {/* The planner's half sheets: native form sheets opening at the medium detent and

@@ -116,6 +116,11 @@ test("plannerPatch: party sets group", () => {
   assert.equal(plannerPatch({ children: 0 }).group, "solo");
 });
 
+test("plannerPatch: carries dietary tags, and leaves them out when not given", () => {
+  assert.deepEqual(plannerPatch({ dietary: ["Halal"] }), { dietary: ["Halal"] });
+  assert.equal("dietary" in plannerPatch({ destination: "Kyoto, Japan" }), false);
+});
+
 test("plannerPatch: carries basis, pace, interests, mustInclude as given", () => {
   assert.deepEqual(
     plannerPatch({

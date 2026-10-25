@@ -5,6 +5,7 @@ import {
   draftFromPrefill,
   emptyDraft,
   prefillPatch,
+  profileSeed,
   toGenerateRequest,
   toTravelerProfile,
   toUserAnswers,
@@ -227,7 +228,46 @@ describe('draftFromPrefill', () => {
   });
 });
 
+describe('profileSeed', () => {
+  const profile = {
+    group: 'couple' as const,
+    explorerStyle: 'relaxed' as const,
+    energy: 'low' as const,
+    crowds: 'avoid' as const,
+    priorities: ['Food', 'Culture & History'],
+    topPriorities: ['Food'],
+    dietary: { tags: ['Halal'], note: 'No pork gelatin' },
+    accessibility: { stepFreeRequired: true, limitStairs: false, note: '' },
+  };
+  test('a fresh draft takes the saved profile: diet, access, interests, pace and the rest', () => {
+    expect(profileSeed(profile, emptyDraft())).toEqual({
+      group: 'couple',
+      party: { adults: 2, children: 0, infants: 0 },
+      pace: 'relaxed',
+      energy: 'low',
+      crowds: 'avoid',
+      interests: ['Food', 'Culture & History'],
+      starredInterests: ['Food'],
+      dietary: { tags: ['Halal'], note: 'No pork gelatin' },
+      accessibility: { stepFreeRequired: true, limitStairs: false, note: '' },
+    });
+  });
+  test('a field the trip already says (a prefill, or the traveller) is never overwritten', () => {
+    const meri = { ...emptyDraft(), dietary: { tags: ['Vegan'], note: '' }, interests: ['Nightlife'] };
+    const seed = profileSeed(profile, meri);
+    expect(seed.dietary).toBeUndefined();
+    expect(seed.interests).toBeUndefined();
+    // Stars belong to the list they were picked from, so they stay with the trip's interests.
+    expect(seed.starredInterests).toBeUndefined();
+    expect(seed.accessibility).toEqual(profile.accessibility);
+  });
+});
+
 describe('prefillPatch', () => {
+  test('diet becomes the dietary chips, keeping only the planner\'s own tags', () => {
+    expect(prefillPatch({ diet: 'Halal,Paleo, Nut allergy' })).toEqual({ dietary: { tags: ['Halal', 'Nut allergy'], note: '' } });
+    expect(prefillPatch({ diet: 'Paleo' })).toEqual({});
+  });
   // A deep link's params land a render after the wizard mounts, carried on expo-router's own
   // `{ pop, initial, path }` first. The provider lays this patch over the draft when they do, so it
   // must say nothing for that first object, and touch nothing the link does not name.

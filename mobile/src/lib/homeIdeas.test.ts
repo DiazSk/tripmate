@@ -12,7 +12,7 @@ import {
   typewriterTick,
 } from './homeIdeas';
 
-const none: IdeaRead = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [] };
+const none: IdeaRead = { destination: null, kind: null, days: null, budget: null, budgetBasis: null, adults: null, children: null, pace: null, interests: [], tags: [], avoidTags: [], dietary: [] };
 
 const trip = (o: Partial<ReadyTrip> & { slug: string }): ReadyTrip => ({
   title: o.slug,
@@ -167,6 +167,12 @@ describe('ideaHeadline', () => {
 });
 
 describe('ideaPrefill', () => {
+  test('a dietary need said in the sentence goes to the planner as diet', () => {
+    expect(ideaPrefill({ ...none, destination: 'California, United States', dietary: ['Halal', 'Nut allergy'] }, '2026-10-21')).toEqual({
+      destination: 'California, United States',
+      diet: 'Halal,Nut allergy',
+    });
+  });
   test('dates only when days is known, today + 30', () => {
     expect(ideaPrefill({ ...none, kind: 'somewhere warm', days: 5 }, '2026-10-21')).toEqual({ start: '2026-11-20', end: '2026-11-24' });
     expect(ideaPrefill(none, '2026-10-21')).toEqual({});

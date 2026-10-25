@@ -1503,6 +1503,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         setStarredInterests((s) => s.filter((t) => chosen.includes(t)));
       }
       if (patch.mustInclude !== undefined) setMustInclude(patch.mustInclude);
+      // The chips only: a note the traveller wrote on their profile stays theirs.
+      if (patch.dietary !== undefined) setDietary((d) => ({ ...d, tags: patch.dietary! }));
     }
     // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
     // should see what it filled in before it prices anything.

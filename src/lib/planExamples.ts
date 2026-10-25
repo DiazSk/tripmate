@@ -92,6 +92,8 @@ export type PlanPrefill = {
   interests?: string[];
   /** Stops to see, comma-joined as the planner's must-include field takes them. */
   mustInclude?: string;
+  /** Dietary chips (DIETARY_TAGS) the traveller said they need; the free-text note is never prefilled. */
+  dietary?: string[];
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -156,6 +158,7 @@ export function plannerPatch(p: PlanPrefill): {
   pace?: PacePreference;
   interests?: string[];
   mustInclude?: string;
+  dietary?: string[];
 } {
   const patch: ReturnType<typeof plannerPatch> = {};
   if (p.destination !== undefined) patch.destination = p.destination;
@@ -172,6 +175,7 @@ export function plannerPatch(p: PlanPrefill): {
   if (p.pace !== undefined) patch.pace = p.pace;
   if (p.interests !== undefined) patch.interests = p.interests;
   if (p.mustInclude !== undefined) patch.mustInclude = p.mustInclude;
+  if (p.dietary !== undefined) patch.dietary = p.dietary;
   return patch;
 }
 

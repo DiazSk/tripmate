@@ -27,6 +27,9 @@ export const IDEA_INTERESTS = [
   "Photography",
 ] as const;
 
+/** The planner's dietary chips, verbatim (both clients' DIETARY_TAGS). A need the plan keeps, not a taste. */
+export const IDEA_DIETS = ["Vegetarian", "Vegan", "Pescatarian", "Halal", "Kosher", "Gluten-free", "Dairy-free", "Nut allergy"] as const;
+
 /** `undefined`-free on purpose: `null` is "the sentence did not say", so the client keeps its own default. */
 export interface IdeaRead {
   /** A place a geocoder can read ("Lisbon, Portugal"), or null. */
@@ -48,6 +51,8 @@ export interface IdeaRead {
   /** Tags the traveller ruled out ("no food tours", "anything but a city"). A matcher excludes
    *  them; leaving a refusal out of `tags` alone would still offer the trip that has it. */
   avoidTags: IdeaTag[];
+  /** What the traveller must eat or avoid ("halal food", "no nuts"), from `IDEA_DIETS`. */
+  dietary: string[];
 }
 
 /** What the box takes. The route checks it before the model sees a character. */
@@ -64,7 +69,7 @@ Read the traveller's one-sentence trip idea into planner fields. Today is ${toda
 ${tagUserText(idea)}
 
 Return exactly one JSON object and nothing else:
-{"destination": string|null, "kind": string|null, "days": integer|null, "budget": number|null, "budgetBasis": "per_person"|"whole_party"|null, "adults": integer|null, "children": integer|null, "pace": "relaxed"|"balanced"|"packed"|null, "interests": string[], "tags": string[], "avoidTags": string[]}
+{"destination": string|null, "kind": string|null, "days": integer|null, "budget": number|null, "budgetBasis": "per_person"|"whole_party"|null, "adults": integer|null, "children": integer|null, "pace": "relaxed"|"balanced"|"packed"|null, "interests": string[], "tags": string[], "avoidTags": string[], "dietary": string[]}
 
 Rules:
 - Use null (or [] for the lists) for anything the sentence did not say. Never guess a field it did not give.
@@ -74,7 +79,8 @@ Rules:
 - pace: "slow" or "easy" is relaxed, "packed" or "see everything" is packed.
 - interests: choose only from ${IDEA_INTERESTS.map((i) => `"${i}"`).join(", ")}.
 - tags: choose only from ${IDEA_TAGS.map((t) => `"${t}"`).join(", ")}.
-- avoidTags: from the same list, only the ones the traveller ruled out ("no food tours" is Food, "anything but a city" is City, "nothing historic" is History). A ruled-out tag never goes in tags.`;
+- avoidTags: from the same list, only the ones the traveller ruled out ("no food tours" is Food, "anything but a city" is City, "nothing historic" is History). A ruled-out tag never goes in tags.
+- dietary: choose only from ${IDEA_DIETS.map((d) => `"${d}"`).join(", ")}, and only what the traveller said they must eat or avoid ("halal food" is Halal, "no nuts" is Nut allergy). A cuisine they would enjoy is an interest, not a diet.`;
 }
 
 const int = (v: unknown, min: number, max: number): number | null =>
@@ -122,5 +128,6 @@ export function parseIdeaRead(raw: string): IdeaRead | null {
     interests: subset(o.interests, IDEA_INTERESTS),
     tags: subset(o.tags, IDEA_TAGS).filter((t) => !avoidTags.includes(t)),
     avoidTags,
+    dietary: subset(o.dietary, IDEA_DIETS),
   };
 }

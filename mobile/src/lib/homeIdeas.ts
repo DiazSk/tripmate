@@ -23,6 +23,8 @@ export function ideaPrefill(read: IdeaRead, today: string): PlanPrefillParams {
   if (read.children !== null) out.children = String(read.children);
   if (read.pace) out.pace = read.pace;
   if (read.interests.length) out.into = read.interests.join(',');
+  // `?? []`: a read from a server older than the field.
+  if ((read.dietary ?? []).length) out.diet = read.dietary.join(',');
   return out;
 }
 
