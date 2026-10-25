@@ -190,5 +190,8 @@ for (const [name, build] of [
     assert.match(prompt, /no "reply" and no "ops"/);
     // The diet goes into an Overpass query, so the model is handed the closed list.
     assert.ok(prompt.includes("Halal") && prompt.includes("Nut allergy"));
+    // The lookup shape sits beside the reply shape in the final contract, not only up in the rules.
+    const contract = prompt.slice(prompt.lastIndexOf("Respond with ONLY valid JSON"));
+    assert.ok(contract.includes(`return ONLY {"lookup":{"kind":`), "lookup in the output contract");
   });
 }

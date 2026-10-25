@@ -139,6 +139,9 @@ whole. "diet" is one of ${IDEA_DIETS.map((d) => `"${d}"`).join(", ")}, or null.
 A question about the plan itself (its costs, times, distances, what is on a day) is not a lookup,
 and neither is a request to change the plan: answer or make it as above.`;
 
+/** Repeated beside each output contract: a model that reads only the shape there never chose lookup. */
+const LOOKUP_CONTRACT = `Or, for a lookup question (above), return ONLY {"lookup":{"kind":"best_time"|"food"|"see"|"entry","place":string|null,"diet":string|null}}.`;
+
 /** Trimmed view of the itinerary: enough to reason about geography, timing and sequence without
  *  spending tokens on fields an edit never consults. */
 function compactDay(day: DayPlan, dayIndex: number): string {
@@ -256,6 +259,8 @@ ${SHARED_RULES}
 Respond with ONLY valid JSON, no markdown fences:
 {"reply":"your answer to their message, as long as the question deserves and short when it was a change","options":["short tappable reply","another"],"changes":["one short line per change, in plain language"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an unavoidable adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
 
+${LOOKUP_CONTRACT}
+
 "ops" may mix the op types shown above. "warnings" is an empty array when nothing tripped a guardrail. "options" must be an empty array unless you asked a question. Each option is what the traveler would tap to answer it: under 6 words, and directly usable as their next message.`;
 }
 
@@ -351,6 +356,8 @@ ${SHARED_RULES}
 Respond with ONLY valid JSON, no markdown fences, and NOT the {"days":[...]} shape you used when you
 first wrote this itinerary:
 {"reply":"your answer to their message, as long as the question deserves and short when it was a change","options":["short tappable reply","another"],"changes":["one short line per change"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
+
+${LOOKUP_CONTRACT}
 
 "options" must be an empty array unless you asked a question.
 

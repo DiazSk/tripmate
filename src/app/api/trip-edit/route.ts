@@ -376,9 +376,14 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
         return offTopicResponse("chat");
       }
       // A lookup the session holds no shown answer to would sit in its memory as a question left
-      // hanging; a resumed API session is cut back to before it. A CLI file can't be, as above.
+      // hanging. A resumed API session is cut back to before it. A session this turn opened (fresh
+      // or rebuilt) holds nothing else worth keeping, so it is not stored and the next turn rebuilds
+      // from trip_chat_turns, which hold only what the traveller was shown.
+      // ponytail: a resumed CLI session keeps the hanging lookup, since its JSONL can't be cut; the
+      // CLI only serves local development, so that is accepted.
       if (!answered.inSession && rollback) truncateLlmSession(rollback.id, rollback.keep);
-      if (answered.sessionId) servedBy = answered.sessionId;
+      if (!answered.inSession && !rollback && servedBy !== resumedFrom) servedBy = undefined;
+      else if (answered.sessionId) servedBy = answered.sessionId;
       parsed = { reply: answered.reply, options: answered.options };
       found = { sources: answered.sources, places: answered.places };
     }
@@ -507,10 +512,9 @@ async function answerLookup(input: {
   if (!input.session) return { ...nothing, inSession: false };
 
   const plan = planEvidence(itinerary);
-  // The destination only narrows the geocoder's search; it never reaches the prompt.
-  const anchor = await lookupAnchor(plan.places, typeof lookup.place === "string" ? lookup.place : null, (name) =>
-    geocodeDestination(`${name}, ${destination}`)
-  );
+  // The bare name: Open-Meteo's geocoder matches a place name, and "Wadi Musa, Petra, Jordan" finds
+  // nothing at all. A same-named place elsewhere is rejected by lookupAnchor's near-the-plan check.
+  const anchor = await lookupAnchor(plan.places, typeof lookup.place === "string" ? lookup.place : null, geocodeDestination);
   if (!anchor) return { ...nothing, inSession: false };
   const { place } = anchor;
 
