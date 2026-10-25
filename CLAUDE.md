@@ -162,6 +162,29 @@ The pipeline's governing separation: the **skill** (`.claude/skills/itinerary-pl
 
 **A third way a plan comes into being: imported.** `POST /api/import-plan` reads a traveller's own plan into days, and `POST /api/import-plan/complete` saves it as a draft with `Itinerary.origin: "imported"`. The model only copies and fills cost, duration, category and description — `parseFill` refuses any reply whose stop ids differ from the traveller's, so nothing is added, dropped or reordered. Stops carry `estimated` (what TripMate supplied) and `closedDays` (read by the `closed` guardrail). Spec: `docs/superpowers/specs/2026-10-10-import-own-itinerary-design.md`.
 
+### Meri answers from checked facts, not from memory
+
+A travel question ("best time to visit Petra?", "halal food near the Treasury?") is answered by Meri on
+the Home pill and in the trip chat **only from facts TripMate fetched for that question**, with where
+each came from. Home's `read-idea` and the chat's `lookup` turn both gather evidence
+(`gatherEvidence`, `src/lib/meriEvidence.ts`: Open-Meteo climate, Overpass diet and cuisine tags,
+`placeSearch`, OpenTripMap and Yelp when keyed, the matched ready-made trip, and on the trip page the
+plan itself) and make one `meri-answer` call that sees only the question and that evidence. `entry`
+questions (visas) never reach a model: the answer is the fixed official-source line.
+
+**The check lives in `src/lib/meriAnswer.ts`**, in `parseMeriAnswer` and the `groundAnswer` under it, and
+it is the guarantee rather than the prompt. **Places, months and sources a traveller sees are rendered
+from the evidence records the model's ids point at, never from its prose**, and one id the evidence does
+not hold (or a quoted or bolded name it does not hold) replaces the whole answer with the honest "nothing
+checked" line. Don't render a name from the answer's text, and don't add a field to the answer that
+skips the id lookup. The ceiling is stated, not fixed: a place named in plain prose is checked by the
+prompt alone.
+
+**A question turn costs one extra, cheap call** (the answer, on `cheapModel()`); ideas, plan changes and
+ordinary chat cost none, and the whole question takes one allowance. Fetchers are fail-soft, so an
+Overpass outage reads as "nothing checked" rather than an error. Spec:
+`docs/superpowers/specs/2026-10-24-meri-grounded-answers-design.md`.
+
 ### Story mode owns the camera, and the beat is the clock
 
 Pressing Play on a day narrates it: the camera flies to each stop while a voice reads a story-format
