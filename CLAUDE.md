@@ -438,6 +438,12 @@ A `trips` row, by contrast, now exists from the moment a plan does. `trips.statu
 
 **The key split is a build-time one.** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is inlined at build (a Dockerfile `ARG`), which is why `clerkClientConfigured()` checks it alone to decide whether the root layout mounts `<ClerkProvider>`; the secret and webhook secret are runtime-only and never in the image. `clerkClientConfigured()` is for server code only — a client bundle inlines the literal `process.env.NEXT_PUBLIC_X`, not a read through a parameter. Mobile reads `process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` as that literal for the same reason. Only `/api/avatar`, `/api/onboarding*` and `/api/account*` return 401 signed out.
 
+### Analytics
+
+**PostHog, web and server only, and nothing before a Yes.** `src/lib/analytics/` holds the client (lazy `posthog-js` after consent, masked replay), the server helper (fail-soft, gated on the `analytics_consent` row) and the derived ids (`analyticsIdFor`, an HMAC under `ANALYTICS_ID_SECRET`, so an owner id never reaches PostHog). The Expo app sends nothing yet. Env: `NEXT_PUBLIC_POSTHOG_KEY` / `_HOST`, `ANALYTICS_ID_SECRET`, `ANALYTICS_INTERNAL_USER_IDS`, and `POSTHOG_PERSONAL_API_KEY` / `POSTHOG_PROJECT_ID` for deletions. Unset key: no prompt, no SDK.
+
+**Two traps, both silent.** The CSP reads the PostHog origins from the key **when the server starts** (`posthogOrigins` in `next.config.ts`): a key added to a running `next dev` reloads `.env.local`, loads the SDK, and then every request is refused by the CSP until a restart. And PostHog drops events from automated browsers: a headless check sends nothing unless it has an ordinary user agent, `navigator.webdriver` false and no `HeadlessChrome` client hints. Local keys point at the PostHog dev project; testers get their own.
+
 ## Gotchas
 
 - **Calendar dates are parsed as UTC midnight.** `new Date("2026-09-19")` formatted with local accessors rolls back a day anywhere west of Greenwich. Use `getUTC*()` / `timeZone: "UTC"` for anything date-only — this has already caused a wrong day-of-week to reach generated output.
