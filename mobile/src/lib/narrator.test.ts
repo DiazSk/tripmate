@@ -1,6 +1,6 @@
 import { estimateDurationMs, LEAD_IN_MS } from '@shared/storyPacing';
 
-import { pickNarrator, silentSpeech, speakBeat, START_GUARD_MS, type SpeakOptions, type SpeechLike } from './narrator';
+import { pickNarrator, resumeStart, silentSpeech, speakBeat, START_GUARD_MS, type SpeakOptions, type SpeechLike } from './narrator';
 
 function fakeSpeech() {
   const calls: { text: string; options: SpeakOptions }[] = [];
@@ -153,6 +153,67 @@ describe('speakBeat', () => {
   });
 });
 
+describe('speakBeat resuming', () => {
+  it('starts at the sentence it was paused on, not the first', () => {
+    const { speech, calls } = fakeSpeech();
+    const onSentence = jest.fn();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onSentence }, { speech, from: { sentence: 1, words: 0 } });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    expect(calls.map((c) => c.text)).toEqual(['It is old.']);
+    expect(onSentence).toHaveBeenCalledWith(1, 3, 0);
+  });
+
+  it('re-enters a sentence one word before where it stopped, and lights the words already heard', () => {
+    const { speech, calls } = fakeSpeech();
+    const onSentence = jest.fn();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onSentence }, { speech, from: { sentence: 0, words: 3 } });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    expect(calls[0].text).toBe('the castle.');
+    expect(onSentence).toHaveBeenCalledWith(0, 3, 2);
+    // The sentence keeps its own pace: it is still the first of three.
+    expect(calls[0].options.rate).toBe(0.92);
+  });
+
+  it('never skips a sentence’s last word, and carries on to the next sentence whole', () => {
+    const { speech, calls } = fakeSpeech();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn() }, { speech, from: { sentence: 0, words: 40 } });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    expect(calls[0].text).toBe('castle.');
+    calls[0].options.onStart?.();
+    calls[0].options.onDone?.();
+    jest.advanceTimersByTime(700);
+    expect(calls[1].text).toBe('It is old.');
+  });
+
+  it('a place past the beat’s end starts the last sentence rather than skipping the beat', () => {
+    const { speech, calls } = fakeSpeech();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn() }, { speech, from: { sentence: 9, words: 0 } });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    expect(calls[0].text).toBe('Go now.');
+  });
+});
+
+describe('resumeStart', () => {
+  it('is the top of the beat when there is nothing to resume', () => {
+    expect(resumeStart(BEAT)).toEqual({ sentence: 0, skip: 0 });
+  });
+
+  it('is the sentence it stopped in, one word back, never past its last word', () => {
+    expect(resumeStart(BEAT, { sentence: 0, words: 3 })).toEqual({ sentence: 0, skip: 2 });
+    expect(resumeStart(BEAT, { sentence: 0, words: 40 })).toEqual({ sentence: 0, skip: 3 });
+    expect(resumeStart(BEAT, { sentence: 9, words: 0 })).toEqual({ sentence: 2, skip: 0 });
+  });
+});
+
+describe('speakBeat resuming, timing', () => {
+  it('a resume speaks at once: the camera is not moving, so there is no lead-in to wait for', () => {
+    const { speech, calls } = fakeSpeech();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn() }, { speech, from: { sentence: 1, words: 2 } });
+    jest.advanceTimersByTime(0);
+    expect(calls.map((c) => c.text)).toEqual(['is old.']);
+  });
+});
+
 describe('pickNarrator', () => {
   const v = (identifier: string, name: string, language: string, quality = 'Default') => ({
     identifier,
@@ -181,11 +242,11 @@ describe('subtitles', () => {
     const onSentence = jest.fn();
     speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onSentence }, { speech });
     jest.advanceTimersByTime(LEAD_IN_MS);
-    expect(onSentence).toHaveBeenLastCalledWith(0, 3);
+    expect(onSentence).toHaveBeenLastCalledWith(0, 3, 0);
     calls[0].options.onStart?.();
     calls[0].options.onDone?.();
     jest.advanceTimersByTime(700);
-    expect(onSentence).toHaveBeenLastCalledWith(1, 3);
+    expect(onSentence).toHaveBeenLastCalledWith(1, 3, 0);
   });
 
   it('the silent voice keeps the narrator\'s pace: words across each sentence, then the end', () => {

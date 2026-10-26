@@ -44,18 +44,39 @@ function watchdogMs(sentence: string): number {
   return estimateDurationMs(sentence) * 2.5 + 4000;
 }
 
+/**
+ * **The resume point.** Pause, mute and a trip to the background used to say the beat again from its
+ * first word: most beats are one or two long sentences, so to the ear the film started over. It
+ * re-enters on the sentence it stopped in, one word back so it starts on a word already heard, and
+ * never past the sentence's last word. Exported so the subtitle is placed there before the voice
+ * starts, instead of showing the sentence unlit (and the clock a sentence behind) until it does.
+ */
+export function resumeStart(text: string, from?: { sentence: number; words: number }): { sentence: number; skip: number } {
+  if (!from) return { sentence: 0, skip: 0 };
+  const chunks = splitForSpeech(text);
+  const sentence = Math.max(0, Math.min(chunks.length - 1, from.sentence));
+  const words = chunks[sentence]?.split(' ').length ?? 1;
+  return { sentence, skip: Math.max(0, Math.min(words - 1, from.words - 1)) };
+}
+
 export function speakBeat(
   text: string,
   handlers: {
     onEnd: () => void;
     onError: () => void;
     onWord?: () => void;
-    /** A sentence is about to be said: the subtitle shows one at a time. */
-    onSentence?: (index: number, count: number) => void;
+    /** A sentence is about to be said: the subtitle shows one at a time. `startWord` is how many of
+     *  its words were already heard, when a resume re-enters it part-way. */
+    onSentence?: (index: number, count: number, startWord: number) => void;
   },
-  options: { speech: SpeechLike; voice?: string },
+  options: {
+    speech: SpeechLike;
+    voice?: string;
+    /** Where a paused or muted beat picks up: the sentence, and how many of its words were heard. */
+    from?: { sentence: number; words: number };
+  },
 ): { cancel(): void } {
-  const { speech, voice } = options;
+  const { speech, voice, from } = options;
   const chunks = splitForSpeech(text);
   let done = false;
   let started = false;
@@ -78,11 +99,13 @@ export function speakBeat(
       handlers.onError();
     });
 
-  const speakChunk = (index: number) => {
+  const speakChunk = (index: number, skip = 0) => {
     if (done) return;
     if (index >= chunks.length) return finish(handlers.onEnd);
     const chunk = chunks[index];
-    handlers.onSentence?.(index, chunks.length);
+    handlers.onSentence?.(index, chunks.length, skip);
+    // A resumed sentence says only its unheard words, but keeps its own pace and pause after.
+    const said = skip > 0 ? chunk.split(' ').slice(skip).join(' ') : chunk;
     let settled = false;
     const next = () => {
       if (done || settled) return;
@@ -93,16 +116,16 @@ export function speakBeat(
     };
 
     timer = started
-      ? setTimeout(next, watchdogMs(chunk))
+      ? setTimeout(next, watchdogMs(said))
       : setTimeout(fail, START_GUARD_MS);
-    speech.speak(chunk, {
+    speech.speak(said, {
       rate: rateFor(index, chunks.length),
       voice,
       onStart: () => {
         if (done || settled || started) return;
         started = true;
         clearTimeout(timer);
-        timer = setTimeout(next, watchdogMs(chunk));
+        timer = setTimeout(next, watchdogMs(said));
       },
       onDone: next,
       // Meri's speaking pulse. Dropped by the same latch as everything else after a cancel.
@@ -113,8 +136,10 @@ export function speakBeat(
     });
   };
 
-  // The lead-in lets the camera begin its move before the narrator speaks over it.
-  timer = setTimeout(() => speakChunk(0), LEAD_IN_MS);
+  const start = resumeStart(text, from);
+  // The lead-in lets the camera begin its move before the narrator speaks over it. A resume has no
+  // move to wait for, and a pause of silence there reads as the film catching up.
+  timer = setTimeout(() => speakChunk(start.sentence, start.skip), from ? 0 : LEAD_IN_MS);
 
   return {
     cancel() {

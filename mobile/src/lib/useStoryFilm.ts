@@ -5,7 +5,7 @@ import { useSharedValue } from 'react-native-reanimated';
 
 import { storyScript } from '@/api/tripMateApi';
 import type { Trip } from '@/api/types';
-import { silentSpeech, speakBeat } from '@/lib/narrator';
+import { resumeStart, silentSpeech, speakBeat } from '@/lib/narrator';
 import { deviceSpeech, filmAudio, narratorVoice } from '@/lib/narratorEngine';
 import { filmReducer, filmStopFor, initialFilm } from '@/lib/storyFilm';
 
@@ -29,6 +29,13 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
   const sentence = useSharedValue(0);
   const spoken = useSharedValue(0);
   const voice = useRef<string | undefined>(undefined);
+  /** Where the voice is: which beat, which sentence, how many of its words were heard. A pause, a
+   *  mute or the voice failing re-runs the clock on the same beat, and it resumes here rather than
+   *  from the beat's first word. Only what means "from the top" clears it (`fromTheTop`). */
+  const place = useRef({ beat: -1, sentence: 0, words: 0 });
+  const fromTheTop = () => {
+    place.current = { beat: -1, sentence: 0, words: 0 };
+  };
   // Read inside the fetch rather than depended on: a refreshed trip object mid-film must not
   // restart it.
   const tripRef = useRef(trip);
@@ -39,6 +46,7 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
   useEffect(() => {
     if (!active) return;
     let live = true;
+    fromTheTop();
     dispatch({ type: 'reset' });
     const t = tripRef.current;
     const params = {
@@ -81,8 +89,15 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
   // so the subtitle still moves sentence by sentence and word by word.
   useEffect(() => {
     if (!active || state.phase !== 'playing' || !beat) return;
-    sentence.value = 0;
-    spoken.value = 0;
+    // The same beat again means a resume (play after pause, a mute, the voice failing); a new beat
+    // starts at its first word.
+    const resume = place.current.beat === state.beat ? { sentence: place.current.sentence, words: place.current.words } : undefined;
+    // The subtitle goes where the voice will re-enter before it does, so the caption never shows the
+    // sentence unlit and the clock (read off the lit words) never drops back for a moment.
+    const start = resumeStart(beat.text, resume);
+    place.current = { beat: state.beat, sentence: start.sentence, words: start.skip };
+    sentence.value = start.sentence;
+    spoken.value = start.skip;
     const silent = state.voiceBroken || state.muted;
     const handle = speakBeat(
       beat.text,
@@ -92,18 +107,21 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
         onWord: () => {
           words.value += 1;
           spoken.value += 1;
+          place.current.words += 1;
         },
-        onSentence: (index) => {
+        onSentence: (index, _count, startWord) => {
           sentence.value = index;
-          spoken.value = 0;
+          spoken.value = startWord;
+          place.current = { beat: state.beat, sentence: index, words: startWord };
         },
       },
-      silent ? { speech: silentSpeech() } : { speech: deviceSpeech, voice: voice.current },
+      { ...(silent ? { speech: silentSpeech() } : { speech: deviceSpeech, voice: voice.current }), from: resume },
     );
     return () => handle.cancel();
   }, [active, state.phase, state.beat, state.voiceBroken, state.muted, beat, words, sentence, spoken]);
 
-  // A film is watched: leaving the app pauses it, and resume says the beat again.
+  // A film is watched: leaving the app (or pulling down Notification Center) pauses it, and Play
+  // picks the beat up at the word it was on.
   useEffect(() => {
     if (!active) return;
     const sub = AppState.addEventListener('change', (next) => {
@@ -120,9 +138,19 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
     sentence,
     spoken,
     next: () => dispatch({ type: 'next' }),
-    seek: (beatIndex: number) => dispatch({ type: 'seek', beat: beatIndex }),
+    // A chapter tap, Previous and a replay mean "from the top", even onto the beat already playing.
+    seek: (beatIndex: number) => {
+      fromTheTop();
+      dispatch({ type: 'seek', beat: beatIndex });
+    },
     mute: () => dispatch({ type: 'mute' }),
-    prev: () => dispatch({ type: 'prev' }),
-    toggle: () => dispatch({ type: 'toggle' }),
+    prev: () => {
+      fromTheTop();
+      dispatch({ type: 'prev' });
+    },
+    toggle: () => {
+      if (state.phase === 'ended') fromTheTop();
+      dispatch({ type: 'toggle' });
+    },
   };
 }
