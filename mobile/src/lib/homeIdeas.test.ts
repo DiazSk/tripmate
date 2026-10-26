@@ -9,6 +9,7 @@ import {
   matchTrips,
   planPrefillParams,
   prefillQuery,
+  readingLine,
   readyTripPrefill,
   suggestedBudget,
   typewriterTick,
@@ -226,4 +227,13 @@ test('suggestedBudget is priceFrom per person', () => {
 
 test('prefillQuery encodes each field for /plan/basics', () => {
   expect(prefillQuery({ destination: 'Lisbon, Portugal', pace: 'relaxed' })).toBe('destination=Lisbon%2C%20Portugal&pace=relaxed');
+});
+
+test('readingLine says Meri is still working as the wait grows, never that something failed', () => {
+  expect(readingLine(0)).toBe('Meri is reading your idea');
+  expect(readingLine(4)).toBe('Meri is reading your idea');
+  expect(readingLine(5)).toBe('Still working. For a question, Meri checks the facts before she answers.');
+  expect(readingLine(14)).toBe('Still working. For a question, Meri checks the facts before she answers.');
+  expect(readingLine(15)).toBe('Nearly there. Checking facts can take up to half a minute.');
+  expect(readingLine(90)).toBe('Nearly there. Checking facts can take up to half a minute.');
 });

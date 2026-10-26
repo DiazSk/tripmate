@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MeriAnswer } from '@shared/meriAnswer';
@@ -22,6 +23,7 @@ import {
   NOTHING_CHECKED,
   planPrefillParams,
   prefillQuery,
+  readingLine,
 } from '@/lib/homeIdeas';
 import { useReadyTrips } from '@/lib/useReadyTrips';
 
@@ -54,6 +56,8 @@ export default function IdeaSheet() {
   const { text = '', offline } = useLocalSearchParams<{ text?: string; offline?: string }>();
   const skip = offline === '1';
   const [answer, setAnswer] = useState<Answer>(skip ? null : undefined);
+  // Seconds Meri has been working, so the line beside her moves on (`readingLine`).
+  const [waited, setWaited] = useState(0);
   const trips = useReadyTrips() ?? [];
 
   useEffect(() => {
@@ -64,6 +68,13 @@ export default function IdeaSheet() {
       alive = false;
     };
   }, [text, skip]);
+
+  const waiting = answer === undefined;
+  useEffect(() => {
+    if (!waiting) return;
+    const tick = setInterval(() => setWaited((s) => s + 1), 1000);
+    return () => clearInterval(tick);
+  }, [waiting]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const open = (slug: string) => router.replace(`/ready/${slug}`);
@@ -76,7 +87,7 @@ export default function IdeaSheet() {
   let said: string | null = null;
   let matches: ReadyTrip[] = [];
   let none: string | null = null;
-  if (answer === undefined) said = 'Meri is reading your idea';
+  if (answer === undefined) said = readingLine(waited);
   else if (answer === null) {
     said = 'Meri can read your idea when you’re back online.';
     matches = keywordTrips(trips, text);
@@ -121,8 +132,16 @@ export default function IdeaSheet() {
       ) : null}
 
       {isRead(answer) && meri ? <AnswerCard answer={meri} read={answer} today={today} /> : null}
+      {waiting ? <Waiting /> : null}
 
-      {answer === undefined ? null : (
+      {waiting ? (
+        // A way out from the first second: a wait with no control reads as a screen that froze.
+        <View style={styles.actions}>
+          <Pressable onPress={back} accessibilityRole="button" style={({ pressed }) => [styles.secondary, pressed && styles.secondaryPressed]}>
+            <Text maxFontSizeMultiplier={1.6} style={styles.secondaryText}>Change something</Text>
+          </Pressable>
+        </View>
+      ) : (
         <View style={styles.actions}>
           {isRead(answer) && meri ? (
             showPlan(answer, meri) ? (
@@ -174,6 +193,27 @@ const showPlan = (read: ReadWithAnswer, a: MeriAnswer) =>
  * Meri's answer: the places, months and sources are the evidence records the server rendered,
  * never the answer's prose. Nothing checked says so and shows nothing else.
  */
+/**
+ * The answer card's outline while Meri works: three soft bars breathing in the card's place, so the
+ * sheet shows something is coming and where. Held still under Reduce Motion; the line beside Meri
+ * still moves on, which is what VoiceOver hears.
+ */
+function Waiting() {
+  const reduce = useReducedMotion();
+  const glow = useSharedValue(0.45);
+  useEffect(() => {
+    if (!reduce) glow.value = withRepeat(withTiming(1, { duration: 900 }), -1, true);
+  }, [reduce, glow]);
+  const breathe = useAnimatedStyle(() => ({ opacity: glow.value }));
+  return (
+    <Animated.View style={[styles.card, breathe]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {[92, 100, 64].map((w) => (
+        <View key={w} style={[styles.waitBar, { width: `${w}%` }]} />
+      ))}
+    </Animated.View>
+  );
+}
+
 function AnswerCard({ answer, read, today }: { answer: MeriAnswer; read: ReadWithAnswer; today: string }) {
   const kind = read.question?.kind;
   const checked = !answer.nothingChecked;
@@ -243,6 +283,7 @@ const styles = StyleSheet.create({
   headlineFont: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 35 },
   quote: { marginTop: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, overflow: 'hidden', backgroundColor: GROUND, fontFamily: PolarFonts.sansRegular, fontSize: 14, lineHeight: 19, color: Polar.secondary },
   card: { marginTop: 12, padding: 16, borderRadius: 16, backgroundColor: GROUND, gap: 14 },
+  waitBar: { height: 12, borderRadius: 6, backgroundColor: Polar.rule },
   answerText: { fontFamily: PolarFonts.sans, fontSize: 16, lineHeight: 22, color: Polar.ink },
   monthRow: { flexDirection: 'row', gap: 4 },
   month: { flex: 1, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },

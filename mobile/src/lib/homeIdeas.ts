@@ -83,3 +83,15 @@ export const prefillQuery = (p: PlanPrefillParams): string =>
     .filter((e): e is [string, string] => typeof e[1] === 'string' && e[1] !== '')
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
     .join('&');
+
+/**
+ * What the idea sheet says while Meri works, by how long she has been at it. A trip idea comes back
+ * in a few seconds, but a question waits on a read, a fetch of the facts and an answer, up to half a
+ * minute, and one line that never changes reads as a request that went nowhere. Each step says she is
+ * still working and why; none of them suggests something went wrong.
+ */
+export function readingLine(seconds: number): string {
+  if (seconds < 5) return 'Meri is reading your idea';
+  if (seconds < 15) return 'Still working. For a question, Meri checks the facts before she answers.';
+  return 'Nearly there. Checking facts can take up to half a minute.';
+}
