@@ -3,7 +3,10 @@ import type { FoundPlace, Itinerary, Stop } from '@/api/types';
 import {
   addPlaceToDay,
   describePlace,
+  detourShort,
+  foundLine,
   insertionDetour,
+  insertionPath,
   slotLine,
   slotPreview,
   suggestDay,
@@ -197,6 +200,62 @@ describe('what inserting a place costs in travel', () => {
   test('a place with no coordinate of its own cannot be priced', () => {
     expect(insertionDetour(trip, 0, { lat: 0, lng: 0 }, 'Afternoon')).toBeNull();
   });
+});
+
+// The place card's map draws this line, so it has to be the journey the detour figure prices.
+describe('the path a new stop is drawn on', () => {
+  const between = { lat: 35.009, lng: 135.762 };
+
+  test('runs from the stop before, through the place, to the stop after', () => {
+    expect(insertionPath(trip, 0, between, 'Afternoon')).toEqual([
+      { lat: 35.0142, lng: 135.7481 },
+      between,
+      { lat: 35.0037, lng: 135.7788 },
+    ]);
+  });
+
+  test('an evening place has nothing after it to walk on to', () => {
+    // Gion is at 6 PM, so an evening slot lands after it and the path ends at the place.
+    const path = insertionPath(trip, 0, between, 'Evening');
+    expect(path[path.length - 1]).toEqual(between);
+  });
+
+  test('steps over an unplaced stop rather than drawing a line to the Gulf of Guinea', () => {
+    const withGhost: Itinerary = {
+      days: [
+        {
+          date: '2026-10-22',
+          weather: '',
+          stops: [stop('Nijo Castle', '9:00 AM', 35.0142, 135.7481), stop('Unresolved', '1:00 PM', 0, 0)],
+        },
+      ],
+    };
+    expect(insertionPath(withGhost, 0, between, 'Afternoon')).toEqual([{ lat: 35.0142, lng: 135.7481 }, between]);
+  });
+
+  test('a place with no coordinate has no path, and an empty day is just the place', () => {
+    expect(insertionPath(trip, 0, { lat: 0, lng: 0 }, 'Afternoon')).toEqual([]);
+    const empty: Itinerary = { days: [{ date: '2026-10-22', weather: '', stops: [] }] };
+    expect(insertionPath(empty, 0, between, 'Afternoon')).toEqual([between]);
+  });
+});
+
+describe('a detour in a card\'s few words', () => {
+  test('a figure only when there is one', () => {
+    expect(detourShort({ minutes: 6, mode: 'walk' })).toBe('adds 6 min');
+    expect(detourShort({ minutes: 0, mode: 'walk' })).toBe('on the way');
+    expect(detourShort(null)).toBeNull();
+  });
+});
+
+// What VoiceOver hears when an answer lands: the three answers never read as each other.
+test('an answer is announced as could not ask, nothing, or a count', () => {
+  expect(foundLine(false, 0)).toBe('Couldn\u2019t reach search.');
+  // A failed ask with stale places attached is still a failed ask.
+  expect(foundLine(false, 3)).toBe('Couldn\u2019t reach search.');
+  expect(foundLine(true, 0)).toBe('Nothing found.');
+  expect(foundLine(true, 1)).toBe('1 place found.');
+  expect(foundLine(true, 4)).toBe('4 places found.');
 });
 
 describe('the line under a slot', () => {

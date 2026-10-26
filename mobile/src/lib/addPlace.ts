@@ -95,12 +95,8 @@ export function insertionDetour(
   place: { lat: number; lng: number },
   slot: TimeOfDay
 ): Detour | null {
-  const stops = itinerary.days[dayIndex]?.stops ?? [];
   if (!located(place)) return null;
-
-  const { index } = planSlot(stops, slot);
-  const before = neighbour(stops, index - 1, -1);
-  const after = neighbour(stops, index, 1);
+  const { before, after } = insertionNeighbours(itinerary, dayIndex, slot);
   if (!before && !after) return null;
 
   const here = asPoint(place);
@@ -125,6 +121,62 @@ export function insertionDetour(
     minutes: Math.max(0, minutes),
     mode: modes.every((m) => m === modes[0]) ? modes[0] : null,
   };
+}
+
+/**
+ * The located stops either side of where `slot` would put a new stop — what a detour is measured
+ * against, and what the sheet's small map draws the new stop between.
+ */
+export function insertionNeighbours(
+  itinerary: Itinerary,
+  dayIndex: number,
+  slot: TimeOfDay
+): { before: Stop | null; after: Stop | null } {
+  const stops = itinerary.days[dayIndex]?.stops ?? [];
+  const { index } = planSlot(stops, slot);
+  return { before: neighbour(stops, index - 1, -1), after: neighbour(stops, index, 1) };
+}
+
+/**
+ * The line the place card's map draws: the stop before, the place, the stop after.
+ *
+ * The same two neighbours `insertionDetour` prices, so the path on the map is the journey the
+ * figure beside it is about rather than a line from wherever the search happened to start. Empty
+ * for a place with no usable coordinate, which has no path to draw.
+ */
+export function insertionPath(
+  itinerary: Itinerary,
+  dayIndex: number,
+  place: { lat: number; lng: number },
+  slot: TimeOfDay
+): { lat: number; lng: number }[] {
+  if (!located(place)) return [];
+  const { before, after } = insertionNeighbours(itinerary, dayIndex, slot);
+  return [before, place, after].flatMap((p) => (p ? [{ lat: p.lat, lng: p.lng }] : []));
+}
+
+/**
+ * A detour in the few words a card's foot has room for: "adds 6 min", "on the way", or nothing.
+ *
+ * The mode is not in the words because the card draws it as a glyph beside them; `slotLine` is the
+ * whole sentence, and is what a screen reader hears for the same fact.
+ */
+export function detourShort(detour: Detour | null): string | null {
+  if (!detour) return null;
+  return detour.minutes > 0 ? `adds ${detour.minutes} min` : 'on the way';
+}
+
+/**
+ * A search's answer as one sentence, for a screen reader to hear when it lands.
+ *
+ * Three answers, kept apart the way the sheet keeps them apart on screen: could not ask, asked and
+ * found nothing, asked and found some. Reading the first as the second is the lie `available`
+ * exists to prevent.
+ */
+export function foundLine(available: boolean, count: number): string {
+  if (!available) return 'Couldn\u2019t reach search.';
+  if (count === 0) return 'Nothing found.';
+  return count === 1 ? '1 place found.' : `${count} places found.`;
 }
 
 /** Walk and bike are what "walking" means to a reader; the rest are not worth naming apart. */
@@ -171,7 +223,7 @@ function stopCategoryFor(category: string | undefined): StopCategory {
 }
 
 /** The kind of place as a noun somebody would say — singular, unlike the sheet's plural chips. */
-const KINDS: Record<string, string> = {
+export const KINDS: Record<string, string> = {
   cafe: 'Cafe',
   restaurant: 'Restaurant',
   bar: 'Bar',

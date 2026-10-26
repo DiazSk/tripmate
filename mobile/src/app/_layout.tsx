@@ -13,6 +13,7 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { APPEARANCE } from '@/constants/appearance';
 import { ClerkBridge } from '@/components/clerk-bridge';
 import { SettingsColors } from '@/components/settings-list';
+import { Polar } from '@/constants/polar';
 import { Colors } from '@/constants/theme';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
@@ -44,6 +45,16 @@ const TRIP_SHEET_OPTIONS: ScreenOptions = {
   sheetCornerRadius: 24,
   headerShown: false,
   contentStyle: { backgroundColor: Colors.canvas },
+};
+
+/**
+ * Add a stop is a map with a rail of cards under it, so it opens at the large detent (the medium
+ * one is still a drag away) and on Polar's deep night, which its bar and tray are drawn in.
+ */
+const ADD_SHEET_OPTIONS: ScreenOptions = {
+  ...TRIP_SHEET_OPTIONS,
+  sheetInitialDetentIndex: 'last',
+  contentStyle: { backgroundColor: Polar.deep },
 };
 
 /** Home's two sheets, on white as Home's cards are: a ready-made trip, and Meri's answer to an idea. */
@@ -171,7 +182,7 @@ export default function RootLayout() {
               night. Routes rather than RN Modals, for the detents and grabber; `lib/tripSheets.ts`
               says how they read the trip screen's state. */}
           {TRIP_SHEETS.map((name) => (
-            <Stack.Screen key={name} name={`trip/[id]/${name}`} options={TRIP_SHEET_OPTIONS} />
+            <Stack.Screen key={name} name={`trip/[id]/${name}`} options={name === 'add' ? ADD_SHEET_OPTIONS : TRIP_SHEET_OPTIONS} />
           ))}
           <Stack.Screen name="ready/[slug]" options={HOME_SHEET_OPTIONS} />
           <Stack.Screen name="idea" options={HOME_SHEET_OPTIONS} />

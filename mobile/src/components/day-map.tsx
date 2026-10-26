@@ -36,7 +36,7 @@ const MAP_INSET = { top: 72, right: 0, bottom: 0, left: 0 };
  * `centerOffset` has to pull it. See the note at the `Marker` below for why `anchor` cannot do
  * this job on iOS. Ignored on Android, where `anchor` is the working prop.
  */
-const MARKER_SKEW_PT = 12;
+export const MARKER_SKEW_PT = 12;
 
 /** Roughly every fourth frame. The compass needle is read at a glance, not to the degree, and
  *  each reading is a bridge round-trip. */

@@ -16,7 +16,8 @@ import { Colors } from '@/constants/theme';
  * trait over a light sheet; the stable APIs give no way to set either per screen.
  */
 export function SheetDone({ onPress, label = 'Done', paper = false }: { onPress: () => void; label?: string; paper?: boolean }) {
-  const text = <Text style={[styles.label, { color: paper ? Polar.ember : Colors.accentText }]}>{label}</Text>;
+  // Capped like every bar title here: an uncapped word in a capsule grows past its lane.
+  const text = <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.label, { color: paper ? Polar.ember : Colors.accentText }]}>{label}</Text>;
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
       {isLiquidGlassAvailable() ? (
