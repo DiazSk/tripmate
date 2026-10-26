@@ -600,7 +600,8 @@ export interface FoundPlace {
  * array standing for both.
  */
 export interface PlaceSearchResult {
-  provider: 'google' | 'osm';
+  /** `apple` is the phone's own MapKit search (iOS), asked before the server. */
+  provider: 'google' | 'osm' | 'apple';
   places: FoundPlace[];
   available: boolean;
 }

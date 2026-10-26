@@ -1,3 +1,7 @@
+import { Platform } from "react-native";
+
+import { searchApplePlaces } from "../../modules/apple-places";
+import { appleCategoriesFor, placesFromApple } from "../lib/applePlaces";
 import { fetchWithSession } from "./session";
 import { createSseParser } from "./sse";
 import type {
@@ -352,6 +356,9 @@ export async function updateTripItinerary(
  * `available: false` — "we could not ask" — is passed through untouched, because the screen has
  * to be able to say "search is busy" rather than "there is nothing here".
  */
+/** The server's own default (`DEFAULT_SEARCH_RADIUS_M` in src/lib/placeSearch.ts), for Apple's search. */
+const DEFAULT_SEARCH_RADIUS_M = 1800;
+
 export async function searchPlaces(params: {
   lat: number;
   lng: number;
@@ -359,6 +366,15 @@ export async function searchPlaces(params: {
   category?: PlaceCategory;
   radius?: number;
 }): Promise<PlaceSearchResult | undefined> {
+  // Apple Maps first on iOS: on the device, no key, and no shared OpenStreetMap mirror to turn the
+  // search away. Nothing found there (or Android) asks the server, as before.
+  if (Platform.OS === "ios") {
+    const radius = params.radius ?? DEFAULT_SEARCH_RADIUS_M;
+    const apple = await searchApplePlaces({ lat: params.lat, lng: params.lng, radius, query: params.q, categories: appleCategoriesFor(params.category) });
+    const places = apple ? placesFromApple(apple, params, radius) : [];
+    if (places.length) return { provider: "apple", places, available: true };
+  }
+
   const query = new URLSearchParams({ lat: String(params.lat), lng: String(params.lng) });
   if (params.q?.trim()) query.set('q', params.q.trim());
   if (params.category) query.set('category', params.category);
