@@ -54,7 +54,12 @@
   --wd-pad: 1.25em;
   --wd-rule: rgba(31, 42, 68, 0.12);
   --wd-gridline: rgba(31, 42, 68, 0.07);
-
+}
+/* The base look, at zero specificity: a screen's root (`.tm pp`, `.tm wtp`, `.tm sp`…) restyles it
+   with one class, and this sheet can load twice on a page, after that screen's own. At equal
+   specificity the planner's white-on-night steps came out navy whenever the second copy landed
+   last. */
+:where(.tm) {
   font-size: var(--wd-base);
   font-family: var(--wd-font-sans);
   font-weight: 500;

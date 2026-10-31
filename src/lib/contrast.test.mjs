@@ -63,3 +63,16 @@ test("the trip page's labels and footnotes never render under the 11px floor", (
     assert.ok(px >= 11, `${sel} is "${v}": ${px}px at a 14px base`);
   }
 });
+
+// Turbopack can load PolarLanding.css twice on one page, the second copy after a screen's own sheet, so a
+// screen's `.pp { color: #fff }` lost to `.tm { color: navy }` at equal specificity depending on which
+// route loaded first: the planner's dark-photo steps came out navy on night, again and again. `.tm`'s
+// base look sits in `:where(.tm)` (zero specificity), so any screen class wins whatever the sheet order.
+test(".tm's base colours are zero-specificity, so a screen's own class always overrides them", () => {
+  const bare = css.match(/(?:^|\n)\.tm\s*\{([^}]*)\}/);
+  assert.ok(bare, "the .tm token block is missing");
+  assert.doesNotMatch(bare[1], /(?:^|[;{\s])(color|background):/, ".tm itself sets color or background");
+  const base = css.match(/:where\(\.tm\)\s*\{([^}]*)\}/);
+  assert.ok(base, "no :where(.tm) base block");
+  assert.match(base[1], /\bcolor:\s*var\(--wd-ink\)/);
+});
