@@ -28,6 +28,13 @@ public class ApplePlacesModule: Module {
         request.region = MKCoordinateRegion(center: center, latitudinalMeters: radius * 2, longitudinalMeters: radius * 2)
         request.resultTypes = .pointOfInterest
         request.pointOfInterestFilter = filter
+        // Without this the region is only a hint, and a typed search ranks by where the *phone*
+        // is: "gelato" near Leopold Cafe in Mumbai, asked from Seattle, came back as 25 Seattle
+        // gelaterias, every one dropped by the JS radius filter, so the sheet fell through to the
+        // server and showed its "try again". Measured with the same MapKit call on macOS.
+        if #available(iOS 18.0, *) {
+          request.regionPriority = .required
+        }
         search = MKLocalSearch(request: request)
       } else {
         let request = MKLocalPointsOfInterestRequest(center: center, radius: radius)
