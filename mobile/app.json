@@ -10,7 +10,10 @@
     "backgroundColor": "#121110",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "app.tripmate"
+      "bundleIdentifier": "app.tripmate",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "package": "app.tripmate",

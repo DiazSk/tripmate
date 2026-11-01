@@ -1,7 +1,9 @@
 import type { StoryScript } from '@shared/storyScript';
 
 import type { Stop } from '@/api/types';
-import { filmBeatTitle, filmCameraFor, filmReducer, filmStopFor, initialFilm, type FilmState } from './storyFilm';
+import { beatDurations } from '@shared/storyTimeline';
+
+import { filmBeatTitle, filmCameraFor, filmElapsedMs, filmReducer, filmStopFor, initialFilm, type FilmState } from './storyFilm';
 
 const at = (s: Partial<FilmState>): FilmState => ({ ...initialFilm, ...s });
 
@@ -135,5 +137,23 @@ describe('filmBeatTitle', () => {
     expect(filmBeatTitle({ kind: 'opening', text: '' }, stops, 2)).toBe('Day 3');
     expect(filmBeatTitle({ kind: 'closing', text: '' }, stops, 2)).toBe('End of the day');
     expect(filmBeatTitle(undefined, stops, 2)).toBe('');
+  });
+});
+
+describe('filmElapsedMs', () => {
+  const beats = [{ text: 'One two three four.' }, { text: 'Five six. Seven eight.' }];
+  const durations = beatDurations(beats);
+  const total = durations[0] + durations[1];
+  const start = { sentence: 0, spoken: 0 };
+  it('is zero while the script loads and the whole film once it ends', () => {
+    expect(filmElapsedMs(beats, at({ phase: 'loading' }), start)).toMatchObject({ elapsedMs: 0, totalMs: total, withinMs: 0 });
+    expect(filmElapsedMs(beats, at({ phase: 'ended', beat: 1, count: 2 }), start).elapsedMs).toBe(total);
+  });
+  it('starts a beat where the beats before it end', () => {
+    expect(filmElapsedMs(beats, at({ phase: 'playing', beat: 1, count: 2 }), start).elapsedMs).toBe(durations[0]);
+  });
+  it('places the voice within the beat by the words it has said', () => {
+    const half = filmElapsedMs(beats, at({ phase: 'playing', beat: 0, count: 2 }), { sentence: 0, spoken: 2 }).elapsedMs;
+    expect(half).toBeCloseTo(durations[0] / 2, 0);
   });
 });

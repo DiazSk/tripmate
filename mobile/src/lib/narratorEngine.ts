@@ -3,6 +3,8 @@ import * as Speech from 'expo-speech';
 
 import { pickNarrator, type SpeechLike } from '@/lib/narrator';
 
+import { filmNowPlaying } from '../../modules/film-now-playing';
+
 /**
  * The phone's own speech engine behind the narrator seam — the one file that imports a native
  * module, so `narrator.ts` stays testable.
@@ -27,12 +29,19 @@ export async function narratorVoice(): Promise<string | undefined> {
 /**
  * **The silent switch does not mute a film.** Pressing Play is a request for sound, the way a
  * video plays with the switch on; `expo-speech` speaks on the app's audio session, so this is
- * what lets it be heard. Other audio is ducked while the narrator speaks, and mixing is restored
- * when the film ends.
+ * what lets it be heard. Mixing is restored when the film ends.
+ *
+ * Where the film is a Now Playing player (iOS, `modules/film-now-playing`), it keeps narrating in
+ * the background and does not mix: iOS only gives the Lock Screen to an app that does not, so other
+ * audio pauses for the film the way it does for a video. Elsewhere other audio is ducked while the
+ * narrator speaks.
  */
 export function filmAudio(on: boolean): void {
+  const player = filmNowPlaying.available;
   setAudioModeAsync(
-    on ? { playsInSilentMode: true, interruptionMode: 'duckOthers' } : { interruptionMode: 'mixWithOthers' },
+    on
+      ? { playsInSilentMode: true, shouldPlayInBackground: player, interruptionMode: player ? 'doNotMix' : 'duckOthers' }
+      : { interruptionMode: 'mixWithOthers' },
   ).catch(() => {
     // A session that cannot be configured still speaks with the switch off — not worth a message.
   });

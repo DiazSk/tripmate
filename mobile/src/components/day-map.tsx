@@ -95,7 +95,7 @@ export function DayMap({
    * Present while a film plays this day. `stop` is the day's stop the camera should be on, or null
    * to frame the whole day. Hides everything that is not the place being talked about.
    */
-  film?: { stop: number | null; inset?: number };
+  film?: { stop: number | null; inset?: number; epoch?: number };
   /** What the map is actually drawing, for a panel standing on it that must pick its material by
    *  whether the ground is a photograph (`chrome()`). The film's panel is that panel. */
   onMapType?: (type: MapType) => void;
@@ -353,6 +353,9 @@ export function DayMap({
   }, [dayIndex]);
 
   const filmStop = film ? film.stop : undefined;
+  /** Bumped when the app comes back to a film that kept narrating: the map did not fly while it was
+   *  away, so the camera is put on the current stop again (`useStoryFilm`'s `cameraEpoch`). */
+  const filmEpoch = film?.epoch ?? 0;
   /**
    * **The film's camera: a dive to each stop, facing along the day.** A whole camera every time,
    * for the reason `toggle3D` records — a partial one lets the omitted fields fall to defaults.
@@ -402,9 +405,9 @@ export function DayMap({
       clearTimeout(grace);
       cancelAnimationFrame(frame);
     };
-    // The stop is the trigger; a re-render with equal stops must not re-fly.
+    // The stop is the trigger, and a return to the app; a re-render with equal stops must not re-fly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filmStop]);
+  }, [filmStop, filmEpoch]);
 
   // An empty day is legitimate; a map of nowhere is not.
   if (!region) {

@@ -599,7 +599,7 @@ export default function TripDetail() {
                   dayIndex={day}
                   emphasis={stopIndexFor(emphasis, day)}
                   onEmphasise={(stop) => setEmphasis(stop === null ? null : `${day}:${stop}`)}
-                  film={filming ? { stop: film.stop, inset: sheetHeight } : undefined}
+                  film={filming ? { stop: film.stop, inset: sheetHeight, epoch: film.cameraEpoch } : undefined}
                   lift={filming ? 0 : toolbarHeight}
                 />
               </MapFace>

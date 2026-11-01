@@ -1,4 +1,6 @@
+import { estimateDurationMs, splitForSpeech } from '@shared/storyPacing';
 import type { StoryBeat, StoryScript } from '@shared/storyScript';
+import { beatDurations } from '@shared/storyTimeline';
 import { legBearingRad } from '@shared/tourPacing';
 
 import type { Stop } from '@/api/types';
@@ -125,4 +127,31 @@ export function filmBeatTitle(beat: StoryBeat | undefined, stops: { name: string
     return to ? `On to ${to}` : 'On the way';
   }
   return '';
+}
+
+/**
+ * How far into the day's film the voice is, in ms, and how long the film runs — the player bar's
+ * scrubber — and the same within the current beat (`beatMs`, `withinMs`), which is the Lock Screen's,
+ * where each stop is a track. One estimate (`storyTimeline.ts`): within a beat the voice is placed by
+ * how far through its sentences, and the current sentence's words, it has got.
+ */
+export function filmElapsedMs(
+  beats: readonly { text: string }[],
+  state: FilmState,
+  at: { sentence: number; spoken: number },
+): { elapsedMs: number; totalMs: number; withinMs: number; beatMs: number } {
+  const durations = beatDurations(beats);
+  const totalMs = durations.reduce((a, b) => a + b, 0);
+  const beatMs = durations[state.beat] ?? 0;
+  if (state.phase === 'loading') return { elapsedMs: 0, totalMs, withinMs: 0, beatMs };
+  if (state.phase === 'ended') return { elapsedMs: totalMs, totalMs, withinMs: beatMs, beatMs };
+  const sentences = beats[state.beat] ? splitForSpeech(beats[state.beat].text) : [];
+  const weights = sentences.map((s) => estimateDurationMs(s));
+  const beatWeight = weights.reduce((a, b) => a + b, 0) || 1;
+  const index = Math.min(at.sentence, Math.max(0, sentences.length - 1));
+  const words = sentences[index] ? sentences[index].split(' ').length : 0;
+  const within =
+    (weights.slice(0, index).reduce((a, b) => a + b, 0) + (weights[index] ?? 0) * Math.min(1, words ? at.spoken / words : 0)) / beatWeight;
+  const before = durations.slice(0, state.beat).reduce((a, b) => a + b, 0);
+  return { elapsedMs: before + beatMs * within, totalMs, withinMs: beatMs * within, beatMs };
 }

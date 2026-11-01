@@ -38,6 +38,12 @@ function load(name: string): Promise<PlacePhoto | undefined> {
   return request;
 }
 
+/** The same lookup outside React: the film's Now Playing artwork, asked for once per beat. */
+export function placePhotoFor(name: string): Promise<PlacePhoto | undefined> {
+  const known = resolved.get(name);
+  return known ? Promise.resolve(known) : load(name);
+}
+
 /**
  * The photograph for a place, or `undefined` while it is being fetched — and also `undefined` if
  * the lookup failed. Callers draw the same thing in both cases, which is why they are not

@@ -1,5 +1,5 @@
 import { Oswald_400Regular } from '@expo-google-fonts/oswald';
-import { splitForSpeech, estimateDurationMs } from '@shared/storyPacing';
+import { splitForSpeech } from '@shared/storyPacing';
 import { beatAt, beatDurations, clockLabel } from '@shared/storyTimeline';
 import type { StoryBeat } from '@shared/storyScript';
 import { useFonts } from 'expo-font';
@@ -28,7 +28,7 @@ import { StopDisc } from '@/components/stop-disc';
 import { Polar, PolarFonts, PolarRadius } from '@/constants/polar';
 import { Curve, Motion, dayCore, FontScale } from '@/constants/theme';
 import { filmSubtitle, meriForFilm } from '@/lib/meri';
-import { filmBeatTitle } from '@/lib/storyFilm';
+import { filmBeatTitle, filmElapsedMs } from '@/lib/storyFilm';
 import type { useStoryFilm } from '@/lib/useStoryFilm';
 import { Text } from '@/components/themed-text';
 
@@ -117,12 +117,8 @@ export function StoryPanel({
   // by how far through its sentences and their words the voice has got.
   const durations = useMemo(() => beatDurations(beats), [beats]);
   const total = durations.reduce((a, b) => a + b, 0);
-  const weights = useMemo(() => sentences.map((s) => estimateDurationMs(s)), [sentences]);
-  const beatWeight = weights.reduce((a, b) => a + b, 0) || 1;
-  const within =
-    (weights.slice(0, place.sentence).reduce((a, b) => a + b, 0) + (weights[place.sentence] ?? 0) * Math.min(1, words.length ? place.spoken / words.length : 0)) /
-    beatWeight;
-  const elapsed = loading ? 0 : ended ? total : durations.slice(0, state.beat).reduce((a, b) => a + b, 0) + (durations[state.beat] ?? 0) * within;
+  // The same function the Lock Screen's scrubber is published from (`nowPlaying.ts`).
+  const { elapsedMs: elapsed } = filmElapsedMs(beats, state, place);
   const fraction = total > 0 ? Math.min(1, elapsed / total) : 0;
   const [trackW, setTrackW] = useState(0);
 

@@ -389,8 +389,27 @@ with the same `src/lib/storyPacing.ts` the web re-exports from `storyVoice.ts` �
 `storyVoice.ts` imports `kokoroVoice`, a browser Worker Metro would bundle. Three mobile-only facts:
 `animateCamera`'s duration is ignored on iOS (`RNMapsMapView.mm`), so the narrator is the only clock; the
 film narrates with the silent switch on (`expo-audio` `playsInSilentMode`, set at film start) because Play is
-a request for sound; and the expo-audio plugin's `enableBackgroundPlayback` is off because a film pauses when
-backgrounded. No travel beats — the app sends no `legs`.
+a request for sound; and on iOS a film keeps narrating when the app is left, as a system **Now Playing**
+player (`mobile/modules/film-now-playing`): **each stop is its own track** — its name the title, "Stop 2 of 5 ·
+A day in Lisbon" the artist, its photo (or the destination's) the artwork, the scrubber over that stop alone —
+so Next reads as the next stop the way it reads as the next song, and a stop changing looks like a track
+changing. (A first build ran one scrubber over the whole day; on the phone, stop changes were invisible and Next
+read as "next track" of nothing.) iOS draws the Dynamic Island and Lock Screen player from that, with play/pause,
+previous and next coming back as commands (`nowPlaying.ts`, `commandAction`). That is why `app.json` gives iOS
+`UIBackgroundModes: ["audio"]` through `ios.infoPlist` — not the expo-audio plugin's `enableBackgroundPlayback`,
+which stays off because on Android it adds a media-playback foreground service Play Console must have justified
+— and why the film's session is `doNotMix` (other audio pauses for it, as for a video): a mixable session never
+gets the Lock Screen. A muted film, one whose voice failed, and every film on Android still pause when backgrounded
+(`staysOnInBackground`). The module loops a silent buffer only while the film plays, so the app stays the
+Now Playing app through the pauses between sentences; on pause the engine is stopped outright (a paused node
+on a running engine is still audio output, and would keep the app awake), and it is rebuilt whenever it should
+be running and is not, because iOS stops it on interruptions and headphone changes and `play()` on a stopped
+engine is an uncatchable exception. **The session mode is `.default`, matching expo-audio's**: the module once
+set `.spokenAudio`, every `setAudioModeAsync` call (each play and pause) flipped it back, iOS stopped the loop on
+that reconfiguration, and leaving the app in the gap before the next sentence meant the island never came. It
+also restarts the loop on `AVAudioEngineConfigurationChange` and checks it as the app enters the background.
+A stop's artist line reads "Now arriving · Stop 3 of 5" during its first sentence, then the day's line: iOS
+animates nothing in this player but a cross-fade, so an arrival is told as two changes. No travel beats — the app sends no `legs`.
 The player (`mobile/src/components/story-panel.tsx`) is the canvas design "Story mode · 1 Subtitles" at
 phone width, as the web's is: a subtitle above a night bar, chapters that slide up, Plan to leave. **The
 words light on the voice's own events, not an estimate**: `speakBeat` reports each sentence

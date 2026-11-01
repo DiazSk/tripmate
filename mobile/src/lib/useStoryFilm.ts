@@ -3,11 +3,33 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
+import { placePhotoFor } from '@/api/placePhotos';
 import { storyScript } from '@/api/tripMateApi';
 import type { Trip } from '@/api/types';
 import { resumeStart, silentSpeech, speakBeat } from '@/lib/narrator';
 import { deviceSpeech, filmAudio, narratorVoice } from '@/lib/narratorEngine';
-import { filmReducer, filmStopFor, initialFilm } from '@/lib/storyFilm';
+import { artworkNameFor, artworkUrlOf, commandAction, nowPlayingFor, scriptIsForDay, staysOnInBackground, type NowPlayingInfo } from '@/lib/nowPlaying';
+import { filmReducer, filmStopFor, initialFilm, type FilmState } from '@/lib/storyFilm';
+
+import { filmNowPlaying } from '../../modules/film-now-playing';
+
+type Place = { beat: number; sentence: number; words: number };
+
+/** The film as the Now Playing player shows it, from where the voice is and the latest artwork. */
+function nowPlayingAt(trip: Trip, dayIndex: number, script: StoryScript, state: FilmState, place: Place, artworkUrl: string | null): NowPlayingInfo {
+  const day = trip.itinerary.days[dayIndex];
+  return nowPlayingFor({
+    script,
+    state,
+    stops: day?.stops ?? [],
+    day,
+    dayIndex,
+    destination: trip.destination,
+    // A new beat runs before the clock has moved `place` onto it: it starts at its first word.
+    at: place.beat === state.beat ? { sentence: place.sentence, spoken: place.words } : { sentence: 0, spoken: 0 },
+    artworkUrl,
+  });
+}
 
 /**
  * Runs one day's film while `active`: writes or fetches the script, speaks each beat, and
@@ -33,14 +55,25 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
    *  mute or the voice failing re-runs the clock on the same beat, and it resumes here rather than
    *  from the beat's first word. Only what means "from the top" clears it (`fromTheTop`). */
   const place = useRef({ beat: -1, sentence: 0, words: 0 });
+  /** Whether the Now Playing player is up: the first publish starts it, later ones update it. */
+  const published = useRef(false);
+  /** The latest artwork. Kept across a beat change until the next photograph lands, so the Lock
+   *  Screen's art changes rather than blanking at every beat; cleared when the film closes. */
+  const art = useRef<string | null>(null);
+  /** Bumped when the app comes back to a film: the map flies to the current stop again. */
+  const [cameraEpoch, setCameraEpoch] = useState(0);
   const fromTheTop = () => {
     place.current = { beat: -1, sentence: 0, words: 0 };
   };
   // Read inside the fetch rather than depended on: a refreshed trip object mid-film must not
   // restart it.
   const tripRef = useRef(trip);
+  /** The film as the remote commands and the background policy see it: they are subscribed once
+   *  per film, so they read the latest state here rather than the state they were made with. */
+  const stateRef = useRef(state);
   useEffect(() => {
     tripRef.current = trip;
+    stateRef.current = state;
   });
 
   useEffect(() => {
@@ -70,18 +103,76 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
       // the old script before anything can render it.
       setScript(null);
       deviceSpeech.stop();
+      filmNowPlaying.stop();
+      published.current = false;
+      art.current = null;
       filmAudio(false);
     };
   }, [active, dayIndex]);
 
   const beat = script && state.phase !== 'loading' ? script.beats[state.beat] : undefined;
 
+  /** A film that can be heard. A muted one, or one whose voice failed, is not an audio player: it
+   *  leaves the Lock Screen, and somebody's music, alone. */
+  const audible = !state.muted && !state.voiceBroken;
+
   // Other audio is ducked only while the narrator can actually speak — not through a pause or
-  // the end screen. The fetch effect's cleanup restores mixing when the film closes.
+  // the end screen. The fetch effect's cleanup restores mixing when the film closes. As a Now
+  // Playing player (iOS) the film holds the session through a pause too, as a music app does: a
+  // mixable session loses the Lock Screen.
   useEffect(() => {
     // Nor while muted: a silent film has no reason to quiet somebody's music.
-    if (active) filmAudio(state.phase === 'playing' && !state.muted && !state.voiceBroken);
-  }, [active, state.phase, state.muted, state.voiceBroken]);
+    if (active) filmAudio(audible && (filmNowPlaying.available || state.phase === 'playing'));
+  }, [active, state.phase, audible]);
+
+  // **The Now Playing player.** The beat is the track and the day the artist; it is republished on
+  // every change of beat or phase, and goes away for a film that cannot be heard.
+  useEffect(() => {
+    if (!filmNowPlaying.available || !active || !script || state.phase === 'loading' || !scriptIsForDay(script, dayIndex)) return;
+    if (!audible) {
+      if (published.current) filmNowPlaying.stop();
+      published.current = false;
+      return;
+    }
+    const info = nowPlayingAt(tripRef.current, dayIndex, script, state, place.current, art.current);
+    if (published.current) filmNowPlaying.update(info);
+    else filmNowPlaying.start(info);
+    published.current = true;
+  }, [active, script, state, audible, dayIndex]);
+
+  // The artwork: the stop's photograph, or the destination's, looked up once per beat and attached
+  // when it lands, unless the film has moved on by then.
+  useEffect(() => {
+    if (!filmNowPlaying.available || !active || !script) return;
+    let live = true;
+    const beatIndex = state.beat;
+    const t = tripRef.current;
+    const stops = t.itinerary.days[dayIndex]?.stops ?? [];
+    const name = artworkNameFor(script.beats[beatIndex], stops, t.destination);
+    // A stop with no photograph shows the destination's, never the previous stop's under its name.
+    void placePhotoFor(name)
+      .then(async (photo) => artworkUrlOf(photo) ?? (name === t.destination ? null : artworkUrlOf(await placePhotoFor(t.destination))))
+      .then((url) => {
+        if (!live || !url || url === art.current) return;
+        art.current = url;
+        const now = stateRef.current;
+        if (published.current && now.beat === beatIndex) filmNowPlaying.update(nowPlayingAt(t, dayIndex, script, now, place.current, art.current));
+      });
+    return () => {
+      live = false;
+    };
+  }, [active, script, state.beat, dayIndex]);
+
+  // Its buttons, and what iOS treats as buttons: the same actions as the panel's.
+  useEffect(() => {
+    if (!active || !filmNowPlaying.available) return;
+    const sub = filmNowPlaying.onCommand((command) => {
+      const action = commandAction(command, stateRef.current.phase);
+      if (action === 'prev' || (action === 'toggle' && stateRef.current.phase === 'ended')) fromTheTop();
+      if (action) dispatch({ type: action });
+    });
+    return () => sub.remove();
+  }, [active]);
 
   // **The clock.** One run per beat; its cleanup cancels the sentence, so Next, Prev, Pause and
   // Close never leave a voice talking over the next shot.
@@ -113,19 +204,25 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
           sentence.value = index;
           spoken.value = startWord;
           place.current = { beat: state.beat, sentence: index, words: startWord };
+          // Re-anchors the Lock Screen's scrubber on each sentence; iOS runs it on between.
+          if (published.current && script) {
+            filmNowPlaying.update(nowPlayingAt(tripRef.current, dayIndex, script, stateRef.current, place.current, art.current));
+          }
         },
       },
       { ...(silent ? { speech: silentSpeech() } : { speech: deviceSpeech, voice: voice.current }), from: resume },
     );
     return () => handle.cancel();
-  }, [active, state.phase, state.beat, state.voiceBroken, state.muted, beat, words, sentence, spoken]);
+  }, [active, state.phase, state.beat, state.voiceBroken, state.muted, beat, words, sentence, spoken, script, dayIndex]);
 
   // A film is watched: leaving the app (or pulling down Notification Center) pauses it, and Play
-  // picks the beat up at the word it was on.
+  // picks the beat up at the word it was on. Where it is a Now Playing player and can be heard, it
+  // is listened to instead, and keeps going.
   useEffect(() => {
     if (!active) return;
     const sub = AppState.addEventListener('change', (next) => {
-      if (next !== 'active') dispatch({ type: 'pause' });
+      if (next === 'active') setCameraEpoch((e) => e + 1);
+      else if (!staysOnInBackground(stateRef.current, filmNowPlaying.available)) dispatch({ type: 'pause' });
     });
     return () => sub.remove();
   }, [active]);
@@ -134,6 +231,7 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
     state,
     script,
     stop: filmStopFor(script, state),
+    cameraEpoch,
     words,
     sentence,
     spoken,
