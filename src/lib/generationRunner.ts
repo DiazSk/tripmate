@@ -66,6 +66,9 @@ export interface LiveSink {
   onRevised(revision: { days: Itinerary["days"]; issues: string[] }): void;
   /** The day sketch, ~20s in. Optional so the JSON caller and older sinks need nothing. */
   onSketch?(days: SketchDay[]): void;
+  /** The run exists. Its id goes to the client first, so a client that loses the stream can ask
+   *  what became of the plan (`runOutcome`) instead of starting, and paying for, another. */
+  onRun?(runId: string): void;
 }
 
 /** The shared budget for every Overpass lookup between the model's answer and the hand-over; see
@@ -198,6 +201,7 @@ export async function runGeneration(
     destination,
     tripId: tripId ?? null,
   });
+  live?.onRun?.(runId);
 
   // Kicked off before the geocode/weather work below so it runs concurrently
   // with it rather than adding its latency on top.

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
-import { insertTrip, linkGenerationToTrip, listTrips, purgeStaleDrafts } from "@/lib/db";
+import { listTrips, purgeStaleDrafts, saveTripForRun } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
 import { itineraryRejection } from "@/lib/itinerary";
 import { currentOwner, currentOwnerId } from "@/lib/ownerRequest";
@@ -63,39 +62,27 @@ export async function POST(req: NextRequest) {
     timezone = null;
   }
 
-  const trip = insertTrip({
-    id: randomUUID(),
+  // One trip per run: the server already saved this plan as a draft the moment it was written (so a
+  // phone suspended mid-stream still gets it), and this save of the same run returns that row — or,
+  // for a Keep, promotes it — rather than adding a second. See `saveTripForRun`.
+  const id = saveTripForRun({
     // Stamped from the cookie so this plan comes back to the browser that made it, and to no
     // other. A cookieless caller falls back to the legacy bucket — see owner.ts.
-    owner_id: await currentOwnerId(),
+    ownerId: await currentOwnerId(),
     destination,
-    start_date: startDate,
-    end_date: endDate,
+    startDate,
+    endDate,
     budget,
-    itinerary_json: JSON.stringify(itinerary),
-    run_id: runId ?? null,
-    chat_session_id: chatSessionId ?? null,
-    user_answers_json: userAnswers ? JSON.stringify(userAnswers) : null,
+    itinerary,
+    runId: runId ?? null,
+    chatSessionId: chatSessionId ?? null,
+    userAnswers: userAnswers ?? null,
     // Only an explicit "draft" makes one. Anything else — including a caller that predates drafts
-    // and sends no status at all — inserts a kept trip, so the Save button's own POST fallback
+    // and sends no status at all — saves a kept trip, so the Save button's own POST fallback
     // behaves exactly as it did before this field existed.
     status: status === "draft" ? "draft" : "saved",
     timezone,
   });
 
-  // Back-fill the generation that produced this plan. The run still exists before the trip does —
-  // a generation is written the moment the model answers, the trip row a beat later — so
-  // `generations.trip_id` can only be set here. It now fires when the *draft* is created rather
-  // than on Save, which is a strict improvement: a plan the traveler never kept keeps its link to
-  // the run that wrote it, instead of leaving the provenance dangling.
-  // Best-effort: a trip that saved must not fail because its provenance link didn't.
-  if (runId) {
-    try {
-      linkGenerationToTrip(runId, trip.id);
-    } catch (err) {
-      console.error("[trips] generation link failed", err);
-    }
-  }
-
-  return NextResponse.json({ id: trip.id });
+  return NextResponse.json({ id });
 }

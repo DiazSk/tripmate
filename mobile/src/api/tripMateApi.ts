@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 import { searchApplePlaces } from "../../modules/apple-places";
 import { appleCategoriesFor, placesFromApple } from "../lib/applePlaces";
+import type { RunStatus } from "../lib/planRecovery";
 import { fetchWithSession } from "./session";
 import { createSseParser } from "./sse";
 import type {
@@ -62,6 +63,20 @@ export async function getTrip(id: string): Promise<Trip | undefined> {
     return (await res.json()) as Trip;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * What became of a generation whose stream was lost (`planRecovery.ts`). Null when the check itself
+ * failed, which the caller treats as "ask again", not as an answer.
+ */
+export async function getRunStatus(runId: string): Promise<RunStatus> {
+  try {
+    const res = await fetchWithSession(`/api/itinerary/runs/${encodeURIComponent(runId)}`, {});
+    if (!res.ok) return null;
+    return (await res.json()) as RunStatus;
+  } catch {
+    return null;
   }
 }
 
@@ -518,6 +533,9 @@ export async function generateTrip(
       return; // A frame we cannot read is not a reason to fail a running generation.
     }
     switch (frame.event) {
+      case 'run':
+        handlers.onRun?.((payload as { runId: string }).runId);
+        break;
       // The progress frames stop mattering the moment a whole plan exists.
       case 'stage':
         if (!planned) handlers.onStage?.(payload as StageEvent);

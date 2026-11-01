@@ -4,10 +4,10 @@ import { Oswald_400Regular } from '@expo-google-fonts/oswald';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
-import { createTripDraft, generateTrip, getTrip, placePhoto, saveProfile, tripFetch, updateTripItinerary } from '@/api/tripMateApi';
+import { createTripDraft, generateTrip, getRunStatus, getTrip, placePhoto, saveProfile, tripFetch, updateTripItinerary } from '@/api/tripMateApi';
 import type { Itinerary, SketchEvent, StreamedStop } from '@/api/types';
 import { PrimaryButton } from '@/components/form';
 import { Meridian } from '@/components/meridian';
@@ -15,6 +15,7 @@ import { Notice } from '@/components/states';
 import { WritingThePlan } from '@/components/writing-the-plan';
 import { Polar } from '@/constants/polar';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { recoveryStep } from '@/lib/planRecovery';
 import { tierName, tripDays } from '@/lib/tiers';
 import { assembleDays, type DayCoords } from '@/lib/writingPlan';
 import { buildDestinationFacts } from '@shared/destinationFacts';
@@ -24,6 +25,9 @@ import { meriForGeneration } from '@shared/meri';
 import type { RawFetch } from '@shared/types';
 import { toGenerateRequest, toTravelerProfile, toUserAnswers, usePlanDraft } from '@/lib/planDraft';
 import { Text } from '@/components/themed-text';
+
+/** How often a plan whose stream was lost is asked after. A status read, free: no allowance. */
+const RECOVERY_POLL_MS = 4000;
 
 /**
  * The wait, drawn as the live map writing the plan (`components/writing-the-plan.tsx`).
@@ -75,6 +79,15 @@ export default function Generating() {
    * what is stored.
    */
   const written = useRef<{ id: string; itinerary: Itinerary } | null>(null);
+  /**
+   * The run the server is writing, from the stream's first frame, and when it began.
+   *
+   * iOS suspends the app when it is left and the stream drops, while the server carries on and
+   * saves the plan as a draft itself. So a lost stream with a run in hand is not a failure: this
+   * screen asks what became of the run (`recovering`) and opens the plan when it is there.
+   */
+  const run = useRef<{ id: string; startedAt: number } | null>(null);
+  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     if (started.current === attempt) return;
@@ -95,6 +108,9 @@ export default function Generating() {
     generateTrip(
       toGenerateRequest(draft),
       {
+        onRun: (id) => {
+          run.current = { id, startedAt: Date.now() };
+        },
         onStage: (event) => {
           if (!live.current) return;
           setStages((prev) => prev.map((s) => (s.stage === event.stage ? { ...s, status: event.status } : s)));
@@ -123,7 +139,9 @@ export default function Generating() {
           if (!live.current) return;
           // A row exists the moment a plan does, as a draft — so a back press cannot throw away
           // four minutes of work. Keep promotes this same row later.
-          const id = await createTripDraft({
+          // The server saved it already (`tripId`); the client's own save stays as the fallback, and
+          // finds that same row if both run.
+          const id = result.tripId ?? await createTripDraft({
             destination,
             startDate,
             endDate,
@@ -178,7 +196,10 @@ export default function Generating() {
       },
       controller.signal
     ).then((error) => {
-      if (live.current && error) setFailure(error.message);
+      if (!live.current || !error) return;
+      // A dropped stream for a run that exists: the plan may well be written. Ask, don't fail.
+      if (error.kind === 'failed' && run.current && !written.current) setRecovering(true);
+      else setFailure(error.message);
     });
 
     return () => {
@@ -188,8 +209,43 @@ export default function Generating() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
+  // Asks what became of the run every few seconds while the app is in front, until the plan is
+  // there (and opens it, as the stream would have), the run failed, or far too long has passed.
+  useEffect(() => {
+    if (!recovering) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = async () => {
+      const held = run.current;
+      if (stopped || !held) return;
+      if (AppState.currentState !== 'active') {
+        timer = setTimeout(check, RECOVERY_POLL_MS);
+        return;
+      }
+      const step = recoveryStep(await getRunStatus(held.id), held.startedAt, Date.now());
+      if (stopped || !live.current) return;
+      if (step.action === 'open') {
+        setRecovering(false);
+        setReady(true);
+        setTimeout(() => router.replace(`/trip/${step.tripId}`), reduce ? 200 : 1100);
+      } else if (step.action === 'fail') {
+        setRecovering(false);
+        setFailure(step.message);
+      } else {
+        timer = setTimeout(check, RECOVERY_POLL_MS);
+      }
+    };
+    void check();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [recovering, reduce, router]);
+
   /** The same answers, from the top. Everything the last run streamed is cleared first. */
   function tryAgain() {
+    run.current = null;
+    setRecovering(false);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: 'pending' })));
     setStops([]);
     setSketch([]);
@@ -260,6 +316,7 @@ export default function Generating() {
         raw={raw}
         ready={ready}
         seed={draft.destinationLat !== undefined && draft.destinationLng !== undefined ? { lat: draft.destinationLat, lon: draft.destinationLng } : null}
+        note={recovering ? 'Still writing your plan. It carried on while you were away.' : 'You can leave the app. Your plan keeps being written and will be in Trips.'}
         onCancel={() => {
           live.current = false;
           abort.current?.abort();
