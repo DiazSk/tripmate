@@ -4,6 +4,7 @@ import type { PlanPrefill } from "./planExamples";
 import type { ReadyTrip } from "./readyTrips";
 import type { Itinerary } from "./types";
 import { SCOPE_BLOCK_WITH_REFUSAL, tagUserText } from "./promptScope";
+import { NO_EM_DASH_RULE, withoutDashes } from "./writingStyle";
 
 /**
  * Meri's answers to travel questions ("when's the best time to go?", "where should I eat?"), held
@@ -127,7 +128,7 @@ Return exactly one JSON object and nothing else:
 {"answer": string, "places": string[], "months": number[], "sources": string[], "nothing": boolean}
 
 Rules:
-- answer is 1 to 4 sentences. Use only what the evidence says; add nothing from memory.
+- answer is 1 to 4 sentences. Use only what the evidence says; add nothing from memory. ${NO_EM_DASH_RULE}
 - Mention a place only if it is listed above, by its exact name, and put its id in places. Put a month number in months only if it is one the evidence calls good.
 - sources lists the id of every source you used: the short id before the ·, such as osm, not the label. places likewise lists ids such as p1. An answer that used none is not an answer.
 - If the evidence does not answer the question, return {"answer": "", "places": [], "months": [], "sources": [], "nothing": true}.`;
@@ -183,7 +184,10 @@ export function groundAnswer(o: Record<string, unknown>, evidence: Evidence): Me
   if (quotedNames(answer).some((n) => !known.includes(n.toLowerCase()))) return nothingCheckedAnswer();
 
   return {
-    answer,
+    // Dashes are stripped here, not only asked against in the prompt: this is the one place both
+    // Home's answer and the chat's lookup answer pass, and a prompt is not a guarantee. After the
+    // name check, so a venue whose own name carries a dash is still matched as written.
+    answer: withoutDashes(answer),
     places: [...new Set(places as EvidencePlace[])],
     months: [...new Set(months)],
     sources: [...new Set(sources as EvidenceSource[])],
@@ -261,7 +265,7 @@ Respond with ONLY valid JSON, no markdown fences:
 {"reply": string, "options": string[], "places": string[], "months": number[], "sources": string[], "ops":[]}
 
 Rules:
-- reply is 1 to 4 sentences.
+- reply is 1 to 4 sentences. ${NO_EM_DASH_RULE}
 - Mention a place only if it is listed above, by its exact name, and put its id in places. Put a month number in months only if it is one the evidence calls good.
 - sources lists the id of every source you used: the short id before the ·, such as plan or osm, not the label. An answer that used none is not an answer.
 - "ops" is an empty array: this turn changes nothing. "options" offers at most two changes to the plan that follow from the answer, each naming a place listed above by its exact name, under 8 words and tappable as their next message, such as "Add Al-Rawda to day 2". Empty when nothing follows.

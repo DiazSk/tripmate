@@ -66,6 +66,7 @@ import {
 import { gatherEvidence } from "@/lib/meriEvidence";
 import { fetchReadyTrips } from "@/lib/readyTrips";
 import { geocodeDestination } from "@/lib/weather";
+import { withoutDashes } from "@/lib/writingStyle";
 
 interface EditResponse {
   reply?: string;
@@ -387,6 +388,16 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
       parsed = { reply: answered.reply, options: answered.options };
       found = { sources: answered.sources, places: answered.places };
     }
+
+    // The prose a traveller reads, de-dashed once here so the transcript and the response agree.
+    // `editPrompt` already carries NO_EM_DASH_RULE; this is what makes it hold.
+    // Typed by the contract, not checked against it, so a non-string passes through untouched.
+    const tidy = <T,>(v: T): T => (typeof v === "string" ? (withoutDashes(v) as T) : v);
+    parsed.reply = tidy(parsed.reply);
+    parsed.why = tidy(parsed.why);
+    parsed.knockOn = tidy(parsed.knockOn);
+    if (Array.isArray(parsed.changes)) parsed.changes = parsed.changes.map(tidy);
+    if (Array.isArray(parsed.warnings)) parsed.warnings = parsed.warnings.map(tidy);
 
     const ops = parsed.ops ?? [];
     const { itinerary: updated, rejected } = applyPatch(itinerary, ops, scope);
