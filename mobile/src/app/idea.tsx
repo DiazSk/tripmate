@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,6 +26,7 @@ import {
   readingLine,
 } from '@/lib/homeIdeas';
 import { useReadyTrips } from '@/lib/useReadyTrips';
+import { Text } from '@/components/themed-text';
 
 /** `undefined` while Meri reads; `null` when she could not be asked (no signal). */
 type Answer = ReadWithAnswer | { error: string; limited: boolean } | null | undefined;
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
   waitBar: { height: 12, borderRadius: 6, backgroundColor: Polar.rule },
   answerText: { fontFamily: PolarFonts.sans, fontSize: 16, lineHeight: 22, color: Polar.ink },
   monthRow: { flexDirection: 'row', gap: 4 },
-  month: { flex: 1, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  month: { flex: 1, paddingVertical: 6, minHeight: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   monthOn: { backgroundColor: Polar.signal },
   monthBest: { borderWidth: 2, borderColor: Polar.ink },
   monthText: { fontFamily: PolarFonts.sansRegular, fontSize: 12, color: Polar.secondary },

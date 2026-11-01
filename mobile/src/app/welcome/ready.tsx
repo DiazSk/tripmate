@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
 
 import { firstName, welcomeSummary } from '@shared/travelCard';
@@ -9,6 +9,7 @@ import { TravelCard } from '@/components/travel-card';
 import { WelcomeFrame } from '@/components/welcome-frame';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { useWelcome } from '@/lib/welcomeDraft';
+import { Text } from '@/components/themed-text';
 
 /** The card, handed over whole: it rises into place with its stamps, then the two ways on. */
 export default function WelcomeReady() {

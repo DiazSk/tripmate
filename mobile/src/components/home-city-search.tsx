@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { HomeCity } from '@shared/travelerProfile';
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
@@ -9,6 +9,7 @@ import { Glass, GlassField } from '@/components/glass-auth';
 import { PaperInput } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { Colors } from '@/constants/theme';
+import { Text } from '@/components/themed-text';
 
 /**
  * A city search that resolves to a `HomeCity`. Used by the welcome (as glass over its photograph,

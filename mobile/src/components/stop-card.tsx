@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import type { MapType } from 'react-native-maps';
 import { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
@@ -6,7 +6,7 @@ import { SymbolView } from '@/components/symbol';
 import type { Stop } from '@/api/types';
 import { Group, MAP_FLOOR, chrome } from '@/components/map-controls';
 import { StopDisc } from '@/components/stop-disc';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText, Text } from '@/components/themed-text';
 import { Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
 import { stopParticulars } from '@/lib/dayDisplay';
 import { formatMoney } from '@/lib/spend';

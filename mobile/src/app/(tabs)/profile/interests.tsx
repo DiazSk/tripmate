@@ -1,11 +1,12 @@
 import { Stack } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { SymbolView } from '@/components/symbol';
 import { CheckRow, Footer, Group, Separator, SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { INTERESTS, MAX_STARRED, toggleTag } from '@/lib/planDraft';
 import { useProfileStore } from '@/lib/profileStore';
+import { Text } from '@/components/themed-text';
 
 /**
  * Tags you choose, and up to three you star. Unstarring follows deselection (a starred tag no longer

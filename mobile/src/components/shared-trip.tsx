@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -26,6 +25,7 @@ import { formatDayChip, formatRange, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
 import { timelineRows, type TimelineLeg } from '@/lib/sharedTimeline';
 import { formatMoney } from '@/lib/spend';
+import { Text } from '@/components/themed-text';
 
 /**
  * A trip somebody sent you, as the canvas design "Phone shared trip · 4 Cover, days, thumb bar".
@@ -526,12 +526,12 @@ const styles = StyleSheet.create({
   },
   noticeText: { flexShrink: 1, fontSize: 13, lineHeight: 17, color: '#1C1C1E' },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 6, borderRadius: 999, overflow: 'hidden' },
-  switch: { flexDirection: 'row', height: 44, padding: 3, borderRadius: 999, backgroundColor: 'rgba(120,120,128,0.14)' },
+  switch: { flexDirection: 'row', minHeight: 44, padding: 3, borderRadius: 999, backgroundColor: 'rgba(120,120,128,0.14)' },
   half: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 999 },
   halfOn: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
   halfText: { fontSize: 14, fontWeight: '600', color: SharedColors.grey },
   halfTextOn: { color: Polar.ink },
-  save: { flex: 1, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
+  save: { flex: 1, paddingVertical: 6, minHeight: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
   savePressed: { backgroundColor: Polar.signalPressed },
   saveText: { fontSize: 16, fontWeight: '600', color: Polar.ink },
 
@@ -543,7 +543,8 @@ const styles = StyleSheet.create({
   directions: {
     flexDirection: 'row',
     gap: 8,
-    height: 50,
+    minHeight: 50,
+    paddingVertical: 6,
     marginTop: 20,
     borderRadius: 25,
     alignItems: 'center',

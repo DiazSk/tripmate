@@ -1,7 +1,7 @@
 import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
 import { useRef, useState, type ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import type { DayPlan, Stop } from '@/api/types';
@@ -9,7 +9,7 @@ import { MoneyBand } from '@/components/budget-sheet';
 import { PlacePhoto } from '@/components/place-photo';
 import { TravelSegment } from '@/components/travel-segment';
 import { DISC_SIZE, StopDisc } from '@/components/stop-disc';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText, Text, TextInput } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { dayLine, stopParticulars } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
@@ -100,7 +100,7 @@ export function DayPage({
    * changed yet, and a cost edited on a row that might be about to move is a second edit.
    */
   preview?: { rows: ProposalRow[]; dayName: (index: number) => string } | null;
-  /** A fact about the whole trip that sits under the day's hero — the draft's Keep shelf. */
+  /** Facts about the whole trip that sit under the day's hero and scroll with it — Keep, plan health, anchors. */
   shelf?: ReactNode;
 }) {
   const stops = day.stops ?? [];

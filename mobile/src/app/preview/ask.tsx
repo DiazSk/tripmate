@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import type { ChatTurn, DayPlan, Itinerary, Stop } from '@/api/types';
 import { AskBar } from '@/components/ask-bar';
@@ -10,6 +10,7 @@ import { TripToolbar } from '@/components/trip-toolbar';
 import { Colors, Spacing } from '@/constants/theme';
 import { diffItineraries } from '@/lib/itineraryDiff';
 import { proposalRows } from '@/lib/proposalRows';
+import { Text } from '@/components/themed-text';
 
 /**
  * Asking for a change, with no planner behind it. **`__DEV__` only**, like `preview/writing.tsx`:

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 
 import { arrivalPoints } from '@/api/tripMateApi';
 import type { ArrivalPoint } from '@/api/types';
 import { PlanColors, Section, SheetScreen, TextRow, TimeRow } from '@/components/plan-ui';
 import { usePlanDraft } from '@/lib/planDraft';
+import { Text } from '@/components/themed-text';
 
 /**
  * Anything fixed already: where you are staying, and when and where you arrive and leave. The

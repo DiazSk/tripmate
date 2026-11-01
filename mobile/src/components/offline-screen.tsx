@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -21,6 +20,7 @@ import { QuietLink, SignalButton, monumentFontSize, usePolarFonts, usePolarStatu
 import { Polar, PolarFonts, PolarSpace, PolarType } from '@/constants/polar';
 import { tripDays } from '@/lib/tiers';
 import { readCachedTrips, type Cached } from '@/lib/tripCache';
+import { Text } from '@/components/themed-text';
 
 /**
  * "You're out of range", the web's `/offline` (canvas design "Offline · 1 Out of range") at phone

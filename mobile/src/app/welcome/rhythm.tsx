@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { CROWD_CHOICES, PACE_CHOICES } from '@shared/travelCard';
 
@@ -8,6 +8,7 @@ import { GlassChoice, GlassHeading, GlassSegment, WelcomeFrame, welcomeGlass } f
 import { Polar } from '@/constants/polar';
 import { dayCore } from '@/constants/theme';
 import { useWelcome } from '@/lib/welcomeDraft';
+import { Text } from '@/components/themed-text';
 
 export default function WelcomeRhythm() {
   const { answers, set, react, save, busy, guard } = useWelcome();

@@ -4,7 +4,7 @@ import { beatAt, beatDurations, clockLabel } from '@shared/storyTimeline';
 import type { StoryBeat } from '@shared/storyScript';
 import { useFonts } from 'expo-font';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -26,10 +26,11 @@ import { Meridian } from '@/components/meridian';
 import { PlacePhoto } from '@/components/place-photo';
 import { StopDisc } from '@/components/stop-disc';
 import { Polar, PolarFonts, PolarRadius } from '@/constants/polar';
-import { Curve, Motion, dayCore } from '@/constants/theme';
+import { Curve, Motion, dayCore, FontScale } from '@/constants/theme';
 import { filmSubtitle, meriForFilm } from '@/lib/meri';
 import { filmBeatTitle } from '@/lib/storyFilm';
 import type { useStoryFilm } from '@/lib/useStoryFilm';
+import { Text } from '@/components/themed-text';
 
 /**
  * The film as the canvas design "Story mode · 1 Subtitles", at phone width — the web's
@@ -265,7 +266,7 @@ export function StoryPanel({
               <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.nowTitle} numberOfLines={2}>
                 {loading ? `Writing day ${dayIndex + 1}…` : ended ? `Day ${dayIndex + 1} is done` : title(beat)}
               </Text>
-              <Text maxFontSizeMultiplier={TEXT_CAP} style={styles.nowSub} numberOfLines={1}>
+              <Text maxFontSizeMultiplier={CHROME_CAP} style={styles.nowSub} numberOfLines={1}>
                 {`${destination.split(',')[0]} · Day ${dayIndex + 1}${day?.title ? ` · ${day.title}` : ''}`}
               </Text>
             </View>
@@ -412,8 +413,8 @@ function Icon({ name, size, color, label }: { name: React.ComponentProps<typeof 
  * captions under them to 1.6x (ThemedText's cap). Uncapped at AX3 the subtitle ran off the top of the
  * screen and the bar's clock wrapped to two lines.
  */
-const CHROME_CAP = 1.3;
-const TEXT_CAP = 1.6;
+const CHROME_CAP = FontScale.chrome;
+const TEXT_CAP = FontScale.body;
 
 const NIGHT_BAR = 'rgba(9,11,16,0.96)';
 const HAIRLINE = 'rgba(255,255,255,0.08)';

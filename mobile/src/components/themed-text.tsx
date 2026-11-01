@@ -1,6 +1,53 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { createContext, useContext } from 'react';
+import {
+  StyleSheet,
+  Text as NativeText,
+  TextInput as NativeTextInput,
+  type TextInputProps,
+  type TextProps,
+} from 'react-native';
 
-import { Colors, Fonts, type ThemeColor } from '@/constants/theme';
+import { Colors, FontScale, Fonts, type ThemeColor } from '@/constants/theme';
+
+/**
+ * The cap of the text this one is nested in. A nested span with no size of its own takes its
+ * parent's size, so it must take its parent's cap too — on Fabric a child's
+ * `maxFontSizeMultiplier` overrides the parent's, and a 1.6 span inside a 1.3 masthead would grow
+ * past the words around it.
+ */
+const CapContext = createContext<number | null>(null);
+
+const capForSize = (size: number | undefined) =>
+  size !== undefined && size >= FontScale.displayFrom ? FontScale.display : FontScale.body;
+
+/**
+ * `react-native`'s `Text`, with `FontScale`'s cap applied when the call site gives none. Import this
+ * rather than the platform's, and new text is capped without anyone remembering to — see `FontScale`.
+ */
+export function Text({ maxFontSizeMultiplier, ...props }: TextProps & { ref?: React.Ref<NativeText> }) {
+  const parent = useContext(CapContext);
+  const size = StyleSheet.flatten(props.style)?.fontSize;
+  const cap = maxFontSizeMultiplier ?? (size === undefined && parent !== null ? parent : capForSize(size));
+  return (
+    <CapContext.Provider value={cap}>
+      <NativeText {...props} maxFontSizeMultiplier={cap} />
+    </CapContext.Provider>
+  );
+}
+// The instance type under the same name, so `useRef<Text>` keeps working after the import swap.
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export type Text = NativeText;
+
+/** The same for inputs: what somebody types is read text, so it takes `body` unless told otherwise. */
+export function TextInput({
+  maxFontSizeMultiplier,
+  ...props
+}: TextInputProps & { ref?: React.Ref<NativeTextInput> }) {
+  const size = StyleSheet.flatten(props.style)?.fontSize;
+  return <NativeTextInput {...props} maxFontSizeMultiplier={maxFontSizeMultiplier ?? capForSize(size)} />;
+}
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export type TextInput = NativeTextInput;
 
 /**
  * The Kiln type scale, from `ios/TripMateKit/Sources/TripMateKit/Typography.swift`.
@@ -41,8 +88,8 @@ export type ThemedTextProps = TextProps & {
  * which is what leaves its Dynamic Type uncapped (see DESIGN.md's third boundary).
  */
 const MAX_SCALE: Partial<Record<KilnTextType, number>> = {
-  display: 1.3,
-  price: 1.3,
+  display: FontScale.display,
+  price: FontScale.display,
 };
 
 export function ThemedText({
@@ -52,7 +99,7 @@ export function ThemedText({
   maxFontSizeMultiplier,
   ...rest
 }: ThemedTextProps) {
-  const cap = maxFontSizeMultiplier ?? MAX_SCALE[type] ?? 1.6;
+  const cap = maxFontSizeMultiplier ?? MAX_SCALE[type] ?? FontScale.body;
 
   /**
    * **No leading rule of our own: React Native already scales `lineHeight`.** On iOS the explicit

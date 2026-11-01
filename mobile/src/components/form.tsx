@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Switch,
-  TextInput,
   useWindowDimensions,
   View,
   type StyleProp,
@@ -16,7 +15,7 @@ import {
 } from 'react-native';
 
 import { DatePicker } from '@/components/date-picker';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText, TextInput } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { MAX_FONT_SCALE, prefixedWidth } from '@/lib/fieldWidth';
 

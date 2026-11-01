@@ -1,10 +1,11 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { SymbolView } from '@/components/symbol';
 import { HomeCitySearch } from '@/components/home-city-search';
 import { Footer, Group, RowIcon } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { useProfileStore } from '@/lib/profileStore';
+import { Text } from '@/components/themed-text';
 
 /** Where you usually set off from. It goes on the passport, and it helps with travel times. */
 export default function Home() {

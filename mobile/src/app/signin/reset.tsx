@@ -1,13 +1,13 @@
 import { useSignIn } from '@clerk/expo';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Text } from 'react-native';
 
 import { GlassStep, Note, PasswordField, SignalCapsule, glassText, useClerkStep } from '@/components/glass-auth';
 import { unsupportedStepMessage } from '@/lib/clerkError';
 import { passwordToGo } from '@/lib/emailFirst';
 import { PASSWORD_MIN } from '@/lib/formGap';
 import { useFinishAuth } from '@/lib/useFinishAuth';
+import { Text } from '@/components/themed-text';
 
 /**
  * The reset's last screen, reached only from a verified code (`code.tsx`), so the sign-in is at

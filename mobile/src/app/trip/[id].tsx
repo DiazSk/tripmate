@@ -40,7 +40,7 @@ import { PlanHealth } from '@/components/plan-health';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { TripToolbar } from '@/components/trip-toolbar';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontScale, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
 import { type Repair, repairsFor } from '@shared/guardrailFixes';
 import { clearsIn } from '@shared/memories';
@@ -186,6 +186,7 @@ export default function TripDetail() {
    * is the traveller finding out at the tram stop.
    */
   const [touched, setTouched] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const findings = useMemo(
     () => health?.dimensions.flatMap((dimension) => dimension.findings) ?? [],
@@ -535,25 +536,6 @@ export default function TripDetail() {
                 </Pressable>
               ) : null}
 
-              {trip && importNoteLines(trip.itinerary).length > 0 ? (
-                // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
-                <View style={styles.importNotes}>
-                  {importNoteLines(trip.itinerary).map((line) => (
-                    <ThemedText key={line} type="detail" themeColor="muted">
-                      {line}
-                    </ThemedText>
-                  ))}
-                </View>
-              ) : null}
-              {health && (touched || chat.turns.length > 0 || (trip && showsHealthOnOpen(trip.itinerary))) ? (
-                <PlanHealth health={health} />
-              ) : null}
-
-              <AnchorReceipt
-                itinerary={trip.itinerary}
-                kept={trip.status !== 'draft'}
-                onFitAnchor={(name) => askWith(fitMessage(name))}
-              />
             </>
           )}
 
@@ -576,10 +558,37 @@ export default function TripDetail() {
               proposal={chat.pending ? { itinerary: chat.pending.itinerary, diff: chat.pending.diff } : null}
               // Under the day's hero, as trip-2C draws it, not in the chrome above the day: that put
               // ~290pt of header, strip and card between the traveller and the first stop.
+              //
+              // **The trip's own cards ride the day's scroll too, for the reason the shelf does.** The
+              // import notes, plan health and anchor receipt sat in the fixed chrome above the pager,
+              // so five blocking findings — a title-size verdict, three lines of detail and, opened,
+              // every dimension's findings — took the screen's height from the day beneath them and
+              // could not themselves scroll: the last ones sat behind the ask bar with no way to reach
+              // them. Here they scroll with the day and inherit its footer inset.
               shelf={
-                trip.status === 'draft' ? (
-                  <KeepShelf trip={trip} onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })} />
-                ) : null
+                <>
+                  {trip.status === 'draft' ? (
+                    <KeepShelf trip={trip} onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })} />
+                  ) : null}
+                  {importNoteLines(trip.itinerary).length > 0 ? (
+                    // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
+                    <View style={styles.importNotes}>
+                      {importNoteLines(trip.itinerary).map((line) => (
+                        <ThemedText key={line} type="detail" themeColor="muted">
+                          {line}
+                        </ThemedText>
+                      ))}
+                    </View>
+                  ) : null}
+                  {health && (touched || chat.turns.length > 0 || showsHealthOnOpen(trip.itinerary)) ? (
+                    <PlanHealth health={health} open={healthOpen} onToggle={() => setHealthOpen((was) => !was)} />
+                  ) : null}
+                  <AnchorReceipt
+                    itinerary={trip.itinerary}
+                    kept={trip.status !== 'draft'}
+                    onFitAnchor={(name) => askWith(fitMessage(name))}
+                  />
+                </>
               }
             />
 
@@ -1120,7 +1129,7 @@ function DayPager({
   offline: boolean;
   /** A change waiting for approval, drawn on each day it touches. */
   proposal: { itinerary: Itinerary; diff: ItineraryDiff } | null;
-  /** The draft's Keep shelf, drawn under every day's hero — see `DayPage`. */
+  /** The trip-level cards (Keep shelf, import notes, plan health, anchors), drawn under every day's hero — see `DayPage`. */
   shelf: React.ReactNode;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
@@ -1248,11 +1257,15 @@ function DayStrip({
             accessibilityLabel={`Day ${index + 1} of ${count}${marked.includes(index) ? ', changes here' : ''}`}
             style={[styles.chip, active && styles.chipActive]}>
             {marked.includes(index) ? <View style={styles.chipMark} /> : null}
-            <ThemedText type="money" themeColor="muted" style={active && styles.chipTextActive}>
+            <ThemedText type="money" themeColor="muted" maxFontSizeMultiplier={FontScale.chrome} style={active && styles.chipTextActive}>
               {chip?.dayOfMonth ?? index + 1}
             </ThemedText>
             {chip ? (
-              <ThemedText type="micro" themeColor="muted" style={[styles.chipWeekday, active && styles.chipTextActive]}>
+              <ThemedText
+                type="micro"
+                themeColor="muted"
+                maxFontSizeMultiplier={FontScale.chrome}
+                style={[styles.chipWeekday, active && styles.chipTextActive]}>
                 {chip.weekday.toUpperCase()}
               </ThemedText>
             ) : null}

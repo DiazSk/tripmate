@@ -1,9 +1,10 @@
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { CheckRow, Footer, Group, Header, Separator, SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { DIETARY_TAGS, toggleTag } from '@/lib/planDraft';
 import { useProfileStore } from '@/lib/profileStore';
+import { TextInput } from '@/components/themed-text';
 
 /** Dietary needs: applied to every food stop on every trip, so a check here is a hard rule. */
 export default function Dietary() {

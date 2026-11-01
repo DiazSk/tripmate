@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { SymbolView } from '@/components/symbol';
 import { importPlaces, listSavedPlaces } from '@/api/tripMateApi';
@@ -13,6 +13,7 @@ import { looksLikeDayPlan } from '@/lib/importItems';
 import { usePlanDraft } from '@/lib/planDraft';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
+import { Text } from '@/components/themed-text';
 
 /**
  * Places you've saved, and a note to plan around — the two things the planner reads besides your

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { formatDateRange } from '@shared/format';
 import { city } from '@shared/memories';
@@ -18,6 +18,7 @@ import { BarHeight } from '@/constants/theme';
 import { CROWDS, DISCOVERIES, ENERGY, GROUPS, PACES } from '@/lib/planDraft';
 import { dietaryValue, interestsValue } from '@/lib/profileRows';
 import { confirmSignOut, useProfileStore, withLegacy, type SaveStatus } from '@/lib/profileStore';
+import { Text } from '@/components/themed-text';
 
 /**
  * Your travel profile as a settings screen (canvas design "Phone profile · 4 Settings with a

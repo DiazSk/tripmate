@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
 import { Marker, Polygon, Polyline } from 'react-native-maps';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,13 +9,14 @@ import { Meridian } from '@/components/meridian';
 import { Wordmark } from '@/components/polar-landing/landing-screen';
 import { Scrim } from '@/components/polar-landing/scrim';
 import { Polar, PolarFonts, PolarSpace, PolarType } from '@/constants/polar';
-import { dayCore } from '@/constants/theme';
+import { dayCore, FontScale } from '@/constants/theme';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 import { formatMoney } from '@shared/format';
 import { HANDOFF_SECONDS, forecastLine, handoffFraction, latestStop, nowLine, waitPhrase, type PlanDay } from '@/lib/writingPlan';
 import { STEP_GROUPS, generationProgress, isStepTerminal, stepGroupState, type StageProgress } from '@shared/generationStages';
 import { meriForGeneration } from '@shared/meri';
 import type { RawFetch } from '@shared/types';
+import { Text } from '@/components/themed-text';
 
 /**
  * The wait while a plan is written: canvas design "Phone generating · 2 At night, a Live
@@ -236,7 +237,7 @@ export function WritingThePlan({
         pointerEvents="none"
         onLayout={(e) => setLedeBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
         <Text style={[PolarType.eyebrow, styles.dim]}>{`Planning ${city}`}</Text>
-        <Animated.Text key={factIndex} entering={reduce ? undefined : FadeIn.duration(600)} style={styles.fact} numberOfLines={4}>
+        <Animated.Text key={factIndex} entering={reduce ? undefined : FadeIn.duration(600)} style={styles.fact} numberOfLines={4} maxFontSizeMultiplier={FontScale.display}>
           {pool[factIndex] ?? `Reading everything we can find about ${city}.`}
         </Animated.Text>
       </View>
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   dim: { color: Polar.nightText2 },
 
-  header: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: PolarSpace.pad },
+  header: { paddingVertical: 6, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: PolarSpace.pad },
   lede: { position: 'absolute', left: PolarSpace.pad, right: PolarSpace.pad, gap: PolarSpace.s2 },
   // The largest thing on the screen, deliberately: it is the one thing here worth reading slowly,
   // and the eye needs somewhere to rest that is not the progress.
@@ -356,7 +357,8 @@ const styles = StyleSheet.create({
   dotNow: { width: 9, height: 9, borderRadius: 5, backgroundColor: Polar.ice },
 
   cancel: {
-    height: 38,
+    minHeight: 38,
+    paddingVertical: 6,
     paddingHorizontal: 18,
     justifyContent: 'center',
     borderRadius: 19,

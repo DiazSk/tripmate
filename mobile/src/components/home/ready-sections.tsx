@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { ReadyTrip } from '@shared/readyTrips';
 
@@ -8,6 +8,7 @@ import { Polar, PolarFonts } from '@/constants/polar';
 import { clockAt } from '@/lib/dayDisplay';
 import { featuredFor, filterTrips, railsFor, type Pill } from '@/lib/readyTrips';
 import type { Cached } from '@/lib/tripCache';
+import { Text } from '@/components/themed-text';
 
 const GAP = 12;
 const GUTTER = 20;

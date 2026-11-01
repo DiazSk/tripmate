@@ -4,7 +4,7 @@ import { Oswald_400Regular } from '@expo-google-fonts/oswald';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { createTripDraft, generateTrip, getTrip, placePhoto, saveProfile, tripFetch, updateTripItinerary } from '@/api/tripMateApi';
@@ -23,6 +23,7 @@ import { STAGE_ORDER, type StageProgress } from '@shared/generationStages';
 import { meriForGeneration } from '@shared/meri';
 import type { RawFetch } from '@shared/types';
 import { toGenerateRequest, toTravelerProfile, toUserAnswers, usePlanDraft } from '@/lib/planDraft';
+import { Text } from '@/components/themed-text';
 
 /**
  * The wait, drawn as the live map writing the plan (`components/writing-the-plan.tsx`).

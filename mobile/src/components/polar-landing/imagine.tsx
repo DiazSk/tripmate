@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useEffectEvent, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View, type DimensionValue } from 'react-native';
+import { Modal, Pressable, StyleSheet, View, type DimensionValue } from 'react-native';
 import { Marker, Polyline, type Camera, type Region } from 'react-native-maps';
 import Animated, { SlideInDown, SlideOutDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { Polar, PolarFonts, PolarMotion, PolarRadius, PolarSpace, PolarType } fr
 import { altitudeForRegion, regionForStops } from '@/lib/mapRegion';
 import { PETRA_IMG } from './content';
 import { Scrim } from './scrim';
+import { Text } from '@/components/themed-text';
 
 /**
  * "A day you can imagine": the day in Petra told as the hours pass (the story's ground keeping the

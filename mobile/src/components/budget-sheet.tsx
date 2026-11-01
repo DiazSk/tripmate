@@ -272,7 +272,7 @@ function DayTab({
           const sureness = surenessOf(stop);
           return (
             <View key={`${stop.name}-${i}`} style={[styles.row, i > 0 && styles.rowRuled]}>
-              <ThemedText type="body" numberOfLines={1} style={styles.grow}>
+              <ThemedText type="body" numberOfLines={2} style={styles.grow}>
                 {stop.name}
               </ThemedText>
               <Pressable
@@ -294,7 +294,7 @@ function DayTab({
         })}
         {day.lodging ? (
           <View style={[styles.row, day.stops.length > 0 && styles.rowRuled]}>
-            <ThemedText type="body" numberOfLines={1} style={styles.grow}>
+            <ThemedText type="body" numberOfLines={2} style={styles.grow}>
               {day.lodging.name}
             </ThemedText>
             {/* Read-only: nothing on the phone writes a stay's cost yet, so its chip only says. */}

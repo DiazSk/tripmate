@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { candidatePois } from '@/api/tripMateApi';
 import type { CandidatePoi } from '@/api/types';
 import { ChipsRow, PlanColors, Section, SheetScreen, TextRow } from '@/components/plan-ui';
 import { usePlanDraft } from '@/lib/planDraft';
+import { Text } from '@/components/themed-text';
 
 /**
  * Places to pin before the plan is written, and places to leave out.

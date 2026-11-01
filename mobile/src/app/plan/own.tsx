@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SymbolView } from '@/components/symbol';
@@ -12,6 +12,7 @@ import { Polar, PolarFonts } from '@/constants/polar';
 import { dayDate, forgetPlaces, isFound, looseAnchors, ownPlanGap, renameStop, sourceLines, suggestedStart } from '@/lib/ownPlan';
 import { usePlanDraft } from '@/lib/planDraft';
 import { summariseUnread } from '@/lib/unreadSummary';
+import { Text, TextInput } from '@/components/themed-text';
 
 type Status = 'found' | 'missing' | 'later';
 const STATUS: Record<Status, string> = {
@@ -443,7 +444,8 @@ const styles = StyleSheet.create({
   fixHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   fixWhen: { flex: 1, fontSize: 12, fontWeight: '600', letterSpacing: 0.3, color: PlanColors.grey },
   fixInput: {
-    height: 42,
+    minHeight: 42,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     fontSize: 17,
     color: '#000',
@@ -465,11 +467,11 @@ const styles = StyleSheet.create({
   badgeMissing: { backgroundColor: MISS },
   badgeLater: { backgroundColor: '#8E8E93' },
   badgeMark: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  tag: { minWidth: 36, height: 26, paddingHorizontal: 7, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: `${Polar.ember}1A` },
+  tag: { minWidth: 36, paddingVertical: 6, minHeight: 26, paddingHorizontal: 7, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: `${Polar.ember}1A` },
   tagText: { fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'], color: Polar.ember },
 
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 12, paddingHorizontal: 16, backgroundColor: `${PlanColors.ground}F2` },
-  build: { height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
+  build: { paddingVertical: 6, minHeight: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
   buildPressed: { backgroundColor: Polar.signalPressed },
   buildText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
 

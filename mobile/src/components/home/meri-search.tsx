@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 import { IDEA_MAX_CHARS } from '@shared/ideaRead';
@@ -10,6 +10,7 @@ import { SettingsColors } from '@/components/settings-list';
 import { SymbolView } from '@/components/symbol';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { QUICK_PROMPTS, TYPEWRITER_IDEAS, typewriterTick, type Typewriter } from '@/lib/homeIdeas';
+import { Text, TextInput } from '@/components/themed-text';
 
 const START: Typewriter = { line: 0, chars: 0, phase: 'typing' };
 /** Reduce Motion: whole lines, swapped on this beat, never typed. */

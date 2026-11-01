@@ -1,6 +1,6 @@
 import { Stack, useGlobalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { getProfile } from '@/api/tripMateApi';
 import type { TravelerProfile } from '@/api/types';
@@ -10,6 +10,7 @@ import { SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { Colors } from '@/constants/theme';
 import { PlanDraftProvider, type PlanPrefillParams } from '@/lib/planDraft';
+import { Text } from '@/components/themed-text';
 
 /**
  * The way out of the wizard, on the two screens that would otherwise have none.

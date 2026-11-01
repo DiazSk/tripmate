@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { avatarTint, initialsFor } from '@shared/avatar';
 
@@ -9,6 +9,7 @@ import { SymbolView } from '@/components/symbol';
 import { removeAvatar, uploadAvatar, type Account } from '@/api/auth';
 import { Colors } from '@/constants/theme';
 import { squareJpegBase64 } from '@/lib/avatarImage';
+import { Text } from '@/components/themed-text';
 
 /**
  * A traveller's face: their photo, else initials on a disc tinted from their account id (the same

@@ -1,12 +1,14 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Line, Pattern, Rect } from 'react-native-svg';
 
 import type { Account } from '@/api/auth';
 import type { ProfileStats } from '@/api/types';
 import { Avatar } from '@/components/avatar';
 import { Polar, PolarFonts } from '@/constants/polar';
+import { FontScale } from '@/constants/theme';
 import { passportLines } from '@/lib/profileRows';
 import { formatMoney } from '@/lib/spend';
+import { Text } from '@/components/themed-text';
 
 /**
  * The passport data page that leads the Profile tab (canvas design "Phone profile · 4 Settings with
@@ -36,7 +38,9 @@ export function Passport({ account, homeCity, stats, onPress }: { account: Accou
 
       <View style={styles.top}>
         <Text style={styles.issuer}>TripMate</Text>
-        <Text style={styles.kind}>Travel profile · Passport</Text>
+        <Text style={styles.kind} maxFontSizeMultiplier={FontScale.chrome}>
+          Travel profile · Passport
+        </Text>
       </View>
 
       <View style={styles.data}>
@@ -69,7 +73,10 @@ export function Passport({ account, homeCity, stats, onPress }: { account: Accou
 function Field({ k, v, wide = false }: { k: string; v: string; wide?: boolean }) {
   return (
     <View style={wide ? styles.fieldWide : styles.field}>
-      <Text style={styles.k}>{k}</Text>
+      {/* Chrome's cap: a third of a card's width, and at the body cap "PLACES" broke mid-word. */}
+      <Text style={styles.k} maxFontSizeMultiplier={FontScale.chrome}>
+        {k}
+      </Text>
       <Text style={styles.v} numberOfLines={1}>
         {v}
       </Text>
@@ -95,7 +102,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
   },
   pressed: { transform: [{ scale: 0.985 }] },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 },
+  // Wraps at the large text sizes rather than pushing the kind off the card's right edge.
+  top: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 8, justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 },
   issuer: { fontFamily: PolarFonts.condensed, fontSize: 15, letterSpacing: 2.7, textTransform: 'uppercase', color: Polar.ink },
   kind: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4, textTransform: 'uppercase', color: Polar.ember },
   data: { flexDirection: 'row', gap: 14 },

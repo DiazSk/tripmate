@@ -1,9 +1,10 @@
 import NativeDatePicker, { type DateTimePickerProps } from '@expo/ui/community/datetime-picker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 
 import { Polar } from '@/constants/polar';
 import { fromUtcDay, toUtcDay } from '@/lib/utcDay';
+import { Text } from '@/components/themed-text';
 
 /**
  * The date and time picker, as a field on both platforms.

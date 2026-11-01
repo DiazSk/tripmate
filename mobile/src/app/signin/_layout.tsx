@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { Stack, ThemeProvider, useTheme } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { leaveSignIn } from '@/components/glass-auth';
@@ -10,6 +10,7 @@ import { Polar, PolarFonts, PolarSpace } from '@/constants/polar';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
 import wadiRum from '@/assets/images/scenes/wadi-rum-desert.webp';
+import { Text } from '@/components/themed-text';
 
 /**
  * The auth flow, as the canvas design "Phone auth · 3 Glass over the night": Wadi Rum at night,

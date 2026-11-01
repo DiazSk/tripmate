@@ -1,9 +1,10 @@
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OfflineScreen } from '@/components/offline-screen';
+import { Text } from '@/components/themed-text';
 
 /**
  * The offline screen, with no network to lose. **`__DEV__` only**, like `preview/today.tsx`: it

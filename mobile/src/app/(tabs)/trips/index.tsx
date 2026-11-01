@@ -11,7 +11,6 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -36,6 +35,7 @@ import { confirmDelete } from '@/lib/confirmDelete';
 import { tripDays } from '@/lib/tiers';
 import { matchesQuery, todayISO, tripShelves } from '@/lib/tripsWall';
 import { useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
+import { Text } from '@/components/themed-text';
 
 type Loaded = { saved: TripSummary[]; drafts: TripSummary[] };
 
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   emptyFront: { backgroundColor: Polar.signal },
   emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', textAlign: 'center' },
   emptyBody: { fontSize: 15, lineHeight: 21, color: GREY, textAlign: 'center' },
-  cta: { marginTop: 14, height: 50, paddingHorizontal: 28, borderRadius: 25, justifyContent: 'center', backgroundColor: Polar.signal },
+  cta: { marginTop: 14, paddingVertical: 6, minHeight: 50, paddingHorizontal: 28, borderRadius: 25, justifyContent: 'center', backgroundColor: Polar.signal },
   ctaPressed: { backgroundColor: Polar.signalPressed },
   ctaText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
   link: { minHeight: 44, justifyContent: 'center' },

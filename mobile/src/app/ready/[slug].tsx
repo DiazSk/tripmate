@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Make it mine plans from the same month out a read does.
@@ -18,6 +18,7 @@ import { Polar, PolarFonts } from '@/constants/polar';
 import { prefillQuery, readyTripPrefill } from '@/lib/homeIdeas';
 import { formatMoney } from '@/lib/spend';
 import { useReadyTrips } from '@/lib/useReadyTrips';
+import { Text } from '@/components/themed-text';
 
 /**
  * A ready-made trip, opened from its card on Home (design D's preview sheet): the photograph with

@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { Children, Fragment, type ReactNode, type Ref } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions, type TextInputProps } from 'react-native';
 
 import { DatePicker } from '@/components/date-picker';
 import { SymbolView } from '@/components/symbol';
@@ -9,6 +9,7 @@ import { Header, Separator, SettingsColors } from '@/components/settings-list';
 import { SheetDone } from '@/components/sheet-done';
 import { nowTime, toClock, toDate, toIso, toTimeDate } from '@/components/form';
 import { Polar } from '@/constants/polar';
+import { Text, TextInput } from '@/components/themed-text';
 
 /**
  * The planner's rows, drawn the way an iOS form draws them: white rows in a rounded group on the
@@ -76,6 +77,17 @@ export function TextRow({
  * date, so an unanswered start would read as today while the screen still treats it as missing.
  * Until tapped it is the placeholder, which sets today and shows the picker.
  */
+/**
+ * The native picker is a SwiftUI view: `maxFontSizeMultiplier` never reaches it, so it keeps growing
+ * with Dynamic Type after every label beside it has stopped, and in its fixed 150pt box the year was
+ * sheared off ("11/30/2", "Dec 6, 202"). Past 1.2x the row stacks and the picker gets the row's
+ * width and a height that follows the text — the same threshold and reasoning as `form.tsx`.
+ */
+function usePickerScale() {
+  const { fontScale } = useWindowDimensions();
+  return { fontScale, wide: fontScale > 1.2 };
+}
+
 export function DateRow({
   label,
   value,
@@ -89,6 +101,7 @@ export function DateRow({
   placeholder?: string;
   onChange: (iso: string) => void;
 }) {
+  const { fontScale, wide } = usePickerScale();
   if (!value && placeholder) {
     return (
       <View style={styles.row}>
@@ -106,15 +119,15 @@ export function DateRow({
     );
   }
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, wide && styles.rowStacked]}>
       <Text style={styles.label}>{label}</Text>
       {/* In a right-aligned box with an explicit size, as `DateField` does: the native view reports
           no usable intrinsic width, and laid out without the box it picks the short numeric
           format on some passes and the spelled-out one on others. It cannot be replaced by a label
           with the picker hidden over it: the calendar it opens inherits the picker's opacity. */}
-      <View style={styles.dateWrap}>
+      <View style={[styles.dateWrap, wide && styles.dateWrapWide]}>
         <DatePicker
-          style={styles.datePicker}
+          style={wide ? { width: '100%', height: Math.round(36 * fontScale) } : styles.datePicker}
           value={toDate(value)}
           minimumDate={minimumDate ? toDate(minimumDate) : undefined}
           mode="date"
@@ -143,8 +156,9 @@ export function TimeRow({
   placeholder: string;
   onChange: (time: string) => void;
 }) {
+  const { fontScale, wide } = usePickerScale();
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, wide && styles.rowWrap]}>
       <Text style={styles.label}>{label}</Text>
       {value ? (
         <>
@@ -152,7 +166,7 @@ export function TimeRow({
             <Text style={styles.clear}>Clear</Text>
           </Pressable>
           <DatePicker
-            style={styles.timePicker}
+            style={wide ? { width: Math.round(96 * fontScale), height: Math.round(36 * fontScale) } : styles.timePicker}
             value={toTimeDate(value)}
             mode="time"
             accentColor={Polar.ember}
@@ -344,10 +358,13 @@ const styles = StyleSheet.create({
   clear: { fontSize: 15, color: Polar.ember },
   // An explicit size: a native view reports no usable intrinsic width to yoga.
   dateWrap: { flex: 1, alignItems: 'flex-end' },
+  dateWrapWide: { flex: 0, alignSelf: 'stretch', alignItems: 'stretch' },
+  rowStacked: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 10 },
+  rowWrap: { flexWrap: 'wrap' },
   datePicker: { width: 150, height: 36, marginRight: -6 },
   timePicker: { width: 96, height: 36, marginRight: -6 },
   count: { minWidth: 22, fontSize: 17, color: '#000', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  stepper: { flexDirection: 'row', alignItems: 'center', height: 32, borderRadius: 8, backgroundColor: 'rgba(118,118,128,0.12)' },
+  stepper: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, minHeight: 32, borderRadius: 8, backgroundColor: 'rgba(118,118,128,0.12)' },
   step: { width: 46, height: 32, alignItems: 'center', justifyContent: 'center' },
   stepRule: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: SettingsColors.separator },
   segRow: { minHeight: 44 },

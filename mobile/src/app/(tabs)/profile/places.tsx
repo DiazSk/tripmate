@@ -1,8 +1,9 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Footer, Group, RowIcon, Separator, SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { useProfileStore } from '@/lib/profileStore';
+import { Text } from '@/components/themed-text';
 
 /** The places you saved from the map, for a trip you have not planned yet. */
 export default function Places() {

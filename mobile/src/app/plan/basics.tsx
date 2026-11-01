@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
@@ -27,6 +27,7 @@ import { useReadyTrips } from '@/lib/useReadyTrips';
 import { planTiles, type PlanTileId } from '@/lib/planTiles';
 import { crossFieldProblem, gapSentence, planGap } from '@/lib/formGap';
 import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
+import { Text, TextInput } from '@/components/themed-text';
 
 /**
  * The planner, on one page: the place's photograph with Where on it, the essentials already open

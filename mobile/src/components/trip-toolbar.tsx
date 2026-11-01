@@ -1,6 +1,6 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -10,6 +10,7 @@ import { BlurView } from '@/components/blur';
 import { SymbolView } from '@/components/symbol';
 import { Colors } from '@/constants/theme';
 import { formatMoney } from '@/lib/spend';
+import { Text } from '@/components/themed-text';
 
 type Face = 'list' | 'map';
 

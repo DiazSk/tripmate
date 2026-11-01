@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { firstName, photoLine } from '@shared/travelCard';
 
@@ -10,6 +10,7 @@ import { Glass, GlassField, SignalCapsule } from '@/components/glass-auth';
 import { WelcomeFrame } from '@/components/welcome-frame';
 import { Polar } from '@/constants/polar';
 import { useWelcome } from '@/lib/welcomeDraft';
+import { Text } from '@/components/themed-text';
 
 export default function WelcomeYou() {
   const { answers, set, image, react, flagUnsaved, busy, guard } = useWelcome();

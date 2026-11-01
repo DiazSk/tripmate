@@ -2,12 +2,12 @@ import * as Clipboard from 'expo-clipboard';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { SymbolView } from '@/components/symbol';
 import type { ImportItem } from '@/api/types';
 import { PillButton } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText, Text, TextInput } from '@/components/themed-text';
 import { SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
 import { Colors, Radius, Spacing } from '@/constants/theme';
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   actionLightText: { fontSize: 15, fontWeight: '600', color: Polar.ember },
   inputDocked: { minHeight: 220 },
   // The review's "Build my trip" (`plan/own.tsx`), so the two steps end on the same button.
-  dockAction: { marginTop: 'auto', height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
+  dockAction: { marginTop: 'auto', paddingVertical: 6, minHeight: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
   dockActionEmpty: { opacity: 0.45 },
   dockActionPressed: { backgroundColor: Polar.signalPressed },
   dockActionText: { fontSize: 17, fontWeight: '600', color: Polar.ink },

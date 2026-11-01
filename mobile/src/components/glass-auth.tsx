@@ -8,8 +8,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   type StyleProp,
   type TextInputProps,
@@ -21,6 +19,7 @@ import { BlurView } from '@/components/blur';
 import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { clerkMessage } from '@/lib/clerkError';
+import { Text, TextInput } from '@/components/themed-text';
 
 /**
  * Sign-in as the canvas design "Phone auth · 3 Glass over the night": no card and no pass, the
@@ -320,18 +319,18 @@ const styles = StyleSheet.create({
   sub: { marginTop: 10, fontSize: 15, lineHeight: 21, color: Polar.frost68 },
   subRow: { marginTop: 12 },
   controls: { gap: 10, marginTop: 'auto', paddingTop: 24 },
-  capsule: { height: 54, borderRadius: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  capsule: { paddingVertical: 6, minHeight: 54, borderRadius: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   field: { justifyContent: 'flex-start', gap: 10, paddingLeft: 18, paddingRight: 8 },
   ring: { borderWidth: 1.5 },
   input: { flex: 1, height: '100%', fontSize: 17, color: Polar.ice },
   eye: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  signal: { height: 52, borderRadius: 26, backgroundColor: Polar.signal },
+  signal: { paddingVertical: 6, minHeight: 52, borderRadius: 26, backgroundColor: Polar.signal },
   signalPressed: { backgroundColor: Polar.signalPressed, transform: [{ scale: 0.98 }] },
   // Waiting on an answer, as the welcome's Continue does until one is chosen.
   signalOff: { opacity: 0.4 },
   signalText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
-  button: { height: 50, borderRadius: 25, gap: 8 },
-  buttonSmall: { height: 44, borderRadius: 22 },
+  button: { paddingVertical: 6, minHeight: 50, borderRadius: 25, gap: 8 },
+  buttonSmall: { paddingVertical: 6, minHeight: 44, borderRadius: 22 },
   buttonText: { fontSize: 17, fontWeight: '600', color: Polar.ice },
   buttonTextSmall: { fontSize: 15 },
   plain: { alignSelf: 'center', minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' },

@@ -127,6 +127,34 @@ export const MapObjectShadow = {
   elevation: 5,
 } as const;
 
+/**
+ * **How far type follows Dynamic Type — the app's one policy, in three numbers.**
+ *
+ * Nothing is ever `allowFontScaling: false`; every string grows, and these say how far. iOS runs
+ * from 1.0 at the default size to 3.1 at AX5, and uncapped RN text follows it all the way — which
+ * is what "the whole UI goes bad at large text" was: ~60 files rendered a bare `<Text>` with no cap
+ * at all, beside a `ThemedText` that already capped at 1.6.
+ *
+ * - `body` — anything read: sentences, rows, captions, inputs. 1.6 is a 16pt line at ~26pt, past
+ *   AX1, which is where the large sizes stop being about reading and start being about not fitting.
+ * - `display` — the serif mastheads and big figures (24pt and up). They are already large and reflow
+ *   rather than shrink; uncapped, a two-word masthead becomes four lines.
+ * - `chrome` — one-line controls with nowhere to wrap: chips, pills, segment labels, a button's
+ *   verb. The system's own bars stop growing early for the same reason. Each still carries its full
+ *   name for VoiceOver.
+ *
+ * `Text` and `TextInput` in `themed-text.tsx` apply `body` or `display` by font size when a call
+ * site says nothing, so a new screen inherits the policy without knowing it exists. `chrome` is the
+ * one a call site has to ask for, because only it knows a label has no room.
+ */
+export const FontScale = {
+  body: 1.6,
+  display: 1.3,
+  chrome: 1.3,
+  /** At or above this size a string is display type and takes `display`. */
+  displayFrom: 24,
+} as const;
+
 export const BarHeight = 56;
 export const MaxContentWidth = 800;
 

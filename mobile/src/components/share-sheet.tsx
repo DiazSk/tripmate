@@ -1,10 +1,11 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { Group, Separator, SettingsColors } from '@/components/settings-list';
 import { Polar } from '@/constants/polar';
+import { Text } from '@/components/themed-text';
 
 export type ShareState =
   | { kind: 'reading'; found: string[] }
@@ -176,10 +177,10 @@ const styles = StyleSheet.create({
   city: { fontSize: 13, color: SettingsColors.grey },
   note: { marginHorizontal: 32, marginTop: 8, fontSize: 13, lineHeight: 18, color: SettingsColors.grey },
   actions: { gap: 6, marginTop: 18, paddingHorizontal: 16 },
-  primary: { height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
+  primary: { paddingVertical: 6, minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: Polar.signal },
   primaryPressed: { backgroundColor: Polar.signalPressed },
   primaryText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
-  secondary: { height: 46, alignItems: 'center', justifyContent: 'center' },
+  secondary: { paddingVertical: 6, minHeight: 46, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { fontSize: 16, fontWeight: '600', color: Polar.ember },
 });
 

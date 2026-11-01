@@ -1,9 +1,10 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { BlurView } from '@/components/blur';
 import { Polar } from '@/constants/polar';
 import { Colors } from '@/constants/theme';
+import { Text } from '@/components/themed-text';
 
 /**
  * A sheet's way out, top right, the way an iOS 26 sheet draws Done: the word in a Liquid Glass

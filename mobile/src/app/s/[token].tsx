@@ -8,7 +8,6 @@ import {
   Pressable,
   Share,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import Animated, {
@@ -30,6 +29,7 @@ import type { SharedTrip } from '@/api/types';
 import { DayMap } from '@/components/day-map';
 import { COVER_HEIGHT, Cover, DayHead, DayTiles, LinkOff, SharedColors, StopSheet, ThumbBar, Timeline } from '@/components/shared-trip';
 import { Polar } from '@/constants/polar';
+import { Text } from '@/components/themed-text';
 
 /**
  * A trip somebody sent you, opened in the app: `tripmate://s/<token>`, the same token as the web's

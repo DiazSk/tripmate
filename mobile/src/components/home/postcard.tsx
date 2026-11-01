@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ReadyTrip } from '@shared/readyTrips';
 
@@ -16,6 +16,7 @@ import { SymbolView } from '@/components/symbol';
 import { monumentFontSize } from '@/components/polar-ui';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { formatMoney } from '@/lib/spend';
+import { Text } from '@/components/themed-text';
 
 /**
  * The ready-made trip as a postcard: the carousel's paging card and the rails' portrait card.

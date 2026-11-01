@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +7,7 @@ import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { SettingsColors } from '@/components/settings-list';
 import { Polar, PolarFonts } from '@/constants/polar';
 import { METHOD } from '@/lib/method';
+import { Text } from '@/components/themed-text';
 
 /**
  * How TripMate plans, as the canvas design "Phone how it works · 1": Apple's "What's New" sheet,
@@ -94,7 +95,8 @@ const styles = StyleSheet.create({
   spacer: { flexGrow: 1, minHeight: 32 },
   foot: { gap: 4, marginHorizontal: -8 },
   primary: {
-    height: 50,
+    minHeight: 50,
+    paddingVertical: 6,
     borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',

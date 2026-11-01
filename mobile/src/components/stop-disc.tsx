@@ -1,7 +1,7 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors, DiscInk, MapObjectShadow } from '@/constants/theme';
+import { Colors, DiscInk, FontScale, MapObjectShadow } from '@/constants/theme';
 
 /**
  * A stop's number, in its day's colour.
@@ -24,12 +24,16 @@ import { Colors, DiscInk, MapObjectShadow } from '@/constants/theme';
  * it; the ring sits outside both.
  */
 export function StopDisc({ ordinal, color }: { ordinal: number; color: string }) {
+  // The numeral grows to chrome's cap and the disc grows with it, or at the large text sizes the
+  // number spills over its own ring.
+  const { fontScale } = useWindowDimensions();
+  const size = Math.round(DISC_SIZE * Math.min(Math.max(fontScale, 1), FontScale.chrome));
   return (
     // Two boxes, because a view that clips its children clips its own shadow with them — the
     // same split the floating map controls make, for the same reason.
-    <View style={styles.lift}>
-      <View style={[styles.disc, { backgroundColor: color }]}>
-        <ThemedText type="money" style={styles.ordinal}>
+    <View style={[styles.lift, { borderRadius: size / 2 + RING }]}>
+      <View style={[styles.disc, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
+        <ThemedText type="money" maxFontSizeMultiplier={FontScale.chrome} style={styles.ordinal}>
           {ordinal}
         </ThemedText>
       </View>

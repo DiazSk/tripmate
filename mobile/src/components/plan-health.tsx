@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -20,9 +19,16 @@ import { healthSummary, isBlocking, type Guardrail, type HealthDimension, type H
  * a reservation about to be missed, a budget already broken. A day that merely backtracks, or an
  * outdoor stop under a wet forecast, is worth reading and is not worth alarming anyone about.
  */
-export function PlanHealth({ health }: { health: PlanHealthReport }) {
-  const [open, setOpen] = useState(false);
-
+export function PlanHealth({
+  health,
+  open,
+  onToggle,
+}: {
+  health: PlanHealthReport;
+  /** Held by the trip screen: the card is drawn once per day page, and must not reset on a swipe. */
+  open: boolean;
+  onToggle: () => void;
+}) {
   // Nothing in this plan could be checked at all — an empty plan, or one whose stops carry no
   // times. A panel reading "Not checked" seven times tells nobody anything.
   if (health.score === null) return null;
@@ -40,7 +46,7 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
   return (
     <View style={styles.card}>
       <Pressable
-        onPress={() => setOpen((was) => !was)}
+        onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={
@@ -185,7 +191,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.tight,
     marginHorizontal: Spacing.read,
-    marginBottom: Spacing.tight,
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
   // One column when a blocker leads, so the score cannot sit on the diagnosis's baseline.

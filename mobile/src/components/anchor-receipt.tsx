@@ -68,7 +68,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.tight,
     marginHorizontal: Spacing.read,
-    marginBottom: Spacing.tight,
     gap: Spacing.tight,
   },
   list: { gap: Spacing.hair },

@@ -2,13 +2,14 @@ import { useSignInWithApple } from '@clerk/expo/apple';
 import { useSignInWithGoogle } from '@clerk/expo/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { GoogleMark } from '@/components/google-mark';
 import { Glass, Note } from '@/components/glass-auth';
 import { Polar } from '@/constants/polar';
 import { clerkMessage, isCancellation } from '@/lib/clerkError';
 import { useFinishAuth } from '@/lib/useFinishAuth';
+import { Text } from '@/components/themed-text';
 
 type Flow = () => Promise<{ createdSessionId: string | null; setActive?: (p: { session: string }) => Promise<void> }>;
 
@@ -85,7 +86,7 @@ export function SocialSignIn({ disabled }: { disabled?: boolean }) {
 const styles = StyleSheet.create({
   group: { gap: 10 },
   apple: { height: 50, width: '100%' },
-  google: { height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  google: { paddingVertical: 6, minHeight: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   googleText: { fontSize: 17, fontWeight: '600', color: Polar.ice },
 });

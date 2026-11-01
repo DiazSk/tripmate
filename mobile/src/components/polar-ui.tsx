@@ -10,8 +10,6 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   type StyleProp,
   type TextInputProps,
@@ -23,6 +21,7 @@ import { monumentEms } from '@shared/monumentFit';
 import { SymbolView } from '@/components/symbol';
 import { APPEARANCE } from '@/constants/appearance';
 import { Polar, PolarFonts, PolarRadius, PolarSpace } from '@/constants/polar';
+import { Text, TextInput } from '@/components/themed-text';
 
 /**
  * The pieces the Polar arrival screens share: Sign in, Trips and Profile. The landing and the

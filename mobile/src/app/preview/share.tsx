@@ -1,9 +1,10 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShareSheet, type SharedThing, type ShareState } from '@/components/share-sheet';
+import { Text } from '@/components/themed-text';
 
 /**
  * Share to TripMate with no share behind it. **`__DEV__` only**, like `preview/writing.tsx`: the real

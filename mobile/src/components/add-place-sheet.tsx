@@ -9,8 +9,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   useWindowDimensions,
   type StyleProp,
@@ -50,6 +48,7 @@ import { activeCard } from '@/lib/cardRail';
 import { formatDayChip } from '@/lib/dayDisplay';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 import { describeDistance } from '@/lib/savedPlaces';
+import { Text, TextInput } from '@/components/themed-text';
 
 const SLOTS: TimeOfDay[] = ['Morning', 'Afternoon', 'Evening'];
 
@@ -1387,7 +1386,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    height: 40,
+    minHeight: 40,
+    paddingVertical: 6,
     marginHorizontal: GUTTER,
     paddingLeft: 12,
     paddingRight: 10,
@@ -1396,7 +1396,7 @@ const styles = StyleSheet.create({
     borderColor: Polar.frost20,
     overflow: 'hidden',
   },
-  searchInput: { flex: 1, height: '100%', fontFamily: PolarFonts.sans, fontSize: 15, color: Polar.ice },
+  searchInput: { flex: 1, alignSelf: 'stretch', fontFamily: PolarFonts.sans, fontSize: 15, color: Polar.ice },
   clear: {
     width: 20,
     height: 20,
@@ -1408,7 +1408,8 @@ const styles = StyleSheet.create({
   chipRow: { flexGrow: 0 },
   chips: { gap: 6, paddingHorizontal: GUTTER },
   chip: {
-    height: 32,
+    minHeight: 32,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     justifyContent: 'center',
     borderRadius: PolarRadius.hairline,
@@ -1511,7 +1512,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: LINE,
   },
-  fit: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Wraps rather than truncating the detour ("adds 1…") once large text fills the row.
+  fit: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 2 },
   fitTime: { fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ice, fontVariant: ['tabular-nums'] },
   tight: { fontFamily: PolarFonts.sansSemi, fontSize: 11.5, color: Polar.alertNight },
   tightOnIce: { color: Polar.alertText },

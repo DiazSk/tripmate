@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { SymbolView } from '@/components/symbol';
 import { Fine, PlainButton, SignalCapsule, leaveSignIn } from '@/components/glass-auth';
@@ -7,6 +7,7 @@ import { Meridian } from '@/components/meridian';
 import { WelcomeFrame } from '@/components/welcome-frame';
 import { Polar } from '@/constants/polar';
 import { useWelcome } from '@/lib/welcomeDraft';
+import { Text } from '@/components/themed-text';
 
 const PROMISES = ['Days paced the way you like them', 'Food that fits how you eat', "More of what you love, less of what you don't"];
 

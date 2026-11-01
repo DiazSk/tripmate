@@ -8,8 +8,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
@@ -41,6 +39,7 @@ import { crossFieldProblem } from '@/lib/formGap';
 import { BEATS, DESTS, FACTS, FOOT_PHOTO, PLANS, type LandingPlan } from './content';
 import { DayStory, OpenDaySheet, PlanMap, TickContext, Ways, type Tick } from './imagine';
 import { Scrim } from './scrim';
+import { Text, TextInput } from '@/components/themed-text';
 
 /**
  * The Polar Interior landing, for the phone — the "TripMate — Polar Landing (Mobile)" design on the

@@ -1,12 +1,13 @@
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Glass, GlassStep, Note, PlainButton, glassText, useClerkStep } from '@/components/glass-auth';
 import { Polar } from '@/constants/polar';
 import { unsupportedStepMessage } from '@/lib/clerkError';
 import { useFinishAuth } from '@/lib/useFinishAuth';
+import { Text, TextInput } from '@/components/themed-text';
 
 type Purpose = 'verify-signup' | 'sign-in-code' | 'client-trust' | 'reset';
 
@@ -149,7 +150,7 @@ export default function SignInCode() {
 
 const styles = StyleSheet.create({
   code: { flexDirection: 'row', gap: 8 },
-  cell: { flex: 1, height: 58, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cell: { flex: 1, paddingVertical: 6, minHeight: 58, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   digit: { fontSize: 26, fontWeight: '600', color: Polar.ice, fontVariant: ['tabular-nums'] },
   // Over the cells and invisible, so a tap anywhere on them lands in it and autofill has a target.
   codeInput: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0.02, color: 'transparent', fontSize: 16 },

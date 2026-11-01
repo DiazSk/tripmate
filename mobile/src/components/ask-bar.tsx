@@ -1,6 +1,7 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useEffect, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActionSheetIOS,
   Alert,
   Keyboard,
@@ -9,7 +10,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
   type StyleProp,
   type ViewStyle,
@@ -22,8 +22,8 @@ import { BlurView } from '@/components/blur';
 import { SymbolView } from '@/components/symbol';
 import type { ChatTurn } from '@/api/types';
 import { Meridian } from '@/components/meridian';
-import { ThemedText } from '@/components/themed-text';
-import { Colors, ControlShadow, Motion, Radius, Spacing } from '@/constants/theme';
+import { ThemedText, TextInput } from '@/components/themed-text';
+import { Colors, ControlShadow, FontScale, Motion, Radius, Spacing } from '@/constants/theme';
 import { formatDayChip } from '@/lib/dayDisplay';
 import type { ItineraryDiff } from '@/lib/itineraryDiff';
 import { meriForChat } from '@/lib/meri';
@@ -125,15 +125,20 @@ export function AskBar({
       accessibilityRole="button"
       accessibilityLabel={`Changing: ${scope === null ? 'the whole trip' : dayName(days, scope)}. Choose what this can change.`}
       style={({ pressed }) => [styles.scope, pressed && styles.pressed]}>
-      <ThemedText type="detail" style={styles.scopeText}>
+      <ThemedText type="detail" maxFontSizeMultiplier={FontScale.chrome} style={styles.scopeText}>
         {scopeLabel}
       </ThemedText>
       <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} tintColor={Colors.muted} size={10} />
     </Pressable>
   );
 
-  const showReply = replying || failure || reply;
-  const ideas = mode === 'ask' && !draft && !showReply;
+  const showReply = !replying && (failure || reply);
+  const ideas = mode === 'ask' && !draft && !replying && !showReply;
+
+  // `accessibilityLiveRegion` is Android's; VoiceOver has to be told.
+  useEffect(() => {
+    if (replying && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('Working on your change');
+  }, [replying]);
 
   return (
     <Animated.View
@@ -144,11 +149,7 @@ export function AskBar({
         <Glass solid style={styles.reply}>
           <Meridian state={meriForChat({ replying, failure, justReplied: false })} size={28} />
           <View style={styles.grow}>
-            {replying ? (
-              <ThemedText type="detail" themeColor="muted" numberOfLines={2}>
-                {asked ? `Working on “${asked}”` : 'Thinking…'}
-              </ThemedText>
-            ) : failure ? (
+            {failure ? (
               <ThemedText type="detail" themeColor="alert">
                 {failure}
               </ThemedText>
@@ -171,8 +172,8 @@ export function AskBar({
                 ))}
               </>
             ) : null}
-            {pending && !replying ? <Summary diff={pending} /> : null}
-            {turns > 1 && !replying ? (
+            {pending ? <Summary diff={pending} /> : null}
+            {turns > 1 ? (
               <Pressable onPress={onHistory} accessibilityRole="button" hitSlop={8} style={styles.history}>
                 <ThemedText type="caption" themeColor="muted" style={styles.strong}>
                   {`${turns} messages`}
@@ -185,7 +186,42 @@ export function AskBar({
 
       {ideas ? <Ideas ideas={ideasFor(currentDay)} onSend={onSend} /> : null}
 
-      {mode === 'decide' && pending ? (
+      {replying ? (
+        /* **In flight, the box and the status are one object.** It was a status card floating over
+           the composer — two shadows, two radii, an 8pt gap the day showed through, and the whole
+           request quoted into a two-line ellipsis — above a field that could not be typed in anyway
+           while the reply was out. Now the composer itself turns into the status, at the field's own
+           height and radius: Meri where the scope sat, a short line of what is happening, the
+           request on one line under it, and the same way out the × always offered. */
+        <Animated.View entering={FadeIn.duration(Motion.respond)}>
+          <Glass solid style={styles.working}>
+            <Meridian state={meriForChat({ replying, failure: null, justReplied: false })} size={28} />
+            <View
+              style={styles.grow}
+              accessible
+              accessibilityRole="text"
+              accessibilityLiveRegion="polite"
+              accessibilityLabel={asked ? `Working on your change: ${asked}` : 'Working on your change'}>
+              <ThemedText type="detail" style={styles.strong} numberOfLines={2}>
+                Working on your change…
+              </ThemedText>
+              {asked ? (
+                <ThemedText type="caption" themeColor="muted" numberOfLines={1}>
+                  {`“${asked.replace(/\s+/g, ' ').trim()}”`}
+                </ThemedText>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Hide. Your change keeps working"
+              hitSlop={6}
+              style={({ pressed }) => [styles.workingClose, pressed && styles.pressed]}>
+              <SymbolView name={{ ios: 'xmark', android: 'close' }} tintColor={Colors.foreground} size={13} />
+            </Pressable>
+          </Glass>
+        </Animated.View>
+      ) : mode === 'decide' && pending ? (
         <Animated.View entering={FadeIn.duration(Motion.respond)}>
           <Glass style={styles.decide}>
             <Pressable
@@ -590,7 +626,9 @@ function Ideas({ ideas, onSend }: { ideas: string[]; onSend: (text: string) => v
             accessibilityRole="button"
             style={({ pressed }) => pressed && styles.pressed}>
             <Glass solid style={styles.idea}>
-              <ThemedText type="detail">{idea}</ThemedText>
+              <ThemedText type="detail" maxFontSizeMultiplier={FontScale.chrome}>
+                {idea}
+              </ThemedText>
             </Glass>
           </Pressable>
         ))}
@@ -636,6 +674,26 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   history: { alignSelf: 'flex-start', marginTop: 2 },
+  // The field's own geometry — `minHeight` 50, radius 25 — so the box reads as the same object
+  // changing state. Meri's 28pt mark and the 36pt × sit centred in the end caps.
+  working: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight + 2,
+    minHeight: 50,
+    paddingVertical: Spacing.tight,
+    paddingLeft: 11,
+    paddingRight: 7,
+    borderRadius: 25,
+  },
+  workingClose: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${Colors.foreground}1F`,
+  },
 
   // Out to the screen's edges, so a chip scrolls off the side rather than stopping at the gutter.
   ideasScroll: { marginHorizontal: -Spacing.read },
@@ -702,7 +760,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: 36,
+    minHeight: 36,
+    paddingVertical: 6,
     paddingHorizontal: Spacing.rows,
     borderRadius: Radius.pill,
     backgroundColor: `${Colors.foreground}1F`,
@@ -733,7 +792,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   keep: {
-    height: 44,
+    minHeight: 44,
+    paddingVertical: 6,
     paddingHorizontal: Spacing.regular,
     borderRadius: Radius.pill,
     alignItems: 'center',
@@ -742,7 +802,8 @@ const styles = StyleSheet.create({
   },
   apply: {
     flex: 1,
-    height: 44,
+    minHeight: 44,
+    paddingVertical: 6,
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -760,7 +821,8 @@ const styles = StyleSheet.create({
   writerSide: { flex: 1 },
   writerRight: { alignItems: 'flex-end' },
   writerSend: {
-    height: 34,
+    minHeight: 34,
+    paddingVertical: 6,
     paddingHorizontal: Spacing.read,
     borderRadius: Radius.pill,
     justifyContent: 'center',

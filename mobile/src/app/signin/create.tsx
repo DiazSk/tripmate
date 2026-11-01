@@ -1,12 +1,13 @@
 import { useSignUp } from '@clerk/expo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Text, type TextInput } from 'react-native';
+import { type TextInput } from 'react-native';
 
 import { GlassField, GlassStep, Note, PasswordField, SignalCapsule, glassText, useClerkStep } from '@/components/glass-auth';
 import { passwordToGo } from '@/lib/emailFirst';
 import { PASSWORD_MIN } from '@/lib/formGap';
 import { useFinishAuth } from '@/lib/useFinishAuth';
+import { Text } from '@/components/themed-text';
 
 /**
  * An address Clerk has not seen: a name if they like, and a password. The rule is counted down as

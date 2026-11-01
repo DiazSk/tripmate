@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { STEP_LINES, readyLine, type WelcomeStep } from '@shared/travelCard';
 
@@ -9,6 +9,7 @@ import { Glass, GlassStep } from '@/components/glass-auth';
 import { Meridian } from '@/components/meridian';
 import { Polar } from '@/constants/polar';
 import { useWelcome } from '@/lib/welcomeDraft';
+import { Text } from '@/components/themed-text';
 
 const QUESTIONS: WelcomeStep[] = ['you', 'who', 'rhythm', 'matters', 'home'];
 
@@ -144,7 +145,7 @@ export const welcomeGlass = StyleSheet.create({
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
-  skip: { height: 44, paddingHorizontal: 16, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  skip: { paddingVertical: 6, minHeight: 44, paddingHorizontal: 16, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   skipText: { fontSize: 15, fontWeight: '600', color: Polar.ice },
   host: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   line: { flex: 1, fontSize: 15, lineHeight: 21, color: Polar.frost88 },
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, fontWeight: '700', color: Polar.ice },
   segment: { borderRadius: 999, padding: 3 },
   segmentRow: { flexDirection: 'row', gap: 2 },
-  segmentHalf: { flex: 1, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  segmentHalf: { flex: 1, paddingVertical: 6, minHeight: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   segmentText: { fontSize: 14, fontWeight: '600', color: Polar.ice },
   heading: { marginTop: 6, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', color: Polar.frost88 },
 });

@@ -1,7 +1,8 @@
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
 
 import { Polar, PolarFonts } from '@/constants/polar';
 import type { Pill } from '@/lib/readyTrips';
+import { Text } from '@/components/themed-text';
 
 /**
  * The filter pills with their counts ("All 35 · Desert 6 · Coast 10 …"), one row that scrolls

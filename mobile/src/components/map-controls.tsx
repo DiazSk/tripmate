@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
@@ -24,7 +23,7 @@ import { BlurView } from '@/components/blur';
 import MapView from '@/components/map-view';
 import { SymbolView } from '@/components/symbol';
 import { ToggleRow } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText, Text } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
 import {
   Colors,

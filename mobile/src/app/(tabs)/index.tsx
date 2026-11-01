@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { clearsIn } from '@shared/memories';
@@ -28,6 +28,7 @@ import { todayInZone } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
 import { daysUntil, todayISO, tripShelves } from '@/lib/tripsWall';
 import { useFocusedFetch, useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
+import { Text } from '@/components/themed-text';
 
 /** The bar the greeting folds into, under the status bar. */
 const BAR = 50;

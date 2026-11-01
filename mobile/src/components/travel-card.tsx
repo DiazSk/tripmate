@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useId, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { Keyframe, ReduceMotion } from 'react-native-reanimated';
 import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
@@ -10,6 +10,7 @@ import { stampsFor, type StampKey, type WelcomeAnswers } from '@shared/travelCar
 
 import { Fonts } from '@/constants/theme';
 import { TravelStamp } from './travel-stamp';
+import { Text } from '@/components/themed-text';
 
 const HEIGHT = 136;
 /** The 2pt border sits inside the outer box, so the drawn area is the card minus both edges. */

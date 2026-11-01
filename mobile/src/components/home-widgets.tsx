@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState, type ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import type { SavedPlace, Stop, Trip } from '@/api/types';
@@ -15,6 +15,7 @@ import { tripDays } from '@/lib/tiers';
 import { glanceFor, type NextGlance } from '@/lib/todayGlance';
 import { clockInZone, nowInZone } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
+import { Text } from '@/components/themed-text';
 
 /**
  * Home as a page of widgets, in the system's three sizes (canvas design "Phone home · 4 Widgets
