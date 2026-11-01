@@ -147,6 +147,20 @@ test("dayActiveSpan measures first start to last end, and reads both time format
   assert.equal(overlap.end, "5:00 PM");
   assert.equal(overlap.minutes, 480);
 
+  // A 1 AM transfer closes the day; read raw it opened it, and the day "ran 1:00 AM to 7:00 PM".
+  const lateNight = dayActiveSpan({
+    date: "2026-09-01",
+    weather: "",
+    stops: [
+      stop({ time: "10:00 AM", durationLabel: "2 hours" }),
+      stop({ time: "6:00 PM", durationLabel: "1 hour" }),
+      stop({ time: "1:00 AM", durationLabel: "1 hour" }),
+    ],
+  });
+  assert.equal(lateNight.start, "10:00 AM");
+  assert.equal(lateNight.end, "2:00 AM");
+  assert.equal(lateNight.minutes, 16 * 60);
+
   assert.equal(dayActiveSpan({ date: "2026-09-01", weather: "", stops: [] }), null);
   assert.equal(
     dayActiveSpan({ date: "2026-09-01", weather: "", stops: [stop({ time: "", durationLabel: "" })] }),

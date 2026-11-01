@@ -1,5 +1,5 @@
 import { parseDurationLabel } from '@shared/daySlotting';
-import { formatClock, parseClock } from '@shared/itinerary';
+import { clockAfter, formatClock, parseClock } from '@shared/itinerary';
 import { travelLegBetween } from '@shared/travelTime';
 
 import type { Stop } from '@/api/types';
@@ -40,7 +40,11 @@ export function timelineRows(stops: Stop[]): TimelineRow[] {
       const hop = travelLegBetween({ lat: prev.lat, lon: prev.lng }, { lat: stop.lat, lon: stop.lng });
       const prevFrom = parseClock(prev.time ?? '');
       const prevLength = parseDurationLabel(prev.durationLabel);
-      const gap = from !== null && prevFrom !== null && prevLength !== null ? from - (prevFrom + prevLength) : null;
+      // `clockAfter`: a 1 AM transfer after a 6 PM dinner is the next morning, not a leg 17h short.
+      const gap =
+        from !== null && prevFrom !== null && prevLength !== null
+          ? clockAfter(from, prevFrom) - (prevFrom + prevLength)
+          : null;
       leg = { mode: hop.mode as TimelineLeg['mode'], minutes: hop.minutes, gap, short: gap !== null && hop.minutes > gap };
     }
     return { start: stop.time, end: endMin === null ? null : clockLike(stop.time, endMin), leg };

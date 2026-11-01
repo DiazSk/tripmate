@@ -1,4 +1,4 @@
-import { formatClock, parseClock, parseDuration } from "./itinerary";
+import { dayClocks, formatClock, parseClock, parseDuration } from "./itinerary";
 import { travelLegBetween } from "./travelTime";
 import type { DayPlan, Itinerary, Stop, TransportMode } from "./types";
 
@@ -59,9 +59,10 @@ export interface ScheduleOptions {
  */
 function dayAnchor(day: DayPlan, override?: number): number {
   if (override !== undefined) return override;
+  // `dayClocks`, so a 1 AM airport transfer at the end of the day is not its "earliest" start —
+  // read raw, one drag on that day re-timed the whole of it from 1 AM.
   let earliest: number | null = null;
-  for (const stop of day.stops) {
-    const start = parseClock(stop.time ?? "");
+  for (const start of dayClocks(day.stops)) {
     if (start !== null && (earliest === null || start < earliest)) earliest = start;
   }
   return earliest ?? DEFAULT_DAY_START_MIN;
@@ -189,9 +190,7 @@ export function appendedStartTime(day: DayPlan, stop: Stop, modes?: TransportMod
 export function insertionIndexByTime(day: DayPlan, stop: Stop): number {
   const at = parseClock(stop.time ?? "");
   if (at === null) return day.stops.length;
-  const index = day.stops.findIndex((existing) => {
-    const start = parseClock(existing.time ?? "");
-    return start !== null && start > at;
-  });
+  const clocks = dayClocks(day.stops);
+  const index = clocks.findIndex((start) => start !== null && start > at);
   return index === -1 ? day.stops.length : index;
 }

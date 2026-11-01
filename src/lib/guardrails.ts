@@ -1,7 +1,9 @@
 import {
   ARRIVAL_BUFFER_MIN,
   DEPARTURE_BUFFER_MIN,
+  clockAfter,
   dayActiveSpan,
+  dayClocks,
   formatClock,
   parseClock,
   parseDuration,
@@ -180,7 +182,7 @@ function checkLegs(
 
 /** What one hop costs against the room the schedule leaves for it. */
 export interface LegFit {
-  /** Clock minutes since midnight. */
+  /** Minutes since the day's midnight; past 1440 for a stop after midnight (`clockAfter`). */
   end: number;
   nextStart: number;
   /** Room between the two, negative when they overlap. */
@@ -209,8 +211,11 @@ export function legFit(
   realMinutes?: LegMinutesLookup
 ): LegFit | null {
   const start = parseClock(from.time ?? "");
-  const nextStart = parseClock(to.time ?? "");
-  if (start === null || nextStart === null) return null;
+  const clock = parseClock(to.time ?? "");
+  if (start === null || clock === null) return null;
+  // A 1:00 AM transfer after a 6:00 PM dinner is the next morning, not seven hours before dinner:
+  // read raw, it was a 1,080-minute overlap reported as "past the 1:00 AM booking".
+  const nextStart = clockAfter(clock, start);
 
   const end = start + parseDuration(from.durationLabel ?? "");
   const gap = nextStart - end;
@@ -568,9 +573,16 @@ function checkCommitments(
     // The travel time to the departure point is not known here, so this checks the processing
     // buffer alone. A plan that clears this can still be too tight once the transfer is counted —
     // §12a's travel check is what catches that half.
-    const mustEndBy = leaves - DEPARTURE_BUFFER_MIN;
-    for (const stop of itinerary.days[lastIndex].stops ?? []) {
-      const start = parseClock(stop.time ?? "");
+    //
+    // The flight is read against the day's last stop the way any late stop is (`clockAfter`): a
+    // 04:00 departure after a 1:00 AM airport transfer is that night's, and read as this morning's
+    // it flagged every stop of the day as running past 2:00 AM.
+    const stops = itinerary.days[lastIndex].stops ?? [];
+    const clocks = dayClocks(stops);
+    const lastStart = clocks.reduce<number | null>((last, c) => c ?? last, null);
+    const mustEndBy = clockAfter(leaves, lastStart) - DEPARTURE_BUFFER_MIN;
+    for (const [i, stop] of stops.entries()) {
+      const start = clocks[i];
       if (start === null) continue;
       const end = start + parseDuration(stop.durationLabel ?? "");
       if (end > mustEndBy) {

@@ -626,6 +626,57 @@ test("a finding about the day itself carries no stop", () => {
   assert.equal(pace.stopIndex, undefined);
 });
 
+/* Clocks are minutes since midnight, so a 1 AM airport transfer after a 6 PM dinner read as 60
+ * against a 1140 end and was reported as "runs until 7:00 PM, past the 1:00 AM booking" — the
+ * Mumbai day 5 a tester hit. The late stop is the next morning; a real evening overlap still is
+ * one. Same coordinates on both stops, so travel time never decides either case. */
+test("a booked stop after midnight follows the evening, it does not clash with it", () => {
+  const night = (dinner, next) => ({
+    date: "2026-11-27",
+    weather: "",
+    stops: [
+      legStop({ name: "Light dinner at hotel", category: "food", time: "6:00 PM", ...dinner }),
+      legStop({ name: "Private transfer to BOM airport", timeFlexibility: "FIXED", ...next }),
+    ],
+  });
+  const legRules = (day) =>
+    evaluateDay(day, 0).filter((g) => ["overlap", "commitment", "travel"].includes(g.rule));
+
+  assert.deepEqual(legRules(night({ durationLabel: "1 hour" }, { time: "1:00 AM" })), []);
+
+  const [clash, ...rest] = legRules(night({ durationLabel: "2 hours" }, { time: "7:00 PM" }));
+  assert.deepEqual(rest, []);
+  assert.equal(clash.rule, "commitment");
+  assert.match(clash.message, /runs until 8:00 PM, past the 7:00 PM booking/);
+
+  // And a day that is merely out of order (a morning stop listed after the afternoon) is still
+  // an overlap, not a stop twenty hours later.
+  const misordered = legRules(night({ time: "2:00 PM" }, { time: "10:00 AM", timeFlexibility: undefined }));
+  assert.equal(misordered[0]?.rule, "overlap");
+});
+
+test("a 04:00 departure after a 1 AM transfer is that night's, not this morning's", () => {
+  const trip = {
+    tier: "mid-range",
+    days: [
+      {
+        date: "2026-11-27",
+        weather: "",
+        stops: [
+          legStop({ name: "Phoenix Marketcity", time: "2:30 PM", durationLabel: "2 hours" }),
+          legStop({ name: "Light dinner at hotel", time: "6:00 PM" }),
+          legStop({ name: "Private transfer to BOM airport", time: "1:00 AM", timeFlexibility: "FIXED" }),
+        ],
+      },
+    ],
+  };
+  const commitments = (departureTime) =>
+    evaluateItinerary(trip, { logistics: { departureTime } }).filter((g) => g.rule === "commitment");
+  assert.deepEqual(commitments("04:00"), []);
+  // A departure the evening still runs into is still flagged.
+  assert.equal(commitments("19:00").length, 2);
+});
+
 
 /* The gate that stopped the review pass being taken at its word.
  *

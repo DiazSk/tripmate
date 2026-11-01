@@ -396,6 +396,41 @@ export function parseDuration(label: string): number {
   return /^h/i.test(m[2]) ? Math.round(value * 60) : Math.round(value);
 }
 
+/**
+ * How far past the stop before it a clock may be and still read as *after midnight*.
+ *
+ * A day's clocks are minutes since midnight, so a 1:00 AM airport transfer after a 6:00 PM dinner
+ * reads as 60 against 1080 — seventeen hours *before* dinner — and every subtraction over the day
+ * turns it into an overlap. Rolling it a day forward is right when the late stop follows the plan's
+ * order closely; it is wrong for a day that is merely out of order (a 10 AM stop listed after a
+ * 2 PM one is a mistake to flag, not a stop twenty hours later). Twelve hours separates the two:
+ * a 1 AM transfer is 8h on from a 5 PM dinner, a misordered morning stop is 20h on from the
+ * afternoon. The ceiling: a 5 AM flight after a 3 PM museum (14h) still reads as before it.
+ */
+const PAST_MIDNIGHT_WINDOW_MIN = 12 * 60;
+
+/** `clock` read as coming after a stop that started at `previousStart`: a day later when it is
+ *  earlier on the clock but within the window, so 1:00 AM after 6:00 PM is 1500, not 60. */
+export function clockAfter(clock: number, previousStart: number | null): number {
+  if (previousStart === null || clock >= previousStart) return clock;
+  return clock + 1440 - previousStart <= PAST_MIDNIGHT_WINDOW_MIN ? clock + 1440 : clock;
+}
+
+/**
+ * Every stop's start in the day's own order, past-midnight stops rolled forward (`clockAfter`
+ * against the last readable start), null where a clock will not parse. The one walk the day-level
+ * arithmetic shares, so the span, the departure check and the re-timer agree on when 1 AM is.
+ */
+export function dayClocks(stops: Stop[]): (number | null)[] {
+  let previous: number | null = null;
+  return stops.map((stop) => {
+    const raw = parseClock(stop.time ?? "");
+    if (raw === null) return null;
+    previous = clockAfter(raw, previous);
+    return previous;
+  });
+}
+
 export function formatClock(minutes: number): string {
   const total = ((minutes % 1440) + 1440) % 1440;
   const hour24 = Math.floor(total / 60);
@@ -412,19 +447,22 @@ export function formatClock(minutes: number): string {
  * on. Handing it the total instead turns the check into a comparison.
  *
  * Takes the earliest start and the latest end across the day's stops rather than trusting array
- * order, and returns null when no stop carries a readable time.
+ * order, and returns null when no stop carries a readable time. A stop after midnight counts as
+ * the end of the day (`dayClocks`), not its start — a 1 AM transfer once made this "1:00 AM to
+ * 7:00 PM".
  */
 export function dayActiveSpan(day: DayPlan): DayActiveSpan | null {
   let earliest: number | null = null;
   let latest: number | null = null;
 
-  for (const stop of day.stops) {
-    const start = parseClock(stop.time ?? "");
-    if (start === null) continue;
+  const clocks = dayClocks(day.stops);
+  day.stops.forEach((stop, i) => {
+    const start = clocks[i];
+    if (start === null) return;
     const end = start + parseDuration(stop.durationLabel ?? "");
     if (earliest === null || start < earliest) earliest = start;
     if (latest === null || end > latest) latest = end;
-  }
+  });
 
   if (earliest === null || latest === null) return null;
   return { start: formatClock(earliest), end: formatClock(latest), minutes: latest - earliest };

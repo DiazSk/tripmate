@@ -38,3 +38,9 @@ test('says nothing about fit when a clock does not parse, and nothing at all for
   expect(rows[1].leg?.short).toBe(false);
   expect(rows[2].leg).toBeNull();
 });
+
+test('a 1 AM transfer after a 6 PM dinner is the next morning, not a leg 18 hours short', () => {
+  const [, transfer] = timelineRows([stop({ time: '6:00 PM' }), stop({ time: '1:00 AM', timeFlexibility: 'FIXED' })]);
+  expect(transfer.leg?.gap).toBe(360);
+  expect(transfer.leg?.short).toBe(false);
+});
