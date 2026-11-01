@@ -140,6 +140,10 @@ const GOOGLE_TYPES: Record<Exclude<PlaceCategory, "place">, string[]> = {
 /** Longer than the other upstreams because Overpass queues under load. The `[timeout:N]` inside
  *  the query is Overpass's own budget; this is the wall clock on the request carrying it. */
 const OVERPASS_TIMEOUT_MS = 25_000;
+/** The whole search, across every mirror. Without it a box with all three mirrors timing out sat
+ *  on its spinner for 75s (3 x 25s) before saying search was busy; measured on the phone's
+ *  add-place fallback at 76s. A refused mirror still fails over in milliseconds inside this. */
+const OVERPASS_SEARCH_DEADLINE_MS = 35_000;
 const GOOGLE_TIMEOUT_MS = 10_000;
 /** Default search radius. A walk, not a city — the question is "what is near where I am looking". */
 export const DEFAULT_SEARCH_RADIUS_M = 1800;
@@ -398,7 +402,7 @@ async function searchOverpass({
   const clauses = selectors.map((f) => `nwr${f}${nameFilter}${around};`).join("");
   const body = `[out:json][timeout:20];(${clauses});out center ${MAX_RESULTS * 3};`;
 
-  const elements = await askOverpass(body, { timeoutMs: OVERPASS_TIMEOUT_MS });
+  const elements = await askOverpass(body, { timeoutMs: OVERPASS_TIMEOUT_MS, deadline: Date.now() + OVERPASS_SEARCH_DEADLINE_MS });
   if (elements === null) return null;
 
   const seen = new Set<string>();

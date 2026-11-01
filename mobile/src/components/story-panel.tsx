@@ -133,13 +133,16 @@ export function StoryPanel({
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* The night that holds the words. Taller when the chapters lift the subtitle. */}
+      {/* The night that holds the words. Taller when the chapters lift the subtitle, and never shorter
+          than twice the column it sits under, so the column's top is at the gradient's 0.8 midpoint:
+          at the largest text sizes a five-line subtitle rose past a fixed half-screen and the map's own
+          labels read through it. */}
       {subs ? (
         <Animated.View
           entering={FadeIn.duration(Motion.settle)}
           exiting={FadeOut.duration(Motion.exit)}
           pointerEvents="none"
-          style={[styles.scrim, { height: screenH * (chapters ? 0.78 : 0.5) }]}>
+          style={[styles.scrim, { height: Math.min(screenH, Math.max(screenH * (chapters ? 0.78 : 0.5), columnH * 2)) }]}>
           <Svg width="100%" height="100%" preserveAspectRatio="none">
             <Defs>
               <LinearGradient id="film-night" x1="0" y1="1" x2="0" y2="0">

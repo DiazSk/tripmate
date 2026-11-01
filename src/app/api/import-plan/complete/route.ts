@@ -32,6 +32,7 @@ import { currentOwnerId } from "@/lib/ownerRequest";
 import type { Anchor } from "@/lib/types";
 import { attemptIdFrom, captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server";
 import { llmMode } from "@/lib/llmConfig";
+import { fixTypoCoords } from "@/lib/stopCoords";
 
 /**
  * Bring your own itinerary, step two: geocode what is still unplaced, look up hours and weather,
@@ -120,6 +121,9 @@ async function handle(req: NextRequest, seen: Seen): Promise<Response> {
       }
     }
   }
+  // The client sends each stop's position back, so a typo'd one (a dropped sign) is put back here
+  // against the destination, the same repair generation and chat edits get (`stopCoords.ts`).
+  if (geo) fixTypoCoords(stops, [{ lat: geo.lat, lon: geo.lon }]);
   const fallback = fallbackPoint(geo, stops);
   if (!fallback) {
     return NextResponse.json({ error: "Couldn't find this trip on the map. Check where it is." }, { status: 422 });

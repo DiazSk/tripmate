@@ -10,6 +10,7 @@ import { CormorantGaramond_400Regular } from '@expo-google-fonts/cormorant-garam
 import { InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { FontScaleRoot } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
 import { ClerkBridge } from '@/components/clerk-bridge';
 import { SettingsColors } from '@/components/settings-list';
@@ -197,11 +198,13 @@ export default function RootLayout() {
   );
 
   // No key, no Clerk: the app runs signed-out only (see `lib/clerkConfig.ts`).
-  if (!CLERK_PUBLISHABLE_KEY) return tree;
+  if (!CLERK_PUBLISHABLE_KEY) return <FontScaleRoot>{tree}</FontScaleRoot>;
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <ClerkBridge />
-      {tree}
-    </ClerkProvider>
+    <FontScaleRoot>
+      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+        <ClerkBridge />
+        {tree}
+      </ClerkProvider>
+    </FontScaleRoot>
   );
 }

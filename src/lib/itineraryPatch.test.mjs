@@ -325,3 +325,32 @@ test("no scope still means the whole trip", () => {
   const { rejected } = applyPatch(trip(), [{ op: "remove_stop", dayIndex: 1, stopIndex: 0 }]);
   assert.deepEqual(rejected, []);
 });
+
+/* The E2E Porto turn: "add a short coffee stop" came back at lng +8.612, ~1,400km out to sea, and
+ * saved. Stops here sit at 35, 135 (Kyoto-ish), so a dropped sign lands in the Atlantic. */
+test("a stop added with a dropped coordinate sign is put back where the trip is", () => {
+  const { itinerary, rejected } = applyPatch(trip(), [
+    { op: "add_stop", dayIndex: 0, stopIndex: 1, stop: { ...stop("Coffee"), lat: 35.01, lng: -135.01 } },
+  ]);
+  assert.deepEqual(rejected, []);
+  const coffee = itinerary.days[0].stops.find((s) => s.name === "Coffee");
+  assert.equal(coffee.lng, 135.01);
+  assert.equal(coffee.lat, 35.01);
+});
+
+test("a stop added nowhere near the trip is refused, by add or by replace", () => {
+  const paris = { lat: 48.8584, lng: 2.2945 };
+  const { itinerary, rejected } = applyPatch(trip(), [
+    { op: "add_stop", dayIndex: 0, stopIndex: 1, stop: { ...stop("Far"), ...paris } },
+    { op: "replace_stop", dayIndex: 0, stopIndex: 0, stop: paris },
+  ]);
+  assert.equal(rejected.length, 2);
+  for (const r of rejected) assert.match(r.reason, /nowhere near this trip/);
+  assert.deepEqual(itinerary.days[0].stops.map((s) => s.name), ["A", "B", "C", "D"]);
+  assert.equal(itinerary.days[0].stops[0].lat, 35);
+});
+
+test("a replace that changes no position is not checked", () => {
+  const { rejected } = applyPatch(trip(), [{ op: "replace_stop", dayIndex: 0, stopIndex: 0, stop: { cost: 5 } }]);
+  assert.deepEqual(rejected, []);
+});

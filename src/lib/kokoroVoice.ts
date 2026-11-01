@@ -45,8 +45,14 @@ import type { SpeakHandle } from "./storyVoice";
  */
 
 /** Pinned, not `@latest`: this URL is loaded at runtime, so a breaking upstream release would
- *  break the feature in a browser rather than in a build. */
-const MODULE_URL = "https://esm.sh/kokoro-js@1.2.1";
+ *  break the feature in a browser rather than in a build.
+ *
+ *  **The package's own browser bundle, not esm.sh's rebuild of it.** esm.sh polyfills Node's `fs`
+ *  with a stub, which makes kokoro-js take its Node path for voice files: the model loaded, and then
+ *  every sentence failed with `[unenv] fs.readFile is not implemented yet!` and fell back to the
+ *  platform voice, in Chrome with WebGPU as much as headless. `dist/kokoro.web.js` reads voices with
+ *  `fetch`; measured, the same worker returns audio. jsDelivr is already in the CSP for onnxruntime. */
+const MODULE_URL = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
 /**

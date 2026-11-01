@@ -691,7 +691,9 @@
    above the monument. Sticky, so Next is always in reach on a long step. */
 .pp-bar {
   position: sticky;
-  bottom: 1.25em;
+  /* Lifted clear of the analytics consent card while it is showing (ConsentPrompt.tsx), which
+     otherwise covers this bar at phone width. */
+  bottom: calc(1.25em + var(--consent-inset, 0px));
   z-index: 3;
   display: flex;
   align-items: center;

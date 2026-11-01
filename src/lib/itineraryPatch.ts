@@ -1,3 +1,4 @@
+import { checkStopCoord, knownPoints } from "./stopCoords";
 import { insertDay, redateDays, removeDay } from "./tripDays";
 import type { DayPlan, Itinerary, Stop } from "./types";
 
@@ -142,6 +143,15 @@ export function applyPatch(
   // Captured before any op runs, because `add_day` at index 0 would otherwise make the new (blank)
   // day the reference point and drag the whole trip's dates with it. The start date never moves.
   const startISO = next.days[0]?.date;
+  // Where the trip already is, before this patch moves anything: a stop the model places must land
+  // near it (see `stopCoords.ts`). A dropped sign is put back; a point nowhere near is refused.
+  const known = knownPoints(itinerary.days);
+  const placed = (point: { lat?: number; lng?: number }): { lat?: number; lng?: number } | null => {
+    const check = checkStopCoord(point, known);
+    if (check.kind === "far") return null;
+    return check.kind === "fixed" ? { lat: check.lat, lng: check.lng } : {};
+  };
+  const NOWHERE_NEAR = "its place on the map was nowhere near this trip";
 
   for (const op of ops) {
     // Scope lock first, before any op-specific handling. A scope-locked (single-element) edit is
@@ -229,14 +239,28 @@ export function applyPatch(
           day.stops.splice(at, 1);
           break;
         }
+        // Only a replace that moves the stop is checked: one changing its cost has no position.
+        const moved = "lat" in op.stop || "lng" in op.stop
+          ? placed({ lat: op.stop.lat ?? target.lat, lng: op.stop.lng ?? target.lng })
+          : {};
+        if (!moved) {
+          rejected.push({ op, reason: NOWHERE_NEAR });
+          break;
+        }
         // Merged in place rather than replaced with a new object: the model only needs to send
         // changed fields, and keeping the identity lets a later op in this patch still find it.
-        Object.assign(target, op.stop);
+        Object.assign(target, op.stop, moved);
         break;
       }
-      case "add_stop":
-        day.stops.splice(insertionIndex(day, before, op.stopIndex), 0, op.stop);
+      case "add_stop": {
+        const at = placed(op.stop);
+        if (!at) {
+          rejected.push({ op, reason: NOWHERE_NEAR });
+          break;
+        }
+        day.stops.splice(insertionIndex(day, before, op.stopIndex), 0, { ...op.stop, ...at });
         break;
+      }
       case "replace_lodging":
         day.lodging = op.lodging;
         break;

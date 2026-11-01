@@ -413,7 +413,10 @@ export function TripPhotoWidget({
           <Text maxFontSizeMultiplier={1.3} style={styles.daysUnit}>{days === 1 ? 'day to go' : 'days to go'}</Text>
         </View>
       ) : null}
-      <Text maxFontSizeMultiplier={1.3} style={styles.photoCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+      {/* Oswald's ascent stands above its line box, so once the words fill the card the city's caps
+          meet the label over it ("UP NEXT" touching "PORTO" at AX3). At the ordinary sizes the body's
+          slack already keeps them apart and the gap changes nothing. */}
+      <Text maxFontSizeMultiplier={1.3} style={[styles.photoCity, fontScale > 1.2 && styles.photoCityRoomy]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
         {city.toUpperCase()}
       </Text>
       <Text maxFontSizeMultiplier={1.6} style={[styles.photoMeta, crowded && styles.photoMetaShort]} numberOfLines={crowded ? 3 : 1}>
@@ -469,6 +472,7 @@ const styles = StyleSheet.create({
   daysValue: { fontFamily: PolarFonts.condensed, fontSize: 74, color: Polar.signal },
   daysUnit: { marginTop: -16, marginRight: 3, fontSize: 13, fontWeight: '600', color: Polar.ice },
   photoCity: { fontFamily: PolarFonts.condensed, fontSize: 52, lineHeight: 56, color: Polar.ice },
+  photoCityRoomy: { marginTop: 14 },
   photoMeta: { fontSize: 15, lineHeight: 20, fontWeight: '500', color: Polar.ice, fontVariant: ['tabular-nums'] },
   photoMetaShort: { maxWidth: '58%' },
   photoNote: { marginTop: 2, fontSize: 13, lineHeight: 17, color: Polar.frost68 },

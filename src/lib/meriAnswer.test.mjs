@@ -263,3 +263,16 @@ test("both answer prompts mark the evidence as data, not instructions", () => {
     assert.match(p, /Months the evidence calls good: 3, 4, 5, 9, 10, 11/);
   }
 });
+
+/* An answer call that timed out under load read "I don't have anything checked on that yet", which
+ * tells a traveller asking again is pointless. The evidence was there; the model ran out of time. */
+test("an answer the model never finished says to ask again, not that nothing was checked", async () => {
+  const { unfinishedAnswer, ANSWER_UNFINISHED } = await import("./meriAnswer.ts");
+  const a = unfinishedAnswer();
+  assert.equal(a.answer, ANSWER_UNFINISHED);
+  assert.notEqual(a.answer, NOTHING_CHECKED);
+  assert.match(a.answer, /ask me again/i);
+  // Nothing in it is grounded, so it still renders no places, months or sources.
+  assert.equal(a.nothingChecked, true);
+  assert.deepEqual([a.places, a.months, a.sources], [[], [], []]);
+});

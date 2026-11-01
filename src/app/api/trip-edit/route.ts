@@ -52,6 +52,7 @@ import { captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server
 import { IDEA_DIETS } from "@/lib/ideaRead";
 import {
   NOTHING_CHECKED,
+  ANSWER_UNFINISHED,
   buildLookupAnswerPrompt,
   entryAnswer,
   groundAnswer,
@@ -363,7 +364,7 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
         session: servedBy,
         runId,
       });
-      const outcome = "refused" in answered ? "refused" : kind === "entry" ? "entry" : answered.reply === NOTHING_CHECKED ? "nothing_checked" : "answered";
+      const outcome = "refused" in answered ? "refused" : kind === "entry" ? "entry" : answered.reply === ANSWER_UNFINISHED ? "unfinished" : answered.reply === NOTHING_CHECKED ? "nothing_checked" : "answered";
       captureServer(who, "meri_question_answered", {
         surface: "trip",
         kind,
@@ -553,7 +554,7 @@ async function answerLookup(input: {
     });
   } catch (err) {
     console.error("[trip-edit] lookup answer failed", err);
-    return { ...nothing, inSession: false };
+    return { ...nothing, reply: ANSWER_UNFINISHED, inSession: false };
   }
   let answer: EditResponse & { refused?: unknown; places?: unknown; months?: unknown; sources?: unknown; nothing?: unknown };
   try {

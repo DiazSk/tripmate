@@ -7,7 +7,7 @@ import { capResponse, limitResponse, modelFailureResponse, offTopicResponse, pre
 import { dailyCapResumesAt } from "@/lib/spendCap";
 import { isRefusalShape } from "@/lib/promptScope";
 import { IDEA_MAX_CHARS, buildIdeaReadPrompt, ideaFieldCount, parseIdeaRead, type IdeaRead } from "@/lib/ideaRead";
-import { buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip, type MeriAnswer } from "@/lib/meriAnswer";
+import { ANSWER_UNFINISHED, buildAnswerPrompt, entryAnswer, nothingCheckedAnswer, parseMeriAnswer, pickReadyTrip, unfinishedAnswer, type MeriAnswer } from "@/lib/meriAnswer";
 import { gatherEvidence } from "@/lib/meriEvidence";
 import { fetchReadyTrips } from "@/lib/readyTrips";
 import { geocodeDestination } from "@/lib/weather";
@@ -107,10 +107,10 @@ async function withAnswer(parsed: IdeaRead, idea: string, who: Who): Promise<Ide
       answer = await answerFromEvidence(idea, q.kind, q.diet, place, { lat: geo.lat, lng: geo.lon });
     } catch (err) {
       console.error("[read-idea] answer call failed", err);
-      answer = nothingCheckedAnswer();
+      answer = unfinishedAnswer();
     }
   }
-  const outcome = q.kind === "entry" ? "entry" : answer.nothingChecked ? "nothing_checked" : "answered";
+  const outcome = q.kind === "entry" ? "entry" : answer.answer === ANSWER_UNFINISHED ? "unfinished" : answer.nothingChecked ? "nothing_checked" : "answered";
   captureServer(who, "meri_question_answered", {
     surface: "home",
     kind: q.kind,

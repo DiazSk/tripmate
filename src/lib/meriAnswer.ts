@@ -60,6 +60,17 @@ export function nothingCheckedAnswer(): MeriAnswer {
   return { answer: NOTHING_CHECKED, places: [], months: [], sources: [], nothingChecked: true };
 }
 
+/**
+ * The model never answered (a timeout, a failed call), which is not the same claim as "nothing was
+ * checked": the evidence may have been there. Saying nothing was checked told a traveller not to
+ * bother asking again, when asking again is exactly what works.
+ */
+export const ANSWER_UNFINISHED = "I couldn’t finish checking that just now. Ask me again in a moment.";
+
+export function unfinishedAnswer(): MeriAnswer {
+  return { ...nothingCheckedAnswer(), answer: ANSWER_UNFINISHED };
+}
+
 export function entryAnswer(place: string): MeriAnswer {
   return { answer: ENTRY_LINE.replace("{place}", place), places: [], months: [], sources: [], nothingChecked: false };
 }

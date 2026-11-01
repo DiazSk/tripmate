@@ -48,6 +48,7 @@ import {
 import { StageEvent } from "./generationStages";
 import type { DietaryNeeds } from "./travelerProfile";
 import { StreamingItineraryParser, type StreamedStop } from "./streamingItinerary";
+import { fixTypoCoords } from "./stopCoords";
 
 /**
  * Where a streaming caller receives the plan as it is written. Absent for the plain-JSON
@@ -587,6 +588,19 @@ export async function runGeneration(
   // already looked up, not a second Overpass call.
   let resolvedCoords: Record<string, { lat: number; lon: number }> = {};
 
+  /**
+   * A stop no listing matched keeps the model's coordinate, and a model drops a sign or swaps the
+   * pair often enough to matter (see `stopCoords.ts`). Checked against the destination and every
+   * stop a listing did place; a typo is put back, anything else is left for plan health to name.
+   */
+  const fixModelCoords = (stops: Itinerary["days"][number]["stops"]): void => {
+    const known = [
+      ...(geoPoint ? [geoPoint] : []),
+      ...stops.filter((s) => s.located === "osm").map((s) => ({ lat: s.lat, lon: s.lng })),
+    ];
+    fixTypoCoords(stops.filter((s) => s.located === "model"), known);
+  };
+
   const placeStops = async (): Promise<void> => {
     if (geoPoint) {
       onStage({ stage: "placing", status: "start" });
@@ -625,6 +639,7 @@ export async function runGeneration(
             stop.located = "model";
           }
         }
+        fixModelCoords(allStops);
       } catch {
         // Keep the model's coordinates.
       }
@@ -662,6 +677,7 @@ export async function runGeneration(
         }
       }
     }
+    fixModelCoords(days.flatMap((d) => d.stops ?? []));
   };
 
   /**

@@ -60,8 +60,7 @@ const COMMONS = "https://commons.wikimedia.org"; // Special:FilePath hero photos
 const OSM_TILES = "https://tile.openstreetmap.org"; // Cesium's flat imagery when there is no Ion token or no 3D tile arrives
 const CESIUM = ["https://api.cesium.com", "https://tile.googleapis.com"]; // Ion token handshake, Google 3D tiles
 const KOKORO = [
-  "https://esm.sh", // kokoro-js itself, imported inside a Blob worker
-  "https://cdn.jsdelivr.net", // onnxruntime-web's WASM runtime, which transformers.js fetches
+  "https://cdn.jsdelivr.net", // kokoro-js's browser bundle (imported inside a Blob worker) and onnxruntime-web's WASM runtime
   "https://huggingface.co", "https://*.hf.co", "https://cdn-lfs.huggingface.co", // the model weights
 ];
 
@@ -73,7 +72,7 @@ const KOKORO = [
  *  dynamic. */
 const CSP = [
   "default-src 'self'",
-  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://esm.sh", "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", ...CLERK_SCRIPT, ...POSTHOG)}`,
+  `script-src ${list("'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", EVAL, "https://cdn.jsdelivr.net", "https://challenges.cloudflare.com", ...CLERK_SCRIPT, ...POSTHOG)}`,
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",

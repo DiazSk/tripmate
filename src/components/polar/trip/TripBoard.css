@@ -14,7 +14,9 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  /* Above the analytics consent card while it shows (ConsentPrompt.tsx), which otherwise covers the
+     board's foot, and its last stops, at phone width. */
+  bottom: var(--consent-inset, 0px);
   z-index: 15;
   width: auto;
   min-height: 0;

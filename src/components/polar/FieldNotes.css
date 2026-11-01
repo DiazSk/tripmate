@@ -529,7 +529,8 @@
   .pb-index {
     position: sticky;
     top: auto;
-    bottom: 0;
+    /* Clear of the analytics consent card while it shows (ConsentPrompt.tsx). */
+    bottom: var(--consent-inset, 0px);
     margin: 0 calc(-1 * var(--wd-pad));
     padding: 0.6em var(--wd-pad);
     border-top: 1px solid var(--wd-rule);

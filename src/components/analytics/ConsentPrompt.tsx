@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import InlineNote from "@/components/InlineNote";
 
@@ -15,6 +15,28 @@ import InlineNote from "@/components/InlineNote";
 export default function ConsentPrompt({ onAnswer }: { onAnswer: (yes: boolean) => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const card = useRef<HTMLElement>(null);
+
+  // **It sits over the foot of the page, so it says how much.** At phone width the card spans the
+  // screen's bottom ~170px, which is exactly where the planner's sticky Next / Plan my trip bar
+  // lives: the bar was under it, unreachable until the question was answered. Its height plus its
+  // own offset goes on <html> as `--consent-inset`, and a bottom-pinned control adds it (see
+  // `.pp-bar`). Cleared when the card goes, so nothing stays lifted after an answer.
+  useEffect(() => {
+    const el = card.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const set = () => root.style.setProperty("--consent-inset", `${Math.ceil(innerHeight - el.getBoundingClientRect().top)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    addEventListener("resize", set);
+    return () => {
+      ro.disconnect();
+      removeEventListener("resize", set);
+      root.style.removeProperty("--consent-inset");
+    };
+  }, []);
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -29,6 +51,7 @@ export default function ConsentPrompt({ onAnswer }: { onAnswer: (yes: boolean) =
 
   return (
     <section
+      ref={card}
       aria-label="Help improve TripMate"
       className="glass-itinerary is-opaque pointer-events-auto fixed inset-x-4 bottom-4 z-40 rounded-md p-4 sm:right-auto sm:max-w-md"
     >

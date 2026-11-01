@@ -1,10 +1,11 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import {
   StyleSheet,
   Text as NativeText,
   TextInput as NativeTextInput,
   type TextInputProps,
   type TextProps,
+  useWindowDimensions,
 } from 'react-native';
 
 import { Colors, FontScale, Fonts, type ThemeColor } from '@/constants/theme';
@@ -24,13 +25,31 @@ const capForSize = (size: number | undefined) =>
  * `react-native`'s `Text`, with `FontScale`'s cap applied when the call site gives none. Import this
  * rather than the platform's, and new text is capped without anyone remembering to — see `FontScale`.
  */
+/**
+ * The system text size, for `Text` to key its native node on.
+ *
+ * **A live Dynamic Type change left every text that did not re-render drawn at the new size inside
+ * the frame measured for the old one**: day chips read "TUI", "WEI", buttons "Directi", headings cut
+ * at the top and bottom, until the app was relaunched. Fabric keeps a text's measured layout until
+ * its props change, and a size change is not a prop. Keying on the scale re-creates each text node,
+ * which is re-measured, while navigation and every screen's state stay where they were. One
+ * listener at the root rather than one per text.
+ */
+const ScaleContext = createContext(1);
+
+export function FontScaleRoot({ children }: { children: ReactNode }) {
+  const { fontScale } = useWindowDimensions();
+  return <ScaleContext.Provider value={fontScale}>{children}</ScaleContext.Provider>;
+}
+
 export function Text({ maxFontSizeMultiplier, ...props }: TextProps & { ref?: React.Ref<NativeText> }) {
+  const scale = useContext(ScaleContext);
   const parent = useContext(CapContext);
   const size = StyleSheet.flatten(props.style)?.fontSize;
   const cap = maxFontSizeMultiplier ?? (size === undefined && parent !== null ? parent : capForSize(size));
   return (
     <CapContext.Provider value={cap}>
-      <NativeText {...props} maxFontSizeMultiplier={cap} />
+      <NativeText key={scale} {...props} maxFontSizeMultiplier={cap} />
     </CapContext.Provider>
   );
 }

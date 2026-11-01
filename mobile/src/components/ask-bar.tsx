@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -94,7 +95,13 @@ export function AskBar({
   const insets = useSafeAreaInsets();
   const rest = Math.max(insets.bottom - 6, Spacing.tight);
   const lift = useKeyboardLift(rest);
-  const dock = useAnimatedStyle(() => ({ bottom: lift.value }));
+  // At the accessibility sizes the page's own words are bigger than the gaps between the bar's
+  // pieces (the X, the composer, the idea chips), so they read through those gaps as well as through
+  // glass. The dock gets a floor of its own there, down to the screen's edge, the way the pieces
+  // themselves go solid (`Glass`). The lift becomes padding so the floor has no gap under it.
+  const { fontScale } = useWindowDimensions();
+  const backed = fontScale > SOLID_FROM_SCALE;
+  const dock = useAnimatedStyle(() => (backed ? { bottom: 0, paddingBottom: lift.value } : { bottom: lift.value }));
   const [writing, setWriting] = useState(false);
   const ready = draft.trim().length > 0 && !replying;
 
@@ -143,8 +150,8 @@ export function AskBar({
   return (
     <Animated.View
       pointerEvents="box-none"
-      style={[styles.dock, dock]}
-      onLayout={(event) => onHeight(event.nativeEvent.layout.height + rest)}>
+      style={[styles.dock, backed && styles.dockBacked, dock]}
+      onLayout={(event) => onHeight(event.nativeEvent.layout.height + (backed ? 0 : rest))}>
       {showReply ? (
         <Glass solid style={styles.reply}>
           <Meridian state={meriForChat({ replying, failure, justReplied: false })} size={28} />
@@ -535,6 +542,9 @@ function Writer({
  * did not help: the glass draws its lensing above its siblings. The controls stay glass, as the
  * toolbar's do; what you read and write sits on the slate.
  */
+/** The text scale past which the bar's glass becomes a solid surface (`Glass`). AX1 is ~1.35. */
+const SOLID_FROM_SCALE = 1.3;
+
 function Glass({
   style,
   solid,
@@ -544,9 +554,15 @@ function Glass({
   solid?: boolean;
   children: React.ReactNode;
 }) {
+  // **Glass goes solid at the accessibility sizes.** Liquid glass shows the page through it, which
+  // reads fine at the default size, but at AX3 the stop titles behind the bar are larger than the
+  // bar's own words and came straight through "Keep" and the composer. Above that size the bar is
+  // the surface it would be with Reduce Transparency on.
+  const { fontScale } = useWindowDimensions();
+  const opaque = solid || fontScale > SOLID_FROM_SCALE;
   return (
-    <View style={[styles.glass, ControlShadow, solid && styles.solid, style]}>
-      {solid ? null : isLiquidGlassAvailable() ? (
+    <View style={[styles.glass, ControlShadow, opaque && styles.solid, style]}>
+      {opaque ? null : isLiquidGlassAvailable() ? (
         <GlassView glassEffectStyle="regular" colorScheme="dark" isInteractive style={StyleSheet.absoluteFill} />
       ) : (
         <BlurView intensity={80} tint="systemChromeMaterialDark" style={StyleSheet.absoluteFill} />
@@ -656,6 +672,13 @@ const styles = StyleSheet.create({
     left: Spacing.read,
     right: Spacing.read,
     gap: Spacing.tight,
+  },
+  dockBacked: {
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing.read,
+    paddingTop: Spacing.tight,
+    backgroundColor: Colors.surfaceDeep,
   },
   glass: {
     overflow: 'hidden',

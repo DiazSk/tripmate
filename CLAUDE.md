@@ -46,7 +46,7 @@ touching `Hero`, `HeroFrames`, the `.hero-*` rules, or `scripts/build-frame-sequ
 
 **The test suite is deliberately narrow, not small.** `npm test` runs
 `node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` —
-90 files, ~1,240 tests, no framework and no build step. It covers mostly pure, deterministic logic,
+~155 files, ~1,850 tests, no framework and no build step. It covers mostly pure, deterministic logic,
 much of it logic that has already broken once. Nothing renders and no route is booted.
 
 **A few tests do open a database, and it is always an in-memory one.** `db.test.mjs`,

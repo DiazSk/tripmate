@@ -81,8 +81,11 @@ export function TripToolbar({
   onHeight: (height: number) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const tool = width < 390 ? NARROW : WIDE;
+  // Solid at the accessibility sizes, as the ask bar's glass is (`ask-bar.tsx`): there the stop
+  // titles behind the bar are bigger than anything on it and read straight through.
+  const opaque = fontScale > 1.3;
   // `bottom: calc(var(--tk-bottom) - 6px)`: just into the home indicator's band.
   const bottom = Math.max(insets.bottom - 6, 8);
   const glass = isLiquidGlassAvailable();
@@ -102,8 +105,8 @@ export function TripToolbar({
       style={[styles.dock, { bottom }]}
       onLayout={(event: LayoutChangeEvent) => onHeight(event.nativeEvent.layout.height + bottom)}>
       <View style={styles.shadow}>
-        <View style={styles.bar}>
-          {glass ? (
+        <View style={[styles.bar, opaque && styles.barSolid]}>
+          {opaque ? null : glass ? (
             <GlassView glassEffectStyle="regular" colorScheme="dark" isInteractive style={StyleSheet.absoluteFill} />
           ) : (
             <BlurView intensity={80} tint="systemChromeMaterialDark" style={StyleSheet.absoluteFill} />
@@ -218,6 +221,7 @@ const styles = StyleSheet.create({
   dock: { position: 'absolute', left: 8, right: 8, alignItems: 'center' },
   // `0 10px 30px rgba(0,0,0,.35)`, on a wrapper: the bar clips its glass, and a clipped view casts no shadow.
   shadow: { borderRadius: 30, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 15, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+  barSolid: { backgroundColor: Colors.surfaceDeep },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

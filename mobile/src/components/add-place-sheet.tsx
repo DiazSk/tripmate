@@ -341,7 +341,7 @@ export function AddPlaceSheet({
             <Searching line={searchingLine(category, query, near)} width={cardWidth} reduced={reduced} />
           ) : !answer?.available ? (
             <Nothing
-              title="Couldn\u2019t reach search"
+              title="Couldn’t reach search"
               body="Check your connection, or try again in a moment."
               action="Try again"
               onAction={() => setAttempt((n) => n + 1)}
@@ -1396,7 +1396,9 @@ const styles = StyleSheet.create({
     borderColor: Polar.frost20,
     overflow: 'hidden',
   },
-  searchInput: { flex: 1, alignSelf: 'stretch', fontFamily: PolarFonts.sans, fontSize: 15, color: Polar.ice },
+  // Sized by its own text and centred by the row, not stretched to it: stretched, the field kept the
+  // row's height while the 1.4x text inside it grew, and at AX3 the placeholder's descenders were cut.
+  searchInput: { flex: 1, paddingVertical: 0, fontFamily: PolarFonts.sans, fontSize: 15, color: Polar.ice },
   clear: {
     width: 20,
     height: 20,

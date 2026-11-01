@@ -223,10 +223,12 @@ async function handle(
   // Do not add `export const runtime = "edge"` — the Edge runtime is deprecated in Next 16;
   // the Node default is the only non-deprecated choice and it supports streaming.
   let keepalive: ReturnType<typeof setInterval> | undefined;
+  // Out here so `cancel` can set it: a client that leaves after the plan (the web goes to the trip
+  // page) is the ordinary case, and the frames still queued after it went logged as errors.
+  let clientGone = false;
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(PADDING_FRAME);
-      let clientGone = false;
       const safeEnqueue = (event: string, data: unknown) => {
         if (clientGone) return;
         try {
@@ -332,6 +334,7 @@ async function handle(
       // The client navigated away or aborted the fetch; Next/undici already tears this
       // stream down for us. runGeneration has no cancellation token, so an in-flight Claude
       // call simply finishes and its result is discarded — nothing further to clean up here.
+      clientGone = true;
       clearInterval(keepalive);
     },
   });

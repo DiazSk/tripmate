@@ -224,7 +224,7 @@ function AnswerCard({ answer, read, today }: { answer: MeriAnswer; read: ReadWit
   return (
     <View style={styles.card}>
       <Text maxFontSizeMultiplier={1.6} style={styles.answerText} accessibilityLiveRegion="polite">
-        {checked ? answer.answer : NOTHING_CHECKED}
+        {answer.answer || NOTHING_CHECKED}
       </Text>
 
       {checked && good.length ? (
