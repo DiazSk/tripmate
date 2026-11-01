@@ -76,3 +76,25 @@ test(".tm's base colours are zero-specificity, so a screen's own class always ov
   assert.ok(base, "no :where(.tm) base block");
   assert.match(base[1], /\bcolor:\s*var\(--wd-ink\)/);
 });
+
+// Meri's cards sit on the hero photograph, which can put near-white behind them (blurred sky or snow
+// measured at luminance 0.91), so every text colour in a card is checked against the card's tint over pure white.
+test("every text colour in Meri's cards reaches AA (4.5:1) with near-white behind the glass", () => {
+  const pill = readFileSync("src/components/polar/MeriPill.css", "utf8");
+  const block = (cls) => {
+    const m = pill.match(new RegExp(`(?:^|\\n)\\.${cls}\\s*\\{([^}]*)\\}`));
+    assert.ok(m, `.${cls} is missing from MeriPill.css`);
+    return m[1];
+  };
+  const tint = pill.match(/\.mp-card,\s*\.mp-fail\.is-on\s*\{[^}]*background:\s*rgba\(9, 11, 16, ([\d.]+)\)/);
+  assert.ok(tint, "the card has no rgba(9, 11, 16, a) tint");
+  const mix = (fg, a, bg) => fg.map((c, i) => Math.round(a * c + (1 - a) * bg[i]));
+  const hex = (rgb) => "#" + rgb.map((c) => c.toString(16).padStart(2, "0")).join("");
+  const bg = mix([9, 11, 16], Number(tint[1]), [255, 255, 255]);
+  for (const sel of ["mp-kicker", "mp-close", "mp-change", "mp-month", "mp-month-key", "mp-idx", "mp-pdetail", "mp-honest"]) {
+    const a = block(sel).match(/(?:^|\n)\s*color:\s*rgba\(255, 255, 255, ([\d.]+)\)/);
+    assert.ok(a, `${sel} has no white text colour`);
+    const r = ratio(hex(mix([255, 255, 255], Number(a[1]), bg)), hex(bg));
+    assert.ok(r >= 4.5, `${sel} (white at ${a[1]}) over the card on white is ${r.toFixed(2)}:1`);
+  }
+});

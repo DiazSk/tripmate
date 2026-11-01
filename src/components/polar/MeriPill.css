@@ -150,13 +150,15 @@
   border-color: rgba(255, 255, 255, 0.5);
 }
 
-/* The reading card, and the failure in its place */
+/* The reading card, the answer card, and the failure in their place. Dark glass rather than clear: the
+   hero can put near-white behind a card (Tuscany's sky, Sinaia's snow, blurred), and at 0.8 even the
+   dimmest text here, the 0.55 kickers, holds 4.5:1 over white (contrast.test.mjs). */
 .mp-card,
 .mp-fail.is-on {
   padding: 1.25em;
   border-radius: 1em;
   text-align: left;
-  background: rgba(9, 11, 16, 0.42);
+  background: rgba(9, 11, 16, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.2);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
   backdrop-filter: blur(18px) saturate(1.2);
@@ -250,10 +252,6 @@
 }
 .mp-open:hover {
   background: var(--wd-signal-hover);
-}
-/* The answer card: the reading card's glass, a shade darker so a paragraph reads over any photograph. */
-.mp-answer {
-  background: rgba(9, 11, 16, 0.64);
 }
 .mp-answer-text {
   max-width: 34em;

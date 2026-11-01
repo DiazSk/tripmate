@@ -167,7 +167,14 @@ function build(root: HTMLElement, scroller: HTMLElement) {
   const all = (s: string) => Array.from(root.querySelectorAll<HTMLElement>(s));
   const scrub = scrubFor(scroller);
 
-  heroParallax(q(".tm-hero"), scroller, ".tm-hero-mid, .tm-hero-ask, .tm-hero-foot");
+  const hero = q(".tm-hero");
+  heroParallax(hero, scroller, ".tm-hero-mid, .tm-hero-foot");
+  // Meri's group lifts with the copy but never takes `opacity` itself: below 1 it becomes the backdrop
+  // root of the glass inside it, which then blurs nothing, and Lenis eases the last pixels back to 0 for
+  // over a second, so on the way back up the pill sat there clear until the scroll fully settled.
+  // `--ask-fade` reaches the glass elements' own opacity instead (PolarLanding.css), which keeps the blur.
+  const ask = q(".tm-hero-ask");
+  if (hero && ask) gsap.fromTo(ask, { "--ask-fade": 1 }, { "--ask-fade": 0, y: "-3em", ease: "none", scrollTrigger: scrub(hero, "top top", "40% top") });
 
   gsap.matchMedia().add(DESKTOP, () => {
     // Full-bleed sections arrive as an inset card and open to the edges (has-inset-effect).

@@ -399,6 +399,11 @@
   z-index: 3;
   padding: var(--wd-space-4) 0;
 }
+/* The scroll fade (motion.ts), on each glass and text element rather than the group: an opacity below
+   1 on the group would make it their backdrop root, and the blur would have nothing behind it. */
+.tm-hero-ask :is(.mp-pill, .mp-nudge, .mp-prompt, .mp-card, .mp-fail, .mp-steps) {
+  opacity: var(--ask-fade, 1);
+}
 @media (width >= 56.25rem) {
   .tm-hero-ask {
     position: absolute;
