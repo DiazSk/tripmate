@@ -232,11 +232,17 @@ function PlanActivity(props: PlanActivityProps, environment: LiveActivityEnviron
 /** iOS only: `expo-widgets` has no Live Activities elsewhere, and the planner just runs without one. */
 export const planLiveActivity = Platform.OS === 'ios' ? createLiveActivity<PlanActivityProps>('PlanActivity', PlanActivity) : null;
 
+// A writing screen does not survive a relaunch, so a planner activity still up when this loads is
+// the orphan of a run the app was killed during: end it rather than leave it up for iOS's eight hours.
+try {
+  planLiveActivity?.getInstances().forEach((a) => void a.end('immediate').catch(() => {}));
+} catch {}
+
 /** The place's photograph, copied where the widget extension can read it (it cannot reach the app's
  *  own files, nor the network). Null if it could not be saved: the island then shows Meri. */
-async function savePhoto(url: string): Promise<string | null> {
+export async function savePhoto(url: string, name = 'plan-photo.jpg'): Promise<string | null> {
   try {
-    const saved = await File.downloadFileAsync(url, new File(new Directory(widgetsDirectory), 'plan-photo.jpg'), { idempotent: true });
+    const saved = await File.downloadFileAsync(url, new File(new Directory(widgetsDirectory), name), { idempotent: true });
     return saved.uri;
   } catch {
     return null;

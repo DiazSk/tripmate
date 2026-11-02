@@ -12,6 +12,7 @@ import { useHere } from '@/lib/here';
 import { describeDistance, savedNearby, savedNotInPlan } from '@/lib/savedPlaces';
 import { formatMoney } from '@/lib/spend';
 import { tripDays } from '@/lib/tiers';
+import { useDayLiveActivity } from '@/lib/dayLiveActivity';
 import { glanceFor, type NextGlance } from '@/lib/todayGlance';
 import { clockInZone, nowInZone } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
@@ -146,8 +147,10 @@ export function TripWidgets({
   saved?: SavedPlace[];
 }) {
   const phase = tripPhase(trip, today);
-  if (phase !== 'today' && phase !== 'eve') return null;
   const dayIndex = phase === 'today' ? (dayIndexFor(trip, today) ?? 0) : 0;
+  // The day in the Dynamic Island and on the Lock Screen, while it is a trip day (iOS).
+  useDayLiveActivity(phase === 'today' && trip.itinerary.days[dayIndex] ? { trip, dayIndex } : null);
+  if (phase !== 'today' && phase !== 'eve') return null;
   const day = trip.itinerary.days[dayIndex];
   if (!day) return null;
   const stops = day.stops ?? [];
