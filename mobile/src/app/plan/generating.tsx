@@ -15,6 +15,7 @@ import { Notice } from '@/components/states';
 import { WritingThePlan } from '@/components/writing-the-plan';
 import { Polar } from '@/constants/polar';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { usePlanLiveActivity } from '@/lib/planLiveActivity';
 import { recoveryStep } from '@/lib/planRecovery';
 import { tierName, tripDays } from '@/lib/tiers';
 import { assembleDays, type DayCoords } from '@/lib/writingPlan';
@@ -88,6 +89,10 @@ export default function Generating() {
    */
   const run = useRef<{ id: string; startedAt: number } | null>(null);
   const [recovering, setRecovering] = useState(false);
+  /** When the run began, as state, so the Live Activity starts with it. */
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  /** The place's photograph, for the Live Activity's artwork. */
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (started.current === attempt) return;
@@ -102,7 +107,9 @@ export default function Generating() {
       if (live.current) setRaw(bundle);
     });
     void placePhoto(destination).then((photo) => {
-      if (live.current) setWikiExtract(photo?.extract ?? null);
+      if (!live.current) return;
+      setWikiExtract(photo?.extract ?? null);
+      setPhotoUrl(photo?.thumbnailUrl ?? photo?.imageUrl ?? null);
     });
 
     generateTrip(
@@ -110,6 +117,7 @@ export default function Generating() {
       {
         onRun: (id) => {
           run.current = { id, startedAt: Date.now() };
+          if (live.current) setRunStartedAt(run.current.startedAt);
         },
         onStage: (event) => {
           if (!live.current) return;
@@ -245,6 +253,7 @@ export default function Generating() {
   /** The same answers, from the top. Everything the last run streamed is cleared first. */
   function tryAgain() {
     run.current = null;
+    setRunStartedAt(null);
     setRecovering(false);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: 'pending' })));
     setStops([]);
@@ -271,6 +280,20 @@ export default function Generating() {
    * underneath, and `back` would leave the flow altogether.
    */
   const backToReview = () => router.replace('/plan/basics');
+
+  // The plan on the Dynamic Island and the Lock Screen while the traveller is away (iOS only).
+  usePlanLiveActivity({
+    startedAt: runStartedAt,
+    phase: ready ? 'ready' : failure ? 'failed' : 'writing',
+    destination: draft.destination,
+    dateRange: draft.startDate && draft.endDate ? formatDateRange(draft.startDate, draft.endDate) : null,
+    tripDays: tripDays(draft.startDate, draft.endDate),
+    tierName: tierName(toGenerateRequest(draft).tier),
+    stages,
+    days: planDays,
+    facts,
+    photoUrl,
+  });
 
   // A sketch alone is not streaming — only a real stop is.
   const meri = meriForGeneration({ complete: ready, streaming: stops.length > 0, failed: !!failure });

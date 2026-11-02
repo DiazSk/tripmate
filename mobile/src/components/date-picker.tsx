@@ -1,6 +1,8 @@
 import NativeDatePicker, { type DateTimePickerProps } from '@expo/ui/community/datetime-picker';
+import { DatePicker as SwiftDatePicker, Host } from '@expo/ui/swift-ui';
+import { datePickerStyle, environment, opacity, tint } from '@expo/ui/swift-ui/modifiers';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Polar } from '@/constants/polar';
 import { fromUtcDay, toUtcDay } from '@/lib/utcDay';
@@ -17,7 +19,45 @@ import { Text } from '@/components/themed-text';
  * a choice reports through the same `onChange` as iOS, a cancel just closes it.
  */
 export function DatePicker(props: DateTimePickerProps) {
-  return Platform.OS === 'android' ? <AndroidField {...props} /> : <NativeDatePicker {...props} />;
+  return Platform.OS === 'android' ? <AndroidField {...props} /> : <IosField {...props} />;
+}
+
+/**
+ * iOS's compact field, with **the date drawn by us** and the native picker over it, all but invisible.
+ *
+ * iOS's compact `DatePicker` chooses its own label, "Dec 7, 2026" or "12/7/26", and the choice is
+ * not ours to make: on the planner the same two fields read spelled-out and numeric, then traded
+ * places after one was changed. A fixed box, `fixedSize()`, no range and a fresh instance per value
+ * were each tried and each still flipped. So the label is ours, in the format Android's pill uses,
+ * and the native picker sits on top at SwiftUI opacity 0.011 to take the tap and open its calendar,
+ * which iOS presents on its own and is untouched by the opacity. Times keep the native label: they
+ * never flip.
+ */
+function IosField({ value, onChange, mode = 'date', minimumDate, maximumDate, style, accentColor, themeVariant, testID }: DateTimePickerProps) {
+  const ownLabel = mode === 'date';
+  const modifiers = [datePickerStyle('compact'), ...(accentColor ? [tint(accentColor)] : []), ...(themeVariant ? [environment('colorScheme', themeVariant)] : []), ...(ownLabel ? [opacity(0.011)] : [])];
+  const picker = (
+    <Host matchContents={{ vertical: true }} style={ownLabel ? StyleSheet.absoluteFill : style} ignoreSafeArea="all">
+      <SwiftDatePicker
+        selection={value}
+        displayedComponents={mode === 'time' ? ['hourAndMinute'] : mode === 'datetime' ? ['date', 'hourAndMinute'] : ['date']}
+        range={minimumDate || maximumDate ? { start: minimumDate, end: maximumDate } : undefined}
+        onDateChange={(date) => onChange?.({ type: 'set', nativeEvent: { timestamp: date.getTime(), utcOffset: -date.getTimezoneOffset() } }, date)}
+        modifiers={modifiers}
+        testID={testID}
+      />
+    </Host>
+  );
+  if (!ownLabel) return picker;
+  const dark = themeVariant === 'dark';
+  return (
+    <View style={[style, styles.iosBox]}>
+      <View pointerEvents="none" style={[styles.pill, dark && styles.pillDark]}>
+        <Text style={[styles.value, dark && styles.valueDark]}>{value.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+      </View>
+      {picker}
+    </View>
+  );
 }
 
 function AndroidField({ value, mode = 'date', onChange, style, ...rest }: DateTimePickerProps) {
@@ -55,4 +95,9 @@ const styles = StyleSheet.create({
   pill: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center', backgroundColor: 'rgba(118,118,128,0.12)' },
   pressed: { opacity: 0.6 },
   value: { fontSize: 17, color: Polar.ink },
+  // iOS's own dark compact field, for the fields on night ground.
+  pillDark: { backgroundColor: 'rgba(118,118,128,0.24)' },
+  valueDark: { color: '#FFFFFF' },
+  // Where the native picker lays out its own pill: 16pt in from the box's right edge, measured.
+  iosBox: { alignItems: 'flex-end', justifyContent: 'center', paddingRight: 16 },
 });
