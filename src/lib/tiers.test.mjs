@@ -1,7 +1,7 @@
 /* Run: node --import ./scripts/ts-resolve.mjs --test src/lib/tiers.test.mjs */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { closestTier, perPersonBudget } from "./tiers.ts";
+import { closestTier, perPersonBudget, tripDays } from "./tiers.ts";
 import { planExamples } from "./planExamples.ts";
 
 test("a whole-party budget is split across everyone, infants included; a per-person one is not", () => {
@@ -26,4 +26,9 @@ test("every sample plan lands on the tier its card claims", () => {
     const share = perPersonBudget(e.budgetUsd, "whole_party", e.adults + e.children);
     assert.equal(closestTier(share, e.days), claimed[e.id], e.id);
   }
+});
+
+test("a date that doesn't parse is one day, not NaN", () => {
+  assert.equal(tripDays("2026-05-01", "not a date"), 1);
+  assert.equal(tripDays("2026-05-01", "2026-05-03"), 3);
 });

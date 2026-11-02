@@ -62,6 +62,7 @@ export function BudgetSheet({
   initial,
   days,
   budget,
+  budgetEach,
   dayIndex,
   offline,
   onDay,
@@ -71,6 +72,8 @@ export function BudgetSheet({
   initial: 'trip' | 'day';
   days: DayPlan[];
   budget: number;
+  /** The per-person figure the traveller typed, when the budget was given per person. */
+  budgetEach: number | null;
   dayIndex: number;
   offline: boolean;
   onDay: (dayIndex: number) => void;
@@ -92,6 +95,7 @@ export function BudgetSheet({
         initial={initial}
         days={days}
         budget={budget}
+        budgetEach={budgetEach}
         dayIndex={dayIndex}
         offline={offline}
         onDay={onDay}
@@ -105,13 +109,15 @@ function Body({
   initial,
   days,
   budget,
+  budgetEach,
   dayIndex,
   offline,
   onDay,
   onSureness,
 }: Omit<Parameters<typeof BudgetSheet>[0], 'onClose'>) {
   const [tab, setTab] = useState(initial);
-  const spent = tripSpend(days);
+  // Whole dollars before any subtraction, so "of" and "left" never sit a dollar apart.
+  const spent = Math.round(tripSpend(days));
   const day = days[dayIndex];
 
   return (
@@ -135,7 +141,7 @@ function Body({
       </View>
 
       {tab === 'trip' ? (
-        <TripTab days={days} budget={budget} spent={spent} dayIndex={dayIndex} onOpenDay={(i) => { onDay(i); setTab('day'); }} />
+        <TripTab days={days} budget={Math.round(budget)} budgetEach={budgetEach} spent={spent} dayIndex={dayIndex} onOpenDay={(i) => { onDay(i); setTab('day'); }} />
       ) : day ? (
         <DayTab day={day} dayIndex={dayIndex} offline={offline} onSureness={onSureness} />
       ) : null}
@@ -146,12 +152,14 @@ function Body({
 function TripTab({
   days,
   budget,
+  budgetEach,
   spent,
   dayIndex,
   onOpenDay,
 }: {
   days: DayPlan[];
   budget: number;
+  budgetEach: number | null;
   spent: number;
   dayIndex: number;
   onOpenDay: (dayIndex: number) => void;
@@ -169,7 +177,7 @@ function TripTab({
           {formatMoney(spent)}
         </ThemedText>
         {budget > 0 ? (
-          <ThemedText type="detail" themeColor="muted">{`of ${formatMoney(budget)}`}</ThemedText>
+          <ThemedText type="detail" themeColor="muted">{`of ${formatMoney(budget)}${budgetEach ? ` · ${formatMoney(budgetEach)} each` : ''}`}</ThemedText>
         ) : null}
       </View>
       <View style={styles.certainty} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -181,7 +189,7 @@ function TripTab({
       </View>
       {budget > 0 ? (
         <ThemedText type="detail" themeColor={over ? 'alert' : 'muted'}>
-          {over ? `${formatMoney(spent - budget)} over budget` : `${formatMoney(budget - spent)} left in the budget`}
+          {over ? `${formatMoney(spent - budget)} over budget` : `${formatMoney(budget - spent)} not yet planned`}
         </ThemedText>
       ) : null}
 

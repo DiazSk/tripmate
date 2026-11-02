@@ -79,6 +79,8 @@ export function closestTier(budget: number, days: number): TierId {
 
 export function tripDays(startDate: string, endDate: string): number {
   const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
+  // A date that doesn't parse is one day, as on the phone, rather than NaN priced into a tier.
+  if (!Number.isFinite(ms)) return 1;
   return Math.max(Math.round(ms / (1000 * 60 * 60 * 24)) + 1, 1);
 }
 

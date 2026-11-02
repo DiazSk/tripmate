@@ -8,6 +8,7 @@ import { anchorKey } from "./anchors";
 import { avatarUrl } from "./avatar";
 import { normalizeDays } from "./itinerary";
 import { tripEndDate } from "./tripDays";
+import { storedBudget } from "./userAnswers";
 import type { DayPlan, TripStatus } from "./types";
 
 /**
@@ -393,6 +394,32 @@ addColumnIfMissing("trips", "owner_id", "TEXT");
 // since it existed. Rows holding LEGACY_OWNER stay readable by every browser; see LEGACY_OWNER.
 db.exec(`UPDATE trips SET owner_id = '${LEGACY_OWNER}' WHERE owner_id IS NULL`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_trips_owner_status ON trips (owner_id, status, created_at)`);
+
+/**
+ * Rows written before `trips.budget` became the party total kept a per-person figure as typed.
+ * Matching on "stored equals typed" makes this a no-op after one pass and for every row written
+ * since. Imports are left alone: their stop costs were priced for one visitor, so the typed figure
+ * is the one their spend is on. Parsed in JS rather than with `json_extract`, which throws on the
+ * first malformed row instead of skipping it.
+ */
+export function backfillPartyBudgets(): void {
+  const rows = db
+    .prepare(`SELECT id, budget, user_answers_json, itinerary_json FROM trips WHERE user_answers_json LIKE '%per_person%'`)
+    .all() as Pick<TripRow, "id" | "budget" | "user_answers_json" | "itinerary_json">[];
+  const update = db.prepare(`UPDATE trips SET budget = ? WHERE id = ?`);
+  for (const row of rows) {
+    try {
+      const answers = JSON.parse(row.user_answers_json ?? "null");
+      if (answers?.budgetBasis !== "per_person" || answers.budget !== row.budget) continue;
+      if (JSON.parse(row.itinerary_json)?.origin) continue;
+      const total = storedBudget(row.budget, answers);
+      if (total !== row.budget) update.run(total, row.id);
+    } catch {
+      // A row nothing can parse keeps the budget it has.
+    }
+  }
+}
+backfillPartyBudgets();
 // Populated only by runClaudeViaApi() — the Messages API reports no cost itself, so this is
 // computed from its usage block via modelPricing.ts at write time. NULL forever on
 // LLM_TRANSPORT=cli traces, which keep deriving cost from the CLI envelope on read instead

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { insertTrip, linkGenerationToTrip, listTrips, purgeStaleDrafts } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
 import { itineraryRejection } from "@/lib/itinerary";
+import { storedBudget } from "@/lib/userAnswers";
 import { currentOwner, currentOwnerId } from "@/lib/ownerRequest";
 import { geocodeDestinationCached } from "@/lib/serverFetchCached";
 import type { TripStatus } from "@/lib/types";
@@ -71,7 +72,8 @@ export async function POST(req: NextRequest) {
     destination,
     start_date: startDate,
     end_date: endDate,
-    budget,
+    // Clients send the figure as typed, beside its basis; the row keeps the party total.
+    budget: storedBudget(budget, userAnswers),
     itinerary_json: JSON.stringify(itinerary),
     run_id: runId ?? null,
     chat_session_id: chatSessionId ?? null,

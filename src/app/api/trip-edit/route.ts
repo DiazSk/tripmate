@@ -197,7 +197,8 @@ async function handle(req: NextRequest, seen: { ops: number; mode: "chat" | "ele
       userAnswers ??
       (stored?.user_answers_json ? (JSON.parse(stored.user_answers_json) as UserAnswers) : null);
 
-    const editContext = buildEditContext(trip, itinerary, answers);
+    // The row's budget is the party total; a pre-save page sends its own, already converted.
+    const editContext = buildEditContext(stored ? { ...trip, budget: stored.budget } : trip, itinerary, answers);
 
     // Append to the trip's original run when there is one, so an edit reads as another step on
     // that pipeline rather than an orphan — the same grouping place-detail already does.

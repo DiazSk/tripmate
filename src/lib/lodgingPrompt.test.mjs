@@ -17,7 +17,9 @@ test("tells the model to choose the TYPE of stay, not a named property", () => {
 });
 
 test("prices lodging to the style/tier rather than a real rate", () => {
-  assert.equal(lodgingPricingBasis(), "priced to the style above");
+  assert.match(lodgingPricingBasis(), /^priced to the style above/);
+  // Stops are whole-party totals; a room priced per person would count a couple's room twice.
+  assert.match(lodgingPricingBasis(), /one night for the whole party/);
 });
 
 test("budgetInstruction states the budget as a ceiling, not a target to consume", () => {

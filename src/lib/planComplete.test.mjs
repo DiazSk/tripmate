@@ -289,6 +289,22 @@ test("a ready-made trip stores the whole party's budget and takes its tier from 
   assert.equal(budgetsFor(request, false).stored, 0);
 });
 
+test("a ready-made trip typed per person stores the party total, like a generated trip", () => {
+  const request = {
+    budget: 1450, origin: "ready-made", readyTrip: "petra-at-first-light",
+    userAnswers: { budget: 1450, budgetBasis: "per_person", party: { adults: 2, children: 0, infants: 0 } },
+  };
+  assert.deepEqual(budgetsFor(request, true), { stored: 2900, tierBudget: 1450 });
+});
+
+test("the fill prices a party's stops for the whole party, and one visitor's for one", () => {
+  const dated = [{ date: "2026-11-02", day: day([{ name: "A" }]) }];
+  assert.match(buildFillPrompt("Lisbon", dated), /estimate for one visitor/);
+  const party = buildFillPrompt("Lisbon", dated, 3);
+  assert.match(party, /"cost": typical total cost in USD for the whole party of 3/);
+  assert.match(party, /"durationMinutes": how long a visitor/);
+});
+
 test("an import, or a ready-made request with no usable answer budget, stores and tiers its own budget", () => {
   assert.deepEqual(budgetsFor({ budget: 900 }, true), { stored: 900, tierBudget: 900 });
   assert.deepEqual(budgetsFor({ budget: 900 }, false), { stored: 0, tierBudget: 0 });

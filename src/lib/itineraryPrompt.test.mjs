@@ -394,3 +394,14 @@ test("rebalance, critique and context open with the scope block and carry no ref
     assert.equal(prompt.includes(REFUSAL), false);
   }
 });
+
+// Every stop cost is USD; a day pass quoted in yen or forints must not land in that field as dollars.
+test("a bikeshare fare in another currency is quoted with an instruction to convert it", () => {
+  const prompt = (currency) =>
+    buildGeneratePrompt({
+      destination: "Kyoto", startDate: "2026-05-01", endDate: "2026-05-03", budget: 1500, tier: "comfort", weather: WEATHER,
+      bikeshare: { name: "PiPPA", stationsNearby: 40, dayPass: { amount: 1000, currency } },
+    });
+  assert.match(prompt("JPY"), /about 1000 JPY; convert it to US dollars for the cost of any bike leg you add/);
+  assert.match(prompt("USD"), /about 1000 USD; use that figure for the cost/);
+});

@@ -9,7 +9,7 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
 import { useStoryControls } from "@/lib/storyMode";
-import { anyActualSpend, daySpendByCategory } from "@/lib/itinerary";
+import { anyActualSpend, daySpendByCategory, spendOf } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
 import { formatMoney } from "@/lib/format";
 import {
@@ -1170,7 +1170,7 @@ export default function ItineraryCard({
                     $46 — and it is the three-summations-disagree defect `itinerary.ts`'s money
                     section exists to prevent, resurfacing in a view. */}
                 <span className="shrink-0 font-mono text-sm tabular-nums text-money">
-                  {formatMoney(day.lodging.actualCost ?? day.lodging.cost)}
+                  {formatMoney(spendOf(day.lodging))}
                 </span>
               </div>
               {day.lodging.note && (

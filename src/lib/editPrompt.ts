@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
-import { dayActiveSpan } from "./itinerary";
-import type { DayPlan, Itinerary, Stop } from "./types";
+import { dayActiveSpan, spendOf, surenessOf } from "./itinerary";
+import type { DayPlan, Itinerary, Lodging, Stop } from "./types";
 import { NO_EM_DASH_RULE } from "./writingStyle";
 import { SCOPE_BLOCK_WITH_REFUSAL, fenceUserText } from "./promptScope";
 import { IDEA_DIETS } from "./ideaRead";
@@ -144,11 +144,17 @@ const LOOKUP_CONTRACT = `Or, for a lookup question (above), return ONLY {"lookup
 
 /** Trimmed view of the itinerary: enough to reason about geography, timing and sequence without
  *  spending tokens on fields an edit never consults. */
+/** The figure the budget bar counts, with how sure it is: an estimate prints bare. */
+function costLabel(item: Stop | Lodging): string {
+  const sureness = surenessOf(item);
+  return `$${spendOf(item)}${sureness === "estimate" ? "" : ` ${sureness}`}`;
+}
+
 function compactDay(day: DayPlan, dayIndex: number): string {
   const stops = day.stops
     .map(
       (s, i) =>
-        `    stopIndex=${i}: ${s.name}, ${s.time || "no time"}, ${s.durationLabel || "no duration"}, $${s.cost}, ${s.lat.toFixed(3)}/${s.lng.toFixed(3)}${s.note ? `. Note: ${s.note}` : ""}`
+        `    stopIndex=${i}: ${s.name}, ${s.time || "no time"}, ${s.durationLabel || "no duration"}, ${costLabel(s)}, ${s.lat.toFixed(3)}/${s.lng.toFixed(3)}${s.note ? `. Note: ${s.note}` : ""}`
     )
     .join("\n");
   // The day's end-to-end length, computed rather than left to be derived from the clock times
@@ -160,7 +166,7 @@ function compactDay(day: DayPlan, dayIndex: number): string {
     : "";
   // Both numbers, always: the traveler says "day 1" meaning the first day, while ops address
   // days 0-indexed. Showing only one of them got the wrong day edited.
-  return `  Day ${dayIndex + 1} of the trip, dayIndex=${dayIndex} (${day.date})${spanNote}${day.lodging ? `, staying: ${day.lodging.name} ($${day.lodging.cost})` : ""}\n${stops || "    (no stops)"}`;
+  return `  Day ${dayIndex + 1} of the trip, dayIndex=${dayIndex} (${day.date})${spanNote}${day.lodging ? `, staying: ${day.lodging.name} (${costLabel(day.lodging)} a night)` : ""}\n${stops || "    (no stops)"}`;
 }
 
 /** Every day, always — even when only one is editable.

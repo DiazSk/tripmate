@@ -3,6 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   appendLlmSessionTurns,
+  backfillPartyBudgets,
   applyRevisionIfUnedited,
   createLlmSession,
   deleteTrip,
@@ -273,4 +274,27 @@ test("linkGenerationToTrip links an unlinked generation, and re-linking the same
   assert.equal(getGeneration("run-link-free").trip_id, "t2");
   linkGenerationToTrip("run-link-free", "t2");
   assert.equal(getGeneration("run-link-free").trip_id, "t2");
+});
+
+test("backfillPartyBudgets turns a per-person row into its party total once, and only that row", () => {
+  const answers = (basis, budget) =>
+    JSON.stringify({ budget, budgetBasis: basis, party: { adults: 2, children: 1, infants: 0 } });
+  const row = (id, budget, user_answers_json, itinerary = { tier: "midrange", days: [] }) =>
+    insertTrip({
+      id, destination: "Lisbon", start_date: "2026-05-01", end_date: "2026-05-03", budget,
+      itinerary_json: JSON.stringify(itinerary), user_answers_json,
+    });
+  row("pp-old", 1000, answers("per_person", 1000));
+  row("pp-new", 3000, answers("per_person", 1000));
+  row("whole", 1000, answers("whole_party", 1000));
+  row("import", 1000, answers("per_person", 1000), { tier: "midrange", days: [], origin: "imported" });
+  row("junk", 1000, "{not json");
+
+  backfillPartyBudgets();
+  backfillPartyBudgets();
+  assert.equal(getTrip("pp-old").budget, 3000, "per person, stored as typed: multiplied once");
+  assert.equal(getTrip("pp-new").budget, 3000, "already a party total");
+  assert.equal(getTrip("whole").budget, 1000);
+  assert.equal(getTrip("import").budget, 1000, "an import's stop costs were per visitor; left alone");
+  assert.equal(getTrip("junk").budget, 1000);
 });

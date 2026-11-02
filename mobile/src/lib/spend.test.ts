@@ -173,6 +173,10 @@ test('booked and locked read as one: a fixed stop is booked before any figure is
   expect(surenessOf({ ...stop('Dinner', 30, 'food'), costState: 'spent' })).toBe('paid');
 });
 
+test('a figure entered on the web, which writes no kind, reads as paid here too', () => {
+  expect(surenessOf(stop('Fort', 12, 'entry', 15))).toBe('paid');
+});
+
 test('choosing a sureness writes the lock with it, and an estimate releases it', () => {
   expect(surenessFields('booked')).toEqual({ costState: 'booked', timeFlexibility: 'FIXED' });
   expect(surenessFields('paid')).toEqual({ costState: 'spent', timeFlexibility: 'FIXED' });

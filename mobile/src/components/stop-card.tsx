@@ -9,7 +9,7 @@ import { StopDisc } from '@/components/stop-disc';
 import { ThemedText, Text } from '@/components/themed-text';
 import { Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
 import { stopParticulars } from '@/lib/dayDisplay';
-import { formatMoney } from '@/lib/spend';
+import { formatMoney, spendOf } from '@/lib/spend';
 
 /**
  * The stop you pressed, named at the foot of the map.
@@ -55,7 +55,7 @@ export function StopCard({
 }) {
   const { tint, ink, inkMuted, money } = chrome(mapType);
   const particulars = stopParticulars(stop);
-  const spend = stop.actualCost ?? stop.cost;
+  const spend = spendOf(stop);
 
   return (
     <Group

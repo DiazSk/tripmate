@@ -15,6 +15,7 @@ export default function BudgetRoute() {
       initial={tab === 'day' ? 'day' : 'trip'}
       days={sheets.days}
       budget={sheets.budget}
+      budgetEach={sheets.budgetEach}
       dayIndex={sheets.dayIndex}
       offline={sheets.offline}
       onDay={sheets.onDay}

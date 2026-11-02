@@ -181,6 +181,33 @@ export function partyBudget(
   return Math.round(budget * Math.max(partySize ?? 1, 1));
 }
 
+/**
+ * The budget a trip row keeps: always the party total, the basis every reader compares spend to.
+ *
+ * The traveller's own figure and basis stay in `user_answers_json`, so a screen can still say
+ * "$1,000 each". Storing the typed figure instead put a couple's $1,000-each trip $1,000 over
+ * budget on every screen, against a plan that was generated for $2,000.
+ */
+export function storedBudget(
+  budget: number,
+  answers: Pick<UserAnswers, "budgetBasis" | "party"> | null | undefined
+): number {
+  return partyBudget(budget, answers?.budgetBasis, partySizeOf(answers));
+}
+
+/** Everyone travelling, babies included, or null when no party was given. */
+export function partySizeOf(answers: Pick<UserAnswers, "party"> | null | undefined): number | null {
+  const party = sanitizeParty(answers?.party);
+  return party ? party.adults + party.children + party.infants : null;
+}
+
+/** The per-person figure a traveller typed, for "· $1,000 each"; null when the budget was a party total. */
+export function budgetEach(answers: unknown): number | null {
+  const a = answers as Partial<UserAnswers> | null | undefined;
+  if (!a || typeof a.budget !== "number" || a.budget <= 0) return null;
+  return storedBudget(a.budget, a) !== a.budget ? a.budget : null;
+}
+
 export function sanitizeAnswers(answers: UserAnswers): UserAnswers {
   const party = sanitizeParty(answers.party);
   const logistics = sanitizeLogistics(answers.logistics);

@@ -1,4 +1,4 @@
-import type { DayPlan, Itinerary, Lodging, Stop, StopCategory } from "./types";
+import type { CostState, DayPlan, Itinerary, Lodging, Stop, StopCategory } from "./types";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -128,7 +128,7 @@ export function tripSpend(days: DayPlan[]): number {
  *
  * Shared because both clients ask it and only one used to own it — mobile defined this
  * privately while the web card hardcoded the word "spend", so the two said different things
- * about the same trip. `spendSplit` answers the finer question; this is the cheap one, for a
+ * about the same trip. `surenessSplit` answers the finer question; this is the cheap one, for a
  * heading that only needs to know whether anything is settled at all.
  */
 export function anyActualSpend(days: DayPlan[]): boolean {
@@ -137,44 +137,85 @@ export function anyActualSpend(days: DayPlan[]): boolean {
   );
 }
 
-export interface SpendSplit {
-  /** Entered by the traveller — an `actualCost` exists. */
-  settled: number;
-  /** Still the planner's estimate. */
-  projected: number;
-  /** `settled + projected`, identical to `tripSpend`. */
-  total: number;
-  /** Of the settled money, what is committed but not yet gone. */
-  booked: number;
-  /** Of the settled money, what has actually been paid. */
-  spent: number;
+/**
+ * How sure a cost is, in the traveller's three words. Both clients read this one definition; the
+ * phone once kept its own beside a web split that counted differently, so the same trip read
+ * "Estimate" on one screen and settled on the other.
+ *
+ * **Booked and locked are one idea here.** A stop marked `FIXED` is one the planner must not move,
+ * and the only reason a traveller fixes a stop is that they have committed to it, so it reads as
+ * Booked even before a figure is entered. Marking a cost Booked or Paid fixes the stop in the same
+ * write (`surenessFields`), and putting it back to an estimate releases it.
+ *
+ * **A figure with no `costState` is Paid.** Every web field that writes `actualCost` asks what was
+ * actually paid, so the kind was stated by the question even where the field was not written.
+ */
+export type Sureness = "estimate" | "booked" | "paid";
+
+export function surenessOf(item: Stop | Lodging): Sureness {
+  if (item.costState === "spent") return "paid";
+  if (item.costState === "booked") return "booked";
+  if (item.actualCost != null) return "paid";
+  return "timeFlexibility" in item && item.timeFlexibility === "FIXED" ? "booked" : "estimate";
+}
+
+/** What choosing a sureness writes onto a stop: the kind of cost, and the lock that goes with it. */
+export function surenessFields(sureness: Sureness): Pick<Stop, "costState" | "timeFlexibility"> {
+  const costState: CostState | undefined =
+    sureness === "paid" ? "spent" : sureness === "booked" ? "booked" : undefined;
+  return { costState, timeFlexibility: costState ? "FIXED" : "PREFERRED" };
+}
+
+export const SURENESS_LABEL: Record<Sureness, string> = { estimate: "Estimate", booked: "Booked", paid: "Paid" };
+
+/** The trip's money by how sure it is. Sums to `tripSpend` by construction: same `spendOf`. */
+export function surenessSplit(days: DayPlan[]): Record<Sureness, number> {
+  const out: Record<Sureness, number> = { estimate: 0, booked: 0, paid: 0 };
+  for (const day of days) {
+    for (const stop of day.stops) out[surenessOf(stop)] += spendOf(stop);
+    if (day.lodging) out[surenessOf(day.lodging)] += spendOf(day.lodging);
+  }
+  return out;
 }
 
 /**
- * **`booked + spent` can be less than `settled`, deliberately.** A figure entered before
- * `costState` existed — every one the web client has ever written — is a real number whose kind
- * was never stated. Counting it as either would invent a fact; it stays in `settled` and in
- * neither of the two below, which is the same treatment `located` gives a plan that predates it.
+ * The nights of one stay: the run of consecutive days, around `dayIndex`, whose lodging is the
+ * same place. Lodging is stored per night (one entry on every day but the last), so a whole-stay
+ * figure has to be spread across this run rather than written onto the night it was typed on —
+ * that once counted a $600 three-night stay as $600 plus two more $150 nights.
  */
-export function spendSplit(days: DayPlan[]): SpendSplit {
-  const out: SpendSplit = { settled: 0, projected: 0, total: 0, booked: 0, spent: 0 };
-  const add = (item: Stop | Lodging | undefined) => {
-    if (!item) return;
-    const value = spendOf(item);
-    out.total += value;
-    if (item.actualCost == null) {
-      out.projected += value;
-      return;
-    }
-    out.settled += value;
-    if (item.costState === "booked") out.booked += value;
-    if (item.costState === "spent") out.spent += value;
-  };
-  for (const day of days) {
-    for (const stop of day.stops) add(stop);
-    add(day.lodging);
-  }
-  return out;
+export function stayNights(days: DayPlan[], dayIndex: number): number[] {
+  const key = (i: number) => days[i]?.lodging?.name.trim().toLowerCase();
+  const name = key(dayIndex);
+  if (!name) return [];
+  let first = dayIndex;
+  while (first > 0 && key(first - 1) === name) first -= 1;
+  let last = dayIndex;
+  while (last < days.length - 1 && key(last + 1) === name) last += 1;
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+}
+
+/** What the traveller entered for a whole stay, or undefined while every night is an estimate. */
+export function stayActual(days: DayPlan[], dayIndex: number): number | undefined {
+  const nights = stayNights(days, dayIndex).map((i) => days[i].lodging!);
+  if (!nights.some((l) => l.actualCost != null)) return undefined;
+  return Math.round(nights.reduce((sum, l) => sum + spendOf(l), 0) * 100) / 100;
+}
+
+/**
+ * Writes a whole stay's figure across its nights, in place: even shares to the cent, the odd
+ * cents on the first nights, so the nights add back to exactly what was typed. `undefined`
+ * clears every night back to its estimate.
+ */
+export function setStayActual(days: DayPlan[], dayIndex: number, total: number | undefined): void {
+  const nights = stayNights(days, dayIndex);
+  const cents = total === undefined ? 0 : Math.round(money(total) * 100);
+  const share = Math.floor(cents / Math.max(nights.length, 1));
+  nights.forEach((i, n) => {
+    const lodging = days[i].lodging!;
+    if (total === undefined) delete lodging.actualCost;
+    else lodging.actualCost = (share + (n < cents - share * nights.length ? 1 : 0)) / 100;
+  });
 }
 
 export type BudgetSegment = {
@@ -290,7 +331,12 @@ export function normalizeDays(days: unknown): DayPlan[] {
   if (!Array.isArray(days)) return [];
   return days.map((day: DayPlan) => ({
     ...day,
-    lodging: day.lodging && { ...day.lodging, cost: money(day.lodging.cost) },
+    // "No lodging (departure day)" at $0 is the model saying there is no stay, and drawn as one it
+    // reads as a hotel called "No lodging".
+    lodging:
+      day.lodging && !(/^\s*no\b/i.test(day.lodging.name ?? "") && !money(day.lodging.cost) && day.lodging.actualCost == null)
+        ? { ...day.lodging, cost: money(day.lodging.cost) }
+        : undefined,
     stops: (Array.isArray(day.stops) ? day.stops : [])
       // **A stop with no coordinates is dropped, not repaired.** `Stop.lat`/`lng` are typed
       // `number` and the type says this cannot happen; `POST /api/trips` stores whatever

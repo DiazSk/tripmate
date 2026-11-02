@@ -28,6 +28,7 @@ import { fetchReadyTrips } from "@/lib/readyTrips";
 import { MAX_TRIP_DAYS } from "@/lib/tiers";
 import { itineraryRejection } from "@/lib/itinerary";
 import { insertTrip } from "@/lib/db";
+import { partySizeOf } from "@/lib/userAnswers";
 import { currentOwnerId } from "@/lib/ownerRequest";
 import type { Anchor } from "@/lib/types";
 import { attemptIdFrom, captureServer, failureOf, whoFromRequest } from "@/lib/analytics/server";
@@ -152,7 +153,8 @@ async function handle(req: NextRequest, seen: Seen): Promise<Response> {
     : [];
 
   const ids = dated.flatMap(({ day }, d) => day.stops.map((_, i) => stopId(d, i)));
-  const prompt = buildFillPrompt(destination, dated);
+  // A ready-made trip carries the party; an import is one visitor's, as its budget field says.
+  const prompt = buildFillPrompt(destination, dated, origin === "ready-made" ? partySizeOf(userAnswers) ?? 1 : 1);
   const fillOnce = async () => {
     try {
       const { result } = await runClaude(prompt, "plan-fill", FILL_TIMEOUT_MS, { model: cheapModel() });

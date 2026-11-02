@@ -195,3 +195,24 @@ for (const [name, build] of [
     assert.ok(contract.includes(`return ONLY {"lookup":{"kind":`), "lookup in the output contract");
   });
 }
+
+// "How much is left?" has to be answered from the figures the budget bar draws, not the planner's.
+test("the chat sees what the traveller paid, not only the planner's estimate", () => {
+  const day = ITINERARY.days[0];
+  const prompt = buildChatEditPrompt({
+    skill: "",
+    editContext: "",
+    itinerary: {
+      ...ITINERARY,
+      days: [{
+        ...day,
+        stops: [{ ...day.stops[0], actualCost: 8 }, { ...day.stops[0], name: "Ryokan dinner", cost: 60, costState: "booked" }],
+        lodging: { name: "Hotel Kyoto", cost: 150, note: "", actualCost: 180 },
+      }],
+    },
+    messages: [{ role: "user", content: "how much is left?" }],
+  });
+  assert.match(prompt, /Kiyomizu-dera, [^\n]*\$8 paid/);
+  assert.match(prompt, /Ryokan dinner, [^\n]*\$60 booked/);
+  assert.match(prompt, /staying: Hotel Kyoto \(\$180 paid a night\)/);
+});

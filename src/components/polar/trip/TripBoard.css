@@ -234,6 +234,11 @@
 .tb-bar span.is-on {
   background: var(--c);
 }
+.tb-left {
+  margin: 0;
+  font-size: 0.72em;
+  color: var(--wd-charcoal);
+}
 .tb-over {
   margin: 0;
   font-size: 0.72em;

@@ -16,7 +16,7 @@ import { directionsUrl } from '@/lib/directions';
 import { evidenceTags } from '@/lib/provenance';
 import { locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
-import { SURENESS_LABEL, anyActualSpend, daySpend, formatMoney, spendShares, surenessOf, type Sureness } from '@/lib/spend';
+import { SURENESS_LABEL, anyActualSpend, daySpend, formatMoney, spendOf, spendShares, surenessOf, type Sureness } from '@/lib/spend';
 import { emptyDayFindings } from '@/lib/importNotes';
 import type { ProposalRow } from '@/lib/proposalRows';
 
@@ -202,7 +202,7 @@ export function DayPage({
               </ThemedText>
             ) : null}
           </View>
-          <Cost amount={day.lodging.actualCost ?? day.lodging.cost} />
+          <Cost amount={spendOf(day.lodging)} />
         </View>
       ) : null}
 
@@ -449,7 +449,7 @@ function StopRow({
           <ThemedText type="heading" style={styles.grow}>
             {stop.name}
           </ThemedText>
-          <Cost amount={stop.actualCost ?? stop.cost} />
+          <Cost amount={spendOf(stop)} />
         </View>
 
         <View style={styles.particularsRow}>
@@ -560,7 +560,7 @@ function CostLine({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(stop.actualCost == null ? '' : String(stop.actualCost));
-  const shown = stop.actualCost ?? stop.cost;
+  const shown = spendOf(stop);
 
   function commit(text: string) {
     const trimmed = text.trim();
@@ -801,7 +801,7 @@ function Eyebrow({ label }: { label: string }) {
 /**
  * A figure on a row, which must be the figure the totals are counting.
  *
- * Both call sites pass `actualCost ?? cost`, the same coalesce `spendOf` makes in the shared
+ * Both call sites pass `spendOf`, the coalesce the totals make in the shared
  * money module. They passed `cost` until entering a real one became possible on this client —
  * at which point the row said $25 while the day above it said $31, which is the three-summations
  * disagreement `spend.ts` was written to end, resurfacing one layer up.

@@ -54,7 +54,7 @@ import { drawableStops, regionForStops } from '@/lib/mapRegion';
 import { proposalRows } from '@/lib/proposalRows';
 import { publishTripSheets } from '@/lib/tripSheets';
 import { useStoryFilm } from '@/lib/useStoryFilm';
-import { surenessFields, tripSpend, type Sureness } from '@/lib/spend';
+import { budgetEach, surenessFields, tripSpend, type Sureness } from '@/lib/spend';
 import { loadTrip } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { openingDay } from '@/lib/tripPhase';
@@ -382,6 +382,7 @@ export default function TripDetail() {
         ? {
             days: sheetDays,
             budget: trip.budget,
+            budgetEach: budgetEach(trip.userAnswers),
             itinerary: trip.itinerary,
             dayIndex: day,
             offline,

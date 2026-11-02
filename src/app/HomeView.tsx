@@ -9,6 +9,7 @@ import {
   legacyExplorerStyle,
   MAX_STARRED_PRIORITIES,
   sanitizeNamedList,
+  storedBudget,
   travelStyleOf,
 } from "@/lib/userAnswers";
 import type { SuggestOption } from "@/components/SuggestInput";
@@ -662,6 +663,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // Still load-bearing downstream: this feeds `hotelClassForTier`, which is what keeps the real
   // hotel search from returning hostels for a luxury trip.
   // One traveller's share is what a tier prices (`perPersonBudget`), whichever way the budget was given.
+  // What the trip row will store, and so what every screen of a kept trip compares spend to.
+  const tripBudget = storedBudget(budget, { budgetBasis, party });
   const tier: TierId =
     days === null
       ? "midrange"
@@ -1643,7 +1646,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           dateRange={startDate && endDate ? formatDateRange(startDate, endDate) : null}
           tripDays={days}
           tierName={TIERS.find((t) => t.id === tier)?.name ?? null}
-          budget={budget}
+          budget={tripBudget}
           rawFetch={rawFetch}
           draft={draftItinerary}
           onCancel={cancelGeneration}
@@ -1675,7 +1678,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         <div className="trip-page">
           <BoardInsets shape={boardShut ? "ticket" : "board"} />
           <TripBoard
-            trip={{ id: "", destination, startDate, endDate, budget, itinerary, status: "draft" }}
+            trip={{ id: "", destination, startDate, endDate, budget: tripBudget, itinerary, status: "draft" }}
             itinerary={itinerary}
             dayIndex={activeDayIndex}
             onDayChange={(next) => {
@@ -1734,7 +1737,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 overwrite any edit. */}
             <ItineraryCard
               itinerary={shownItinerary}
-              budget={budget}
+              budget={tripBudget}
               destination={destination}
               onSelectStop={noop}
               activeDayIndex={activeDayIndex}

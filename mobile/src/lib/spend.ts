@@ -4,15 +4,19 @@ import {
   daySpendByCategory,
   anyActualSpend,
   spendOf,
-  spendSplit,
+  surenessFields,
+  surenessOf,
+  surenessSplit,
+  SURENESS_LABEL,
   tripSpend,
   type BudgetSegment,
-  type SpendSplit,
   type DaySpend,
+  type Sureness,
 } from '@shared/itinerary';
 import { formatMoney } from '@shared/format';
+import { budgetEach } from '@shared/userAnswers';
 
-import type { CostState, DayPlan, Lodging, Stop, StopCategory } from '@/api/types';
+import type { DayPlan, StopCategory } from '@/api/types';
 
 /**
  * What a plan costs — every figure on a mobile screen, from one place.
@@ -43,8 +47,21 @@ import type { CostState, DayPlan, Lodging, Stop, StopCategory } from '@/api/type
  * takes one, so it has not mattered yet — it is the first thing to check if something here does.
  */
 
-export { anyActualSpend, budgetSegments, daySpend, daySpendByCategory, spendOf, spendSplit, tripSpend, formatMoney };
-export type { BudgetSegment, DaySpend, SpendSplit };
+export {
+  anyActualSpend,
+  budgetEach,
+  budgetSegments,
+  daySpend,
+  daySpendByCategory,
+  spendOf,
+  surenessFields,
+  surenessOf,
+  surenessSplit,
+  SURENESS_LABEL,
+  tripSpend,
+  formatMoney,
+};
+export type { BudgetSegment, DaySpend, Sureness };
 
 
 /** One category's slice of a day. `fraction` draws the band, `percent` is what gets printed. */
@@ -130,40 +147,4 @@ function sharesOf(spend: DaySpend): SpendShare[] {
     fraction: entry.amount / total,
     percent: percents[index],
   }));
-}
-
-/**
- * How sure a cost is, in the traveller's three words.
- *
- * **Booked and locked are one idea here.** A stop marked `FIXED` is one the planner must not move,
- * and the only reason a traveller fixes a stop is that they have committed to it, so it reads as
- * Booked even before a figure is entered. Marking a cost Booked or Paid fixes the stop in the same
- * write (`surenessFields`), and putting it back to an estimate releases it. Two controls for one
- * fact were what let a row say Booked, Unlock and Estimate at once.
- */
-export type Sureness = 'estimate' | 'booked' | 'paid';
-
-export function surenessOf(item: Stop | Lodging): Sureness {
-  if (item.costState === 'spent') return 'paid';
-  if (item.costState === 'booked') return 'booked';
-  return 'timeFlexibility' in item && item.timeFlexibility === 'FIXED' ? 'booked' : 'estimate';
-}
-
-/** What choosing a sureness writes onto a stop: the kind of cost, and the lock that goes with it. */
-export function surenessFields(sureness: Sureness): Pick<Stop, 'costState' | 'timeFlexibility'> {
-  const costState: CostState | undefined =
-    sureness === 'paid' ? 'spent' : sureness === 'booked' ? 'booked' : undefined;
-  return { costState, timeFlexibility: costState ? 'FIXED' : 'PREFERRED' };
-}
-
-export const SURENESS_LABEL: Record<Sureness, string> = { estimate: 'Estimate', booked: 'Booked', paid: 'Paid' };
-
-/** The trip's money by how sure it is. Sums to `tripSpend` by construction: same `spendOf`. */
-export function surenessSplit(days: DayPlan[]): Record<Sureness, number> {
-  const out: Record<Sureness, number> = { estimate: 0, booked: 0, paid: 0 };
-  for (const day of days) {
-    for (const stop of day.stops) out[surenessOf(stop)] += spendOf(stop);
-    if (day.lodging) out[surenessOf(day.lodging)] += spendOf(day.lodging);
-  }
-  return out;
 }

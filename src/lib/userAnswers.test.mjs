@@ -18,6 +18,8 @@ import {
   sanitizeParty,
   deriveGroupLabel,
   partyBudget,
+  storedBudget,
+  budgetEach,
   travelStyleOf,
   legacyExplorerStyle,
   priorityHint,
@@ -232,6 +234,26 @@ test("partyBudget multiplies only a per-person figure, and only once", () => {
   // A party of one, or none stated, cannot change the number.
   assert.equal(partyBudget(750, "per_person", 1), 750);
   assert.equal(partyBudget(750, "per_person", null), 750);
+});
+
+test("storedBudget is the party total a trip row keeps, whatever basis was typed", () => {
+  const couple = { party: { adults: 2, children: 0, infants: 0 } };
+  assert.equal(storedBudget(1000, { ...couple, budgetBasis: "per_person" }), 2000);
+  assert.equal(storedBudget(1000, { ...couple, budgetBasis: "whole_party" }), 1000);
+  // No answers, or no party: nothing to multiply by.
+  assert.equal(storedBudget(1000, null), 1000);
+  assert.equal(storedBudget(1000, { budgetBasis: "per_person" }), 1000);
+  // A junk count is clamped the way the planner clamps it, not multiplied through.
+  assert.equal(storedBudget(500, { budgetBasis: "per_person", party: { adults: "lots", children: -2 } }), 500);
+});
+
+test("budgetEach is the typed per-person figure, only when it differs from the total", () => {
+  const couple = { adults: 2, children: 0, infants: 0 };
+  assert.equal(budgetEach({ budget: 1000, budgetBasis: "per_person", party: couple }), 1000);
+  assert.equal(budgetEach({ budget: 1000, budgetBasis: "whole_party", party: couple }), null);
+  assert.equal(budgetEach({ budget: 1000, budgetBasis: "per_person", party: { adults: 1 } }), null);
+  assert.equal(budgetEach(null), null);
+  assert.equal(budgetEach("junk"), null);
 });
 
 test("a junk basis is read as whole party, never as a silent multiplication", () => {

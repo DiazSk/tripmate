@@ -19,7 +19,7 @@ import { Itinerary, Stop, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen } from "@/lib/mapCamera";
 import { DEFAULT_MAP_ENGINE, MAPLIBRE_STYLE_URL } from "@/lib/mapEngine";
-import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
+import { dayPlanned, daySpend, findStopLocation, setStayActual, upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
 import { changedDayNumbers, clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
 import { onDraftRevision } from "@/lib/draftRevision";
@@ -462,7 +462,8 @@ export default function TripView({
     const updated: Itinerary = structuredClone(itinerary);
     const day = updated.days[dayIndex];
     if (target === "lodging") {
-      if (day.lodging) day.lodging.actualCost = value;
+      // A whole stay's figure, spread over its nights.
+      setStayActual(updated.days, dayIndex, value);
     } else {
       day.stops[target].actualCost = value;
     }

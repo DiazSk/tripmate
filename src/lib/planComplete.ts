@@ -13,6 +13,7 @@ import {
 import { formatClock, parseClock } from "./itinerary";
 import { rescheduleDay, travellerTimes } from "./schedule";
 import { MAX_TRIP_DAYS, closestTier } from "./tiers";
+import { storedBudget } from "./userAnswers";
 import type { DayPlan, ImportNote, Itinerary, Stop, StopCategory, UserAnswers } from "./types";
 import type { DayWeather } from "./weather";
 
@@ -132,7 +133,7 @@ export function datesFor(days: ImportedDay[], startDate?: string): DatedDay[] | 
 
 export const stopId = (dayIndex: number, stopIndex: number) => `d${dayIndex}s${stopIndex}`;
 
-export function buildFillPrompt(destination: string, dated: DatedDay[]): string {
+export function buildFillPrompt(destination: string, dated: DatedDay[], partySize = 1): string {
   const lines = dated.flatMap(({ date, day }, d) =>
     day.stops.map((s, i) => `${stopId(d, i)}: ${tagUserText(s.name)} (${date})`)
   );
@@ -140,8 +141,8 @@ export function buildFillPrompt(destination: string, dated: DatedDay[]): string 
 
 These are the stops of a traveller's own plan for a trip to ${tagUserText(destination)}. Do not add, remove, rename or reorder anything: answer for exactly these ids.
 
-For each stop id, estimate for one visitor:
-- "cost": typical cost in USD, a number; 0 if free
+For each stop id, estimate for ${partySize > 1 ? `a party of ${partySize}` : "one visitor"}:
+- "cost": ${partySize > 1 ? `typical total cost in USD for the whole party of ${partySize} (a ticket each, one shared taxi)` : "typical cost in USD"}, a number; 0 if free
 - "durationMinutes": how long a visitor typically spends there, a whole number of minutes
 - "category": one of "food", "entry", "transit", "other"
 - "why": one short sentence on what the place is
@@ -241,8 +242,9 @@ const positive = (n: unknown): n is number => typeof n === "number" && Number.is
 /**
  * What a completed plan stores as its budget, and what its tier is read from. An import stores
  * and tiers its one figure. A ready-made trip sends two: the per-person figure as `budget`, which
- * the tier is chosen from, and the traveller's own in `userAnswers.budget`, which is stored, as a
- * generated trip stores `draft.budget`. Both stores go through `budgetToStore`'s failed-fill rule.
+ * the tier is chosen from, and the traveller's own in `userAnswers.budget`, which is stored as the
+ * party total, as a generated trip's is (`storedBudget`). Both go through `budgetToStore`'s
+ * failed-fill rule.
  */
 export function budgetsFor(
   request: Pick<CompletePlanRequest, "budget" | "origin" | "userAnswers">,
@@ -250,7 +252,8 @@ export function budgetsFor(
 ): { stored: number; tierBudget: number } {
   const answered = request.userAnswers?.budget;
   if (request.origin === "ready-made" && positive(answered)) {
-    return { stored: budgetToStore(answered, filled), tierBudget: request.budget ?? 0 };
+    // Its stops are priced for the whole party (`buildFillPrompt`), so it keeps the party total.
+    return { stored: budgetToStore(storedBudget(answered, request.userAnswers), filled), tierBudget: request.budget ?? 0 };
   }
   const stored = budgetToStore(request.budget, filled);
   return { stored, tierBudget: stored };

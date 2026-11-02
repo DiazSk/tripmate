@@ -24,7 +24,7 @@ export function lodgingInstruction(): string {
  * How that night's lodging is priced — the phrase that lands mid-sentence in the generate prompt.
  */
 export function lodgingPricingBasis(): string {
-  return "priced to the style above";
+  return "priced to the style above as one night for the whole party (every room it needs), like every other cost";
 }
 
 /**

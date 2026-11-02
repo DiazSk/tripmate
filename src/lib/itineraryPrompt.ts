@@ -177,7 +177,9 @@ export function formatContextInsight(context: DestinationContext): string {
 function formatBikeshare(system?: BikeshareSystem | null): string {
   if (!system) return "";
   const fare = system.dayPass
-    ? `A day pass costs about ${system.dayPass.amount} ${system.dayPass.currency}; use that figure for any bike leg you add.`
+    ? `A day pass costs about ${system.dayPass.amount} ${system.dayPass.currency}; ${
+        system.dayPass.currency.toUpperCase() === "USD" ? "use that figure" : "convert it to US dollars"
+      } for the cost of any bike leg you add.`
     : `Its fare is not published in a form worth quoting, so don't state a price: put the cost at 0 and say in the note that passes are bought from the operator.`;
   return `\nGetting around: this city has a public bikeshare, ${system.name}, with roughly ${system.stationsNearby} docking stations near the centre. ${fare} Where two consecutive stops are between 1.5km and 8km apart, a shared bike is usually the pleasanter option and worth preferring over the metro, so say so in the stop's note. Don't force it: ignore the bike for a traveler whose profile says limited mobility or low energy, in heavy rain, or where the stops are walkable anyway.\n`;
 }
@@ -329,7 +331,7 @@ Style: ${tierStyle(params.tier)}
 ${params.weather.length > 0 ? `Daily weather:\n${formatWeather(params.weather)}` : `No weather data is available for these dates.`}
 ${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}${params.sketch ?? ""}
 ${params.weather.length > 0 ? "Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.\n" : ""}${CLAIMS_POLICY}
-Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city. Repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
+Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. The last day has no "lodging" field at all, not a placeholder entry. Use the SAME hotel for every night in the same city. Repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}

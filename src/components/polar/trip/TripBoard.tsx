@@ -14,7 +14,8 @@ import { TIERS } from "@/lib/tiers";
 import { DRAFT_TTL_DAYS } from "@/lib/drafts";
 import { EVIDENCE_FOOTNOTE } from "@/lib/evidence";
 import { evaluateItinerary } from "@/lib/guardrails";
-import { anyActualSpend, budgetSegments, daySpendByCategory, tripSpend } from "@/lib/itinerary";
+import { anyActualSpend, budgetSegments, daySpendByCategory, spendOf, stayActual, stayNights, surenessSplit, tripSpend } from "@/lib/itinerary";
+import { budgetEach } from "@/lib/userAnswers";
 import { formatDistance, formatDuration, formatMoney } from "@/lib/format";
 import { PROFILE_VERB, ROUTE_PROFILES, meaningfulLeg, setRouteProfile, useDayRoute, useRouteProfile } from "@/lib/dayRoutes";
 import { dayColorToken } from "@/lib/mapRoute";
@@ -364,8 +365,9 @@ export default function TripBoard({
 
   if (shape === "hidden") return null;
 
-  const spent = tripSpend(days);
-  const over = spent > trip.budget;
+  // Whole dollars before any subtraction, so "of" and "left" never sit a dollar apart on screen.
+  const spent = Math.round(tripSpend(days));
+  const over = spent > Math.round(trip.budget);
   const tier = TIERS.find((t) => t.id === itinerary.tier);
 
   if (shape === "ticket") {
@@ -437,6 +439,8 @@ export default function TripBoard({
   const spend = day ? daySpendByCategory(day) : null;
   const confirmed = day ? anyActualSpend([day]) : false;
   const segments = budgetSegments(days, trip.budget);
+  const sure = surenessSplit(days);
+  const each = budgetEach(trip.userAnswers);
 
   return (
     <section className={`tm trip-board tb-board${column ? " docked-panel" : ""}`} data-appearance="light" aria-label="Your plan">
@@ -515,10 +519,10 @@ export default function TripBoard({
           <div>
             <span className="tb-label">Budget</span>
             <b className={over ? "is-over" : ""}>
-              {formatMoney(spent)} <em>of {formatMoney(trip.budget)}</em>
+              {formatMoney(spent)} <em>of {formatMoney(trip.budget)}{each ? ` · ${formatMoney(each)} each` : ""}</em>
             </b>
           </div>
-          <div className="tb-bar" role="img" aria-label={`${formatMoney(spent)} of ${formatMoney(trip.budget)}${over ? `, ${formatMoney(spent - trip.budget)} over` : ""}`}>
+          <div className="tb-bar" role="img" aria-label={`${formatMoney(spent)} of ${formatMoney(trip.budget)}${over ? `, ${formatMoney(spent - Math.round(trip.budget))} over` : ""}`}>
             {segments.map((seg) => (
               <span
                 key={seg.dayIndex}
@@ -528,7 +532,16 @@ export default function TripBoard({
               />
             ))}
           </div>
-          {over && <p className="tb-over">{formatMoney(spent - trip.budget)} over budget</p>}
+          {over ? (
+            <p className="tb-over">{formatMoney(spent - Math.round(trip.budget))} over budget</p>
+          ) : (
+            trip.budget > 0 && <p className="tb-left">{formatMoney(Math.round(trip.budget) - spent)} not yet planned</p>
+          )}
+          {sure.paid + sure.booked > 0 && (
+            <p className="tb-left">
+              {formatMoney(sure.paid + sure.booked)} paid or booked · {formatMoney(sure.estimate)} still estimated
+            </p>
+          )}
         </div>
 
         {dayList}
@@ -555,7 +568,7 @@ export default function TripBoard({
                       <path d="M2 13V5.5L8 2l6 3.5V13M5.5 13V9h5v4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
                     </svg>
                     {day.lodging.name}
-                    {day.lodging.cost > 0 && <> · {formatMoney(day.lodging.actualCost ?? day.lodging.cost)}</>}
+                    {spendOf(day.lodging) > 0 && <> · {formatMoney(spendOf(day.lodging))} a night</>}
                   </span>
                 )}
                 {legs?.some((l) => meaningfulLeg(l)) && <RouteProfile />}
@@ -627,6 +640,7 @@ export default function TripBoard({
                 ))}
                 <li className="tb-card-slot">
                   <DayTotal
+                    days={days}
                     day={day}
                     dayIndex={di}
                     spend={spend}
@@ -649,7 +663,7 @@ function StopCard({ stop, n, dayIndex, lit, onHover, onOpen }: { stop: Stop; n: 
   const photo = usePlacePhoto(stop.name);
   const [failed, setFailed] = useState<string | null>(null);
   const shown = photo && photo !== failed ? photo : null;
-  const cost = stop.actualCost ?? stop.cost;
+  const cost = spendOf(stop);
   return (
     <button
       type="button"
@@ -731,6 +745,7 @@ function RouteProfile() {
 
 /** The day's money, at the end of its cards: what it comes to, and what the stay actually cost. */
 function DayTotal({
+  days,
   day,
   dayIndex,
   spend,
@@ -739,6 +754,7 @@ function DayTotal({
   costNote,
   onRetryCost,
 }: {
+  days: DayPlan[];
   day: DayPlan;
   dayIndex: number;
   spend: ReturnType<typeof daySpendByCategory> | null;
@@ -749,6 +765,11 @@ function DayTotal({
   onRetryCost: () => void;
 }) {
   if (!spend) return null;
+  // The field takes the whole stay and `setStayActual` spreads it over the nights; per night it
+  // read as the stay and counted the other nights twice.
+  const nights = stayNights(days, dayIndex);
+  const stayEstimate = nights.reduce((sum, i) => sum + (days[i].lodging?.cost ?? 0), 0);
+  const stayWord = nights.length > 1 ? `${nights.length} nights` : "1 night";
   const rows = (
     [
       ["Food", spend.food],
@@ -776,7 +797,7 @@ function DayTotal({
         </div>
       </dl>
       {day.lodging && onLodgingActualCost && (
-        <label className="tb-stay" title={`What you actually paid at ${day.lodging.name}. Replaces the estimate in this trip's budget total.`}>
+        <label className="tb-stay" title={`What you actually paid for the whole stay at ${day.lodging.name} (${stayWord}). Replaces the estimate in this trip's budget total.`}>
           <span>Actual stay</span>
           <span className="tb-money-in">
             $
@@ -785,9 +806,10 @@ function DayTotal({
               min={0}
               step={1}
               inputMode="decimal"
-              defaultValue={day.lodging.actualCost}
-              placeholder={String(Math.round(day.lodging.cost))}
-              aria-label={`Actual lodging cost in dollars for day ${dayIndex + 1}, ${day.lodging.name}`}
+              key={`${dayIndex}:${stayActual(days, dayIndex) ?? ""}`}
+              defaultValue={stayActual(days, dayIndex)}
+              placeholder={String(Math.round(stayEstimate))}
+              aria-label={`Actual cost in dollars of the whole stay at ${day.lodging.name}, ${stayWord}`}
               aria-describedby="tb-stay-note"
               onBlur={(e) => onLodgingActualCost(dayIndex, e.target.value === "" ? undefined : Number(e.target.value))}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}

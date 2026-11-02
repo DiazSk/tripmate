@@ -56,9 +56,8 @@ export interface Stop {
   /**
    * What `actualCost` is — money committed, or money gone.
    *
-   * Absent is a real third answer, not a default. Every figure the web client has ever written
-   * carries no kind, and guessing one would invent a fact about somebody's money; such a figure
-   * counts as settled and as neither booked nor spent. See `spendSplit`.
+   * Absent on every figure the web client writes. Such a figure reads as Paid, since every field
+   * that writes one asks what was actually paid. See `surenessOf`.
    */
   costState?: CostState;
   /**

@@ -165,8 +165,9 @@ negotiable; the priority is.
 ### §4a. General
 
 Every day except the last should include a lodging entry representing that night's stay, priced
-to the tier's style (§6). Never invent specific prices, availability, or ratings beyond the cost
-estimate.
+to the tier's style (§6) as one night for the whole party, every room it needs. The last day has no
+lodging entry at all, not a placeholder. Never invent specific prices, availability, or ratings
+beyond the cost estimate.
 
 ### §4b. Type selection
 
@@ -623,7 +624,7 @@ slots), say so in its note, early enough to act on. "Book ahead, these fill week
 
 ### §14d. Name the costs a budget forgets
 
-The stated budget covers stops and lodging. Where a day quietly carries more (luggage storage on an
+The stated budget covers stops and lodging, not the journey to and from the destination. Where a day quietly carries more (luggage storage on an
 arrival or checkout day, a park-and-ride or toll on a driving leg, an airport transfer, a paid
 viewing deck inside a free site), put it in the relevant stop's note so it doesn't arrive as a
 surprise. One clause, only where it applies; don't append a costs disclaimer to every stop.

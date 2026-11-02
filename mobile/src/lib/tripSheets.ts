@@ -25,6 +25,8 @@ import type { Sureness } from '@/lib/spend';
 export type TripSheets = {
   days: DayPlan[];
   budget: number;
+  /** See `budgetEach`: the per-person figure typed, or null. */
+  budgetEach: number | null;
   itinerary: Itinerary;
   dayIndex: number;
   offline: boolean;
