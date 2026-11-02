@@ -360,6 +360,9 @@ function migrateLegacyLlmSessions(): void {
 migrateLegacyLlmSessions();
 addColumnIfMissing("llm_traces", "run_id", "TEXT");
 addColumnIfMissing("trips", "run_id", "TEXT");
+// Set when a generation threw, so a phone that lost its stream can tell a failed plan from one
+// still being written (`runOutcome`). Null while running and after success.
+addColumnIfMissing("llm_runs", "failed_at", "TEXT");
 // The Step 2b answers (priorities, energy, crowds, group, purpose). Stored so the edit loop can
 // read the traveler's profile back instead of asking them things they already told us.
 addColumnIfMissing("trips", "user_answers_json", "TEXT");
@@ -836,6 +839,65 @@ export function listTrips(
  * `readableOwners(...)`. Returns whether a row actually moved, so a caller can tell "not yours"
  * from "already saved".
  */
+export interface RunTripSave {
+  ownerId: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  budget: number;
+  itinerary: unknown;
+  runId: string | null;
+  chatSessionId: string | null;
+  userAnswers: unknown;
+  status: TripStatus;
+  timezone: string | null;
+}
+
+/**
+ * The one way a generated plan becomes a trip row, and it makes **one row per run per owner**.
+ *
+ * Two callers save the same plan: the server, the moment the plan exists (so a plan written while
+ * the phone is suspended still lands, rather than being written and thrown away), and the client,
+ * as it always has (`POST /api/trips`). Whichever arrives second gets the first one's id, and a Keep
+ * for a run that already has a draft promotes that draft rather than adding a second trip. A save
+ * with no run id inserts, as the Save fallback did before runs existed.
+ */
+export function saveTripForRun(save: RunTripSave): string {
+  if (save.runId) {
+    const existing = db
+      .prepare(`SELECT id, status FROM trips WHERE run_id = ? AND owner_id = ? ORDER BY rowid LIMIT 1`)
+      .get(save.runId, save.ownerId) as { id: string; status: TripStatus } | undefined;
+    if (existing) {
+      if (save.status === "saved" && existing.status !== "saved") promoteTripToSaved(existing.id, [save.ownerId]);
+      return existing.id;
+    }
+  }
+  const trip = insertTrip({
+    id: randomUUID(),
+    owner_id: save.ownerId,
+    destination: save.destination,
+    start_date: save.startDate,
+    end_date: save.endDate,
+    budget: save.budget,
+    itinerary_json: JSON.stringify(save.itinerary),
+    run_id: save.runId,
+    chat_session_id: save.chatSessionId,
+    user_answers_json: save.userAnswers ? JSON.stringify(save.userAnswers) : null,
+    status: save.status,
+    timezone: save.timezone,
+  });
+  // Back-fill the generation that produced this plan. Best-effort: a trip that saved must not fail
+  // because its provenance link did not.
+  if (save.runId) {
+    try {
+      linkGenerationToTrip(save.runId, trip.id);
+    } catch (err) {
+      console.error("[trips] generation link failed", err);
+    }
+  }
+  return trip.id;
+}
+
 export function promoteTripToSaved(id: string, owners: string[]): boolean {
   return (
     db
@@ -1305,6 +1367,32 @@ export interface RunRow {
   destination: string;
   trip_id: string | null;
   created_at: string;
+  failed_at?: string | null;
+}
+
+/** A generation threw: `runOutcome` reads it as failed rather than still being written. */
+export function markRunFailed(runId: string): void {
+  db.prepare(`UPDATE llm_runs SET failed_at = ? WHERE id = ?`).run(new Date().toISOString(), runId);
+}
+
+export type RunOutcome = { status: "ready"; tripId: string } | { status: "writing" | "failed" | "unknown" };
+
+/**
+ * What became of a generation, for a phone that lost its stream: iOS suspends the app when it is
+ * left, the stream drops, and the plan carries on being written on the server, which saves it as a
+ * draft itself (`saveTripForRun`). `ready` names the trip only to its owners; anyone else holding
+ * the id learns no more than that it is still being written.
+ */
+export function runOutcome(runId: string, owners: string[]): RunOutcome {
+  const run = getRun(runId);
+  if (!run) return { status: "unknown" };
+  const trip = db
+    .prepare(
+      `SELECT id FROM trips WHERE run_id = ? AND owner_id IN (${owners.map(() => "?").join(",")}) ORDER BY rowid LIMIT 1`
+    )
+    .get(runId, ...owners) as { id: string } | undefined;
+  if (trip) return { status: "ready", tripId: trip.id };
+  return run.failed_at ? { status: "failed" } : { status: "writing" };
 }
 
 export function insertRun(params: {

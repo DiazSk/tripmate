@@ -504,6 +504,9 @@ export interface GenerationResult {
   traceId: string;
   runId: string;
   sessionId?: string;
+  /** The draft the server saved for this plan, so the client need not save it again. Null when that
+   *  save failed (the client saves it, as before); absent from older servers and on `done`. */
+  tripId?: string | null;
 }
 
 /**
@@ -533,6 +536,8 @@ export interface GenerateHandlers {
   onSketch?: (event: SketchEvent) => void;
   onDayCoords?: (event: DayCoordsEvent) => void;
   onPlan: (result: GenerationResult) => void;
+  /** The run exists: its id, first, so a client that loses the stream can ask what became of it. */
+  onRun?: (runId: string) => void;
   /**
    * The reviewed plan, ~150s after `onPlan`.
    *

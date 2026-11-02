@@ -72,6 +72,7 @@ export function WritingThePlan({
   raw,
   ready = false,
   seed = null,
+  note = null,
   onCancel,
 }: {
   destination: string;
@@ -89,6 +90,8 @@ export function WritingThePlan({
   /** Where the destination is, when the planner already knows (a picked suggestion or its blur
    *  geocode), so the map opens on the city rather than on a world view until the fetch lands. */
   seed?: { lat: number; lon: number } | null;
+  /** One quiet line under the progress: that leaving is safe, or that the plan is still being written. */
+  note?: string | null;
   onCancel: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -269,6 +272,11 @@ export function WritingThePlan({
             <View key={i} style={[styles.dot, d.stops.length > 0 && styles.dotOn, latest?.dayIndex === i && !ready && styles.dotNow]} />
           ))}
         </View>
+        {note && !ready ? (
+          <Text style={styles.note} maxFontSizeMultiplier={FontScale.body}>
+            {note}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -351,6 +359,7 @@ const styles = StyleSheet.create({
   fill: { height: '100%', borderRadius: 3, backgroundColor: Polar.ice },
   // The figure a waiting person glances for, at reading size rather than as a footnote.
   left: { fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ice, fontVariant: ['tabular-nums'] },
+  note: { fontFamily: PolarFonts.sans, fontSize: 13, lineHeight: 18, color: Polar.nightText2 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Polar.frost20 },
   dotOn: { backgroundColor: Polar.nightText2 },

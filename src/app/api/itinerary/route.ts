@@ -1,10 +1,13 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { itineraryTimeoutMs, ModelTimeoutError, parseJsonResponse, runClaude } from "@/lib/claude";
-import { applyRevisionIfUnedited, insertRun } from "@/lib/db";
+import { applyRevisionIfUnedited, insertRun, markRunFailed, saveTripForRun } from "@/lib/db";
+import { currentOwnerId } from "@/lib/ownerRequest";
+import { geocodeDestinationCached } from "@/lib/serverFetchCached";
 import { buildRebalancePrompt } from "@/lib/itineraryPrompt";
 import { normalizeDays } from "@/lib/itinerary";
 import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
+import { storedBudget } from "@/lib/userAnswers";
 import { DayPlan } from "@/lib/types";
 import { GenerationParams, runGeneration } from "@/lib/generationRunner";
 import { StageEvent, type StageId } from "@/lib/generationStages";
@@ -220,6 +223,21 @@ async function handle(
     }
   }
 
+  // **A new plan is saved by the server, as a draft, the moment it exists.** The client used to be
+  // the only thing that turned a plan into a trip, and iOS suspends an app that is left: the stream
+  // dropped, the plan was still written (at full cost, and with the allowance already spent), and
+  // nobody saved it. The client's own save of the same run now finds this row (`saveTripForRun`).
+  // A refine changes a trip the client already has, so it saves nothing here.
+  const ownerId = !isRefine && bucket === "plan" ? await currentOwnerId() : null;
+  const timezone: Promise<string | null> = ownerId
+    ? Promise.race([
+        geocodeDestinationCached(destination).then((g) => g?.timezone ?? null, () => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ])
+    : Promise.resolve(null);
+  /** Known from the first frame, so a failure can be recorded against the run the client holds. */
+  let runId: string | null = null;
+
   // Do not add `export const runtime = "edge"` — the Edge runtime is deprecated in Next 16;
   // the Node default is the only non-deprecated choice and it supports streaming.
   let keepalive: ReturnType<typeof setInterval> | undefined;
@@ -264,9 +282,41 @@ async function handle(
         onStop: (stop: StreamedStop) => safeEnqueue("stop", stop),
         onDayCoords: (dayIndex: number, coords: Record<string, { lat: number; lon: number }>) =>
           safeEnqueue("day-coords", { dayIndex, coords }),
+        onRun: (id: string) => {
+          runId = id;
+          // First, so a client that loses the stream can ask what became of this run.
+          safeEnqueue("run", { runId: id });
+        },
         onPlan: (result: Awaited<ReturnType<typeof runGeneration>>) => {
           planned = { runId: result.runId, days: structuredClone(result.itinerary.days) };
-          safeEnqueue("plan", result);
+          if (ownerId) {
+            const owner = ownerId;
+            void timezone.then((tz) => {
+              let tripId: string | null = null;
+              try {
+                tripId = saveTripForRun({
+                  ownerId: owner,
+                  destination,
+                  startDate,
+                  endDate,
+                  // The request carries the figure as typed; the row keeps the party total, as /api/trips does.
+                  budget: storedBudget(budget, userAnswers),
+                  itinerary: result.itinerary,
+                  runId: result.runId,
+                  chatSessionId: result.sessionId ?? null,
+                  userAnswers: userAnswers ?? null,
+                  status: "draft",
+                  timezone: tz,
+                });
+              } catch (err) {
+                // The client still saves it, as before; a failed server save is not a failed plan.
+                console.error("[itinerary] draft save failed", err);
+              }
+              safeEnqueue("plan", { ...result, tripId });
+            });
+          } else {
+            safeEnqueue("plan", result);
+          }
           // The plan exists the moment it is handed to the client; the critique that follows is a
           // revision of it, not part of writing it, so nothing more is sent when that finishes.
           if (!isRefine && !reported) {
@@ -303,6 +353,14 @@ async function handle(
         safeEnqueue("done", result);
       } catch (err) {
         if (!(err instanceof OffTopicError)) console.error("[itinerary]", err);
+        // So a client that lost the stream reads "failed" rather than waiting on a run that ended.
+        if (runId) {
+          try {
+            markRunFailed(runId);
+          } catch (markErr) {
+            console.error("[itinerary] run failure mark failed", markErr);
+          }
+        }
         if (!isRefine && !reported) {
           captureServer(await track.who, "plan_failed", {
             stage: seen.stage,

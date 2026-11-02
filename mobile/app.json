@@ -81,6 +81,12 @@
       "./plugins/withSceneLifecycle",
       "./plugins/withRandomPodUuids",
       [
+        "expo-widgets",
+        {
+          "groupIdentifier": "group.app.tripmate.shared"
+        }
+      ],
+      [
         "expo-audio",
         {
           "enableBackgroundPlayback": false,
