@@ -9,6 +9,7 @@ import { computeCostUsd } from "./modelPricing";
 import {
   apiEffortFor,
   apiModelFor,
+  cliThinkingTokensFor,
   llmMode,
   maxTokensFor,
   supportsAdaptiveThinking,
@@ -403,6 +404,13 @@ function runClaudeViaCli(
     void _dropApiKey;
     env.PATH = [env.PATH, ...CLI_SEARCH_PATH].filter(Boolean).join(":");
     const cliBin = resolveCliBin(env.PATH);
+    // The CLI's own background traffic, none of which a one-shot child needs. Measured 2026-11-02:
+    // before it, 87 of 88 traces also billed a side call to a second model (~2.4k input tokens,
+    // visible as a second key in `modelUsage`); after it, 0 of 111. The child also stops lingering
+    // ~0.5s after printing its result.
+    env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+    const thinkingTokens = cliThinkingTokensFor(type);
+    if (thinkingTokens !== undefined) env.MAX_THINKING_TOKENS = String(thinkingTokens);
 
     const model = meta?.model ?? MODEL;
     const traceId = insertTrace({

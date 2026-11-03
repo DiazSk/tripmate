@@ -27,6 +27,7 @@
  *   node --import ./scripts/ts-resolve.mjs scripts/critique-ab.mjs --compare opus.json haiku.json
  */
 import { readFileSync, writeFileSync } from "fs";
+import http from "node:http";
 
 import { getFixture } from "../src/lib/bench/fixtures.ts";
 import { benchUserAnswers } from "../src/lib/bench/refineTasks.ts";
@@ -75,7 +76,7 @@ console.log(`trip      ${body.destination} ${startDate}..${endDate} $${body.budg
 console.log("generating (this is one full run of the legacy path, critique included)…");
 
 const startedAt = Date.now();
-const res = await fetch(`${BASE}/api/itinerary`, {
+const res = await longPost(`${BASE}/api/itinerary`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
@@ -121,7 +122,7 @@ const record = {
   totalCostUsd: operational.costUsd,
   groups: compositeGroups(scores),
   composite: compositeScore(scores),
-  stops: parsed.days.reduce((n, d) => n + d.stops.length, 0),
+  stops: payload.itinerary.days.reduce((n, d) => n + d.stops.length, 0),
   dayCount: parsed.days.length,
 };
 
@@ -134,6 +135,21 @@ for (const s of steps) {
   console.log(`  ${s.type.padEnd(9)} ${String(s.model).padEnd(20)} ${s.status.padEnd(7)} ${String(Math.round((s.durationMs ?? 0) / 1000)).padStart(4)}s  $${(s.costUsd ?? 0).toFixed(6)}`);
 }
 console.log(`\nwrote ${out}`);
+
+/** `fetch` gives up waiting for headers after 300s, and generate plus critique takes longer than
+ *  that, so a whole run would always fail here before the server finished it. */
+function longPost(url, { body, headers }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method: "POST", headers }, (res) => {
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (d) => (text += d));
+      res.on("end", () => resolve({ ok: res.statusCode < 400, status: res.statusCode, json: async () => JSON.parse(text) }));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
 
 function fmt(n) {
   return n === null || n === undefined ? "n/a" : n.toFixed(4);

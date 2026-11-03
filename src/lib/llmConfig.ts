@@ -304,6 +304,44 @@ export function apiEffortFor(type: ClaudeCallType): "low" | "medium" | "high" | 
   }
 }
 
+/**
+ * How many tokens the model may think before it answers, on the **CLI path**, when that is not the
+ * CLI's own default. `undefined` leaves the CLI alone, which thinks on every call.
+ *
+ * Passed to the child as `MAX_THINKING_TOKENS`, because the CLI has no flag for it — and
+ * `--effort` is not a substitute: on `claude-sonnet-4-5` and `claude-haiku-4-5` the CLI accepts it
+ * and changes nothing (story, effort low: 5,677 and 8,095 thinking tokens against 4,147 and 7,812
+ * without it). The value is a target the model mostly keeps rather than a hard cap; `0` is exact.
+ *
+ * Measured 2026-11-02 against real prompts from `llm_traces` (docs/perf/llm-speed-2026-11-02.md).
+ * Thinking was most of the output and most of the wall clock: a story script spent 3-8k tokens
+ * thinking to write 500, a Meri answer 0.7-2k to write 150. Only call types with evidence that the
+ * answer held are listed; everything else keeps the default.
+ *
+ * `LLM_CLI_THINKING=story=2048,meri-answer=0` overrides per type, for the A/B that sets these.
+ */
+export function cliThinkingTokensFor(type: ClaudeCallType): number | undefined {
+  const override = process.env.LLM_CLI_THINKING?.split(",")
+    .map((kv) => kv.trim().split("="))
+    .find(([t]) => t === type);
+  if (override) return override[1] === "" ? undefined : Number(override[1]);
+  switch (type) {
+    // Rule breaks per script against the prompt's own checklist, 13 scripts each: 0.31 here, 0.15
+    // at the default, 1.15 at 1,024. Median 41s against 108s.
+    case "story":
+      return 2_048;
+    // Not `idea-read`, though it is the same model on the same kind of prompt: without thinking it
+    // wrote the landmark as the question's place ("Treasury, Petra, Jordan") 4 times in 4, which no
+    // geocoder reads, so Home answered nothing. A 1,024 budget bought no speed (8.4s against 8.7s).
+    // Same answer, same months, same sources, ids cited 6/6 once the lookup prompt said ids. 4s
+    // against 7-18s. The grounding check is in `groundAnswer`, not in the thinking.
+    case "meri-answer":
+      return 0;
+    default:
+      return undefined;
+  }
+}
+
 /** Ceiling on generated tokens, by what the call actually emits. Hitting the cap truncates
  *  mid-JSON and costs a full retry, so these are generous — an unused ceiling is free. */
 export function maxTokensFor(type: ClaudeCallType): number {

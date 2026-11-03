@@ -6,6 +6,7 @@ import {
   apiModelFor,
   chatModel,
   cheapModel,
+  cliThinkingTokensFor,
   computeCostUsd,
   extractModel,
   llmMode,
@@ -29,6 +30,7 @@ const ENV_KEYS = [
   "LLM_MODEL_EXTRACT",
   "LLM_MODEL_SKETCH",
   "LLM_REFUSAL_FALLBACK",
+  "LLM_CLI_THINKING",
 ];
 
 afterEach(() => {
@@ -264,5 +266,24 @@ describe("bring-your-own-itinerary call types", () => {
 
   it("reads a trip idea on the cheap tier", () => {
     assert.equal(apiModelFor("idea-read"), cheapModel());
+  });
+});
+
+describe("CLI thinking budget", () => {
+  // `0` is the measured setting for the Meri answer, and `undefined` must stay the default for
+  // every call nobody measured: it leaves MAX_THINKING_TOKENS unset rather than inventing a budget.
+  it("budgets only the measured call types", () => {
+    assert.equal(cliThinkingTokensFor("meri-answer"), 0);
+    assert.equal(cliThinkingTokensFor("idea-read"), undefined);
+    assert.equal(cliThinkingTokensFor("story"), 2_048);
+    assert.equal(cliThinkingTokensFor("generate"), undefined);
+    assert.equal(cliThinkingTokensFor("chat"), undefined);
+  });
+
+  it("lets LLM_CLI_THINKING override one type, and an empty value restore the CLI default", () => {
+    process.env.LLM_CLI_THINKING = "generate=4096, story=";
+    assert.equal(cliThinkingTokensFor("generate"), 4_096);
+    assert.equal(cliThinkingTokensFor("story"), undefined);
+    assert.equal(cliThinkingTokensFor("meri-answer"), 0);
   });
 });
