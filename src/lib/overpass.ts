@@ -111,6 +111,7 @@ export async function askOverpass(
     const url = OVERPASS_URLS[index];
     const left = deadline === undefined ? timeoutMs : Math.min(timeoutMs, deadline - Date.now());
     if (left <= 0) break;
+    let responded = false;
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -118,6 +119,8 @@ export async function askOverpass(
         body,
         signal: AbortSignal.timeout(left),
       });
+      responded = true;
+      health.downAt[index] = null;
       if (!res.ok) continue;
       const data = (await res.json()) as { elements?: OverpassElement[]; remark?: string };
 
@@ -130,10 +133,49 @@ export async function askOverpass(
       if (typeof data.remark === "string") continue;
 
       preferredMirror = index;
+      health.answeredSeq = ++health.seq;
       return data.elements ?? [];
-    } catch {
-      // Refused, timed out, or answered something that is not JSON. Next mirror.
+    } catch (err) {
+      // Refused, timed out, or answered something that is not JSON. Next mirror. Silent through
+      // its whole timeout, or refused outright, is a mirror that is down; an attempt the caller's
+      // deadline cut short proves nothing about it.
+      const cutShort = (err as { name?: string } | null)?.name === "TimeoutError" && left < timeoutMs;
+      if (!responded && !cutShort) health.downAt[index] = { at: Date.now(), seq: ++health.seq };
     }
   }
   return null;
 }
+
+/**
+ * True when every mirror, at its last attempt in the past 10 minutes, gave no HTTP response at all
+ * (refused, or silent through its whole timeout) and nothing has answered since. A 429, a 504 or a
+ * timeout `remark` is a mirror that is up and busy, and does not count.
+ *
+ * For a caller that is about to wait a whole budget on Overpass for nothing it needs: a generation
+ * whose own lookups already found it unreachable skips the coordinate sweep and the listing lookup
+ * rather than spending 45s each on the same refusal (measured 2026-11-03: `overpass-api.de`
+ * refusing, both mirrors silent, every streamed run waiting 45.0s). Every other caller keeps asking,
+ * so the first answer anywhere clears it.
+ *
+ * ponytail: process-wide and only as fresh as the last query anyone sent. A heavy query that
+ * outlasts a busy mirror's whole timeout marks it down too; the cost is one skipped sweep, which is
+ * the fail-soft answer the sweep already gives. A per-host health probe is the upgrade if that ever
+ * shows up.
+ */
+export function overpassUnreachable(now = Date.now()): boolean {
+  return health.downAt.every((d) => d !== null && d.seq > health.answeredSeq && now - d.at < DOWN_FRESH_MS);
+}
+const DOWN_FRESH_MS = 10 * 60_000;
+/**
+ * `downAt`, per mirror in `OVERPASS_URLS` order: when it last refused or stayed silent through a
+ * whole attempt. `seq` orders these against `answeredSeq`, since two can share a millisecond.
+ *
+ * On `globalThis`, not module scope, because Next can load this module once per route bundle: an
+ * outage `/api/roads` had just measured was invisible to `/api/itinerary` in the same process.
+ */
+type Health = { downAt: ({ at: number; seq: number } | null)[]; answeredSeq: number; seq: number };
+const health: Health = ((globalThis as { __tripmateOverpassHealth?: Health }).__tripmateOverpassHealth ??= {
+  downAt: OVERPASS_URLS.map(() => null),
+  answeredSeq: 0,
+  seq: 0,
+});

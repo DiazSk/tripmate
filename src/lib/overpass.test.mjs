@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OVERPASS_URLS, askOverpass } from "./overpass.ts";
+import { OVERPASS_URLS, askOverpass, overpassUnreachable } from "./overpass.ts";
 
 const realFetch = globalThis.fetch;
 
@@ -108,4 +108,32 @@ test("a deadline already past asks nothing", async () => {
   const tried = stubFetch(() => ({ elements: [{ id: 3 }] }));
   assert.equal(await askOverpass("[out:json];node(1);out;", { deadline: Date.now() - 1 }), null);
   assert.equal(tried.length, 0);
+});
+
+test("unreachable only once every mirror refused, and the next answer clears it", async () => {
+  stubFetch(() => ({ elements: [] }));
+  await askOverpass("[out:json];node(1);out;");
+  assert.equal(overpassUnreachable(), false);
+
+  stubFetch(() => "refuse");
+  assert.equal(await askOverpass("[out:json];node(1);out;"), null);
+  assert.equal(overpassUnreachable(), true, "all three refused");
+  assert.equal(overpassUnreachable(Date.now() + 11 * 60_000), false, "a mark older than 10 minutes is stale");
+
+  stubFetch(() => ({ elements: [] }));
+  await askOverpass("[out:json];node(1);out;");
+  assert.equal(overpassUnreachable(), false, "any answer clears it");
+});
+
+test("a busy mirror is not a down one, and a deadline cut proves nothing", async () => {
+  // A 500 is a response: the host is up.
+  stubFetch((url) => (url === OVERPASS_URLS[0] ? "500" : "refuse"));
+  await askOverpass("[out:json];node(1);out;");
+  assert.equal(overpassUnreachable(), false, "the one that answered 500 is up");
+
+  // Silent until the caller's own deadline, shorter than the per-mirror timeout: not marked.
+  globalThis.fetch = (_url, { signal }) =>
+    new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+  await askOverpass("[out:json];node(1);out;", { timeoutMs: 60_000, deadline: Date.now() + 50 });
+  assert.equal(overpassUnreachable(), false);
 });

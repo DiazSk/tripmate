@@ -278,7 +278,7 @@ Respond with ONLY valid JSON, no markdown fences:
 Rules:
 - reply is 1 to 4 sentences. ${NO_EM_DASH_RULE}
 - Mention a place only if it is listed above, by its exact name, and put its id in places. Put a month number in months only if it is one the evidence calls good.
-- sources lists the id of every source you used: the short id before the ·, such as plan or osm, not the label. An answer that used none is not an answer.
+- sources lists the id of every source you used: the short id before the ·, such as plan or osm, not the label. places likewise lists ids such as p1, never names. An answer that used none is not an answer.
 - "ops" is an empty array: this turn changes nothing. "options" offers at most two changes to the plan that follow from the answer, each naming a place listed above by its exact name, under 8 words and tappable as their next message, such as "Add Al-Rawda to day 2". Empty when nothing follows.
 - If the evidence does not answer the question, return {"reply":"","options":[],"places":[],"months":[],"sources":[],"ops":[],"nothing":true}.`;
 }

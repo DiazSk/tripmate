@@ -15,6 +15,7 @@ import {
 import type { DietaryVenue } from "./dietaryVenues";
 import { type LegMinutesLookup, evaluateItinerary, revisionIsNoWorse } from "./guardrails";
 import { routeMinutes, routePairs } from "./osrmRoute";
+import { overpassUnreachable } from "./overpass";
 import type { PlaceFacts } from "./placeFacts";
 import {
   annotateBookAhead,
@@ -461,6 +462,12 @@ export async function runGeneration(
   // union query returns in ~25s); three dead mirrors twice over do not. Past it, the plan goes out
   // on the model's own coordinates and without listing facts, which is the fail-soft answer this
   // step already gave when Overpass was unreachable, only four minutes sooner.
+  //
+  // The coordinate sweep has this budget to itself now. The listing lookups below used to run
+  // first against the same deadline, and when Overpass was unreachable they spent all 45s of it,
+  // so the sweep started past the deadline and placed nothing: measured on 22 of 22 streamed runs
+  // on 2026-11-03, the traveller waited exactly 45.0s after the model finished, for no facts and
+  // no corrected pins.
   const placingDeadline = Date.now() + PLACING_BUDGET_MS;
 
   // Look up real listings for the stops where the answer can change the plan, then check the
@@ -468,69 +475,81 @@ export async function runGeneration(
   // metered calls in the Phase 0 spike, so only "entry" stops qualify — plus every stop when
   // step-free access is required, because §9e outranks the cost control.
   //
-  // Fetched once, here, and reused after critique. Critique can rewrite the day set, but
-  // re-fetching against its output would double the spend for stops that are mostly the same;
-  // anything it newly invents simply has no facts and is left alone.
+  // Fetched once and reused after critique. Critique can rewrite the day set, but re-fetching
+  // against its output would double the spend for stops that are mostly the same; anything it
+  // newly invents simply has no facts and is left alone.
+  //
+  // **After `placeStops()`, and on the streaming path after the hand-over.** The first render
+  // needs coordinates and nothing here: these become notes, pinned admission costs and the
+  // critique's conflict list, so they reach the plan as an update a few seconds after it opens
+  // (`live.onRevised`, the same row write and frame the critique uses). Running after the sweep
+  // also matches listings by the corrected coordinates rather than the model's, which the 80m
+  // match radius needs.
   const placeFacts = new Map<string, PlaceFacts>();
-  try {
-    const names = selectStopsToEnrich(itinerary.days, { stepFreeRequired });
-    // OSM matches by coordinate radius, not by name+destination, so look up each stop's own
-    // lat/lng from the itinerary rather than passing `destination` through.
-    const coordsByName = new Map<string, { lat: number; lng: number }>();
-    for (const day of itinerary.days) {
-      for (const stop of day.stops ?? []) {
-        if (typeof stop.lat === "number" && typeof stop.lng === "number" && !coordsByName.has(stop.name)) {
-          coordsByName.set(stop.name, { lat: stop.lat, lng: stop.lng });
-        }
-      }
-    }
-    // One batched Overpass call for every stop needing enrichment — matches poiEnrichment.ts's
-    // shape — rather than one POST per stop, which used to fire N concurrent requests at a
-    // public instance this repo already documents as flaky under load.
-    const toFetch = names
-      .filter((name) => coordsByName.has(name))
-      .map((name) => ({ name, ...coordsByName.get(name)! }))
-      .map(({ name, lat, lng }) => ({ name, lat, lon: lng }));
-    const tagsByName = await fetchPoiOsmTags(toFetch, undefined, placingDeadline);
-    if (tagsByName) {
-      for (const { name } of toFetch) {
-        const facts = buildPlaceFacts(tagsByName[name]);
-        if (facts) placeFacts.set(normalizeStopName(name), facts);
-      }
-    } // network/HTTP failure (tagsByName === null) — every requested stop stays unenriched
-  } catch (err) {
-    // Fail-soft: no facts means no annotations and no pinned costs, never a failed generation.
-    console.error("[itinerary] place-facts lookup failed", err);
-  }
-  const placeConflicts = detectConflicts(itinerary.days, placeFacts, { stepFreeRequired, crowdBias });
-
-  // §3d is a hard constraint, but only once something was stated — a traveler with no
-  // restrictions costs zero calls here and gets a byte-identical plan. The model currently asserts
-  // what an area contains ("several vegan places along the arcade"); this checks it.
+  let placeConflicts: ReturnType<typeof detectConflicts> = [];
   const dietaryByStop = new Map<string, DietaryVenue[]>();
   const dietaryFindings: string[] = [];
-  if (searchableCategories(dietary ?? null).length > 0) {
+  const lookUpPlaceFacts = async (): Promise<void> => {
+    const factsDeadline = Date.now() + PLACING_BUDGET_MS;
     try {
-      const foodStops = itinerary.days.flatMap((day) =>
-        (day.stops ?? [])
-          .filter((stop) => stop.category === "food" && typeof stop.lat === "number")
-          .map((stop) => ({ date: day.date, stop }))
-      );
-      await Promise.all(
-        foodStops.map(async ({ date, stop }) => {
-          const venues = await fetchDietaryVenues({ lat: stop.lat, lon: stop.lng }, dietary ?? null);
-          if (venues === null) return; // lookup failed — say nothing rather than imply a check
-          if (venues.length === 0) {
-            dietaryFindings.push(noOptionsFinding(stop.name, date));
-            return;
+      const names = selectStopsToEnrich(itinerary.days, { stepFreeRequired });
+      // OSM matches by coordinate radius, not by name+destination, so look up each stop's own
+      // lat/lng from the itinerary rather than passing `destination` through.
+      const coordsByName = new Map<string, { lat: number; lng: number }>();
+      for (const day of itinerary.days) {
+        for (const stop of day.stops ?? []) {
+          if (typeof stop.lat === "number" && typeof stop.lng === "number" && !coordsByName.has(stop.name)) {
+            coordsByName.set(stop.name, { lat: stop.lat, lng: stop.lng });
           }
-          dietaryByStop.set(normalizeStopName(stop.name), venues);
-        })
-      );
+        }
+      }
+      // One batched Overpass call for every stop needing enrichment — matches poiEnrichment.ts's
+      // shape — rather than one POST per stop, which used to fire N concurrent requests at a
+      // public instance this repo already documents as flaky under load.
+      const toFetch = names
+        .filter((name) => coordsByName.has(name))
+        .map((name) => ({ name, ...coordsByName.get(name)! }))
+        .map(({ name, lat, lng }) => ({ name, lat, lon: lng }));
+      // `null` is the same "could not ask" as a refusal, without spending the budget to learn it.
+      const tagsByName = overpassUnreachable() ? null : await fetchPoiOsmTags(toFetch, undefined, factsDeadline);
+      if (tagsByName) {
+        for (const { name } of toFetch) {
+          const facts = buildPlaceFacts(tagsByName[name]);
+          if (facts) placeFacts.set(normalizeStopName(name), facts);
+        }
+      } // network/HTTP failure (tagsByName === null) — every requested stop stays unenriched
     } catch (err) {
-      console.error("[itinerary] dietary venue lookup failed", err);
+      // Fail-soft: no facts means no annotations and no pinned costs, never a failed generation.
+      console.error("[itinerary] place-facts lookup failed", err);
     }
-  }
+    placeConflicts = detectConflicts(itinerary.days, placeFacts, { stepFreeRequired, crowdBias });
+
+    // §3d is a hard constraint, but only once something was stated — a traveler with no
+    // restrictions costs zero calls here and gets a byte-identical plan. The model currently asserts
+    // what an area contains ("several vegan places along the arcade"); this checks it.
+    if (searchableCategories(dietary ?? null).length > 0) {
+      try {
+        const foodStops = itinerary.days.flatMap((day) =>
+          (day.stops ?? [])
+            .filter((stop) => stop.category === "food" && typeof stop.lat === "number")
+            .map((stop) => ({ date: day.date, stop }))
+        );
+        await Promise.all(
+          foodStops.map(async ({ date, stop }) => {
+            const venues = await fetchDietaryVenues({ lat: stop.lat, lon: stop.lng }, dietary ?? null);
+            if (venues === null) return; // lookup failed — say nothing rather than imply a check
+            if (venues.length === 0) {
+              dietaryFindings.push(noOptionsFinding(stop.name, date));
+              return;
+            }
+            dietaryByStop.set(normalizeStopName(stop.name), venues);
+          })
+        );
+      } catch (err) {
+        console.error("[itinerary] dietary venue lookup failed", err);
+      }
+    }
+  };
 
   // Attach the real forecast (not the model's free-text guess) to each day by date, so the UI
   // can render structured icon/temp/humidity data. Declared here, above finalizeDays, so the
@@ -613,7 +632,11 @@ export async function runGeneration(
         // swallows its own failure, and one that somehow rejects must not skip the sweep.
         // …but no later than the deadline. A day lookup still running past it keeps going and can
         // still draw its pins on a writing screen that is open; the sweep just stops waiting.
-        await untilDeadline(Promise.allSettled(pendingCoordLookups), placingDeadline);
+        // With every mirror already found down, neither the stream's lookups still out nor a sweep
+        // can place anything, and waiting on them was the whole 45s: the plan goes out on what the
+        // stream did place.
+        const down = overpassUnreachable();
+        if (!down) await untilDeadline(Promise.allSettled(pendingCoordLookups), placingDeadline);
         const allStops = itinerary.days.flatMap((d) => d.stops);
         // Only the names the stream never resolved. On a streaming run this is usually empty or
         // near it, so the stage that used to be a ~25s whole-trip Overpass call becomes a sweep
@@ -622,7 +645,7 @@ export async function runGeneration(
         const unresolved = allStops
           .map((s) => s.name.trim())
           .filter((name) => !(name in streamedCoords));
-        const resolved = unresolved.length
+        const resolved = unresolved.length && !down
           ? await resolveNamedPlaceCoords(unresolved, geoPoint, undefined, placingDeadline)
           : {};
         const all = { ...streamedCoords, ...resolved };
@@ -831,6 +854,7 @@ export async function runGeneration(
     // `applyResolvedCoords`, the same way the streaming branch restores them — so nothing that
     // used to get an OSM position loses one.
     await placeStops();
+    await lookUpPlaceFacts();
     await computeTravelFindings();
     const revision = await runCritique();
     if (revision) {
@@ -843,12 +867,26 @@ export async function runGeneration(
 
   // Streaming caller: finish the plan the traveller is watching, hand it over, and only then
   // spend the ~150s critique costs. This is the halving — interactive at ~160s rather than ~310s.
+  // No listing facts yet, so this attaches the forecast and nothing else.
   finalizeDays(itinerary.days);
   await placeStops();
   live.onPlan({ itinerary, traceId, runId, sessionId });
 
-  // After the hand-over, as its own comment always said: critique is its only reader, so routing
-  // every leg (up to OSRM's 15s batch budget) is time the traveller need not wait for.
+  // After the hand-over: the listings become notes and pinned costs on a copy, never on the days
+  // just handed over (the route may still be serialising those), and they land the way a critique
+  // revision does, so a traveller's edit made in the meantime wins and a client that has gone still
+  // finds them on the draft. Skipped when they would change nothing, which is every run Overpass
+  // cannot answer.
+  await lookUpPlaceFacts();
+  const enriched = structuredClone(itinerary.days);
+  finalizeDays(enriched);
+  if (JSON.stringify(enriched) !== JSON.stringify(itinerary.days)) {
+    itinerary.days = enriched;
+    live.onRevised({ days: enriched, issues: [] });
+  }
+
+  // As its own comment always said: critique is its only reader, so routing every leg (up to
+  // OSRM's 15s batch budget) is time the traveller need not wait for.
   await computeTravelFindings();
   const revision = await runCritique();
   if (revision) {
