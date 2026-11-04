@@ -341,6 +341,9 @@ async function handle(
           let tripId: string | null = null;
           try {
             if (planned) tripId = applyRevisionIfUnedited(planned.runId, planned.days, revision.days);
+            // The listing facts land this way before the critique does, so once they are on the
+            // row they are the plan the critique's own write has to find still unedited.
+            if (planned && tripId) planned = { runId: planned.runId, days: structuredClone(revision.days) };
           } catch (err) {
             console.error("[itinerary] revision write failed", err);
           }
