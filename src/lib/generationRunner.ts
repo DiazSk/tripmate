@@ -15,6 +15,7 @@ import {
 import type { DietaryVenue } from "./dietaryVenues";
 import { type LegMinutesLookup, evaluateItinerary, revisionIsNoWorse } from "./guardrails";
 import { routeMinutes, routePairs } from "./osrmRoute";
+import { overpassUnreachable } from "./overpass";
 import type { PlaceFacts } from "./placeFacts";
 import {
   annotateBookAhead,
@@ -509,7 +510,8 @@ export async function runGeneration(
         .filter((name) => coordsByName.has(name))
         .map((name) => ({ name, ...coordsByName.get(name)! }))
         .map(({ name, lat, lng }) => ({ name, lat, lon: lng }));
-      const tagsByName = await fetchPoiOsmTags(toFetch, undefined, factsDeadline);
+      // `null` is the same "could not ask" as a refusal, without spending the budget to learn it.
+      const tagsByName = overpassUnreachable() ? null : await fetchPoiOsmTags(toFetch, undefined, factsDeadline);
       if (tagsByName) {
         for (const { name } of toFetch) {
           const facts = buildPlaceFacts(tagsByName[name]);
@@ -630,7 +632,11 @@ export async function runGeneration(
         // swallows its own failure, and one that somehow rejects must not skip the sweep.
         // …but no later than the deadline. A day lookup still running past it keeps going and can
         // still draw its pins on a writing screen that is open; the sweep just stops waiting.
-        await untilDeadline(Promise.allSettled(pendingCoordLookups), placingDeadline);
+        // With every mirror already found down, neither the stream's lookups still out nor a sweep
+        // can place anything, and waiting on them was the whole 45s: the plan goes out on what the
+        // stream did place.
+        const down = overpassUnreachable();
+        if (!down) await untilDeadline(Promise.allSettled(pendingCoordLookups), placingDeadline);
         const allStops = itinerary.days.flatMap((d) => d.stops);
         // Only the names the stream never resolved. On a streaming run this is usually empty or
         // near it, so the stage that used to be a ~25s whole-trip Overpass call becomes a sweep
@@ -639,7 +645,7 @@ export async function runGeneration(
         const unresolved = allStops
           .map((s) => s.name.trim())
           .filter((name) => !(name in streamedCoords));
-        const resolved = unresolved.length
+        const resolved = unresolved.length && !down
           ? await resolveNamedPlaceCoords(unresolved, geoPoint, undefined, placingDeadline)
           : {};
         const all = { ...streamedCoords, ...resolved };

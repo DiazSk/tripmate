@@ -13,8 +13,9 @@ export type RunStatus = { status: 'ready'; tripId: string } | { status: 'writing
 
 export type RecoveryStep = { action: 'open'; tripId: string } | { action: 'fail'; message: string } | { action: 'wait' };
 
-/** Longer than any plan takes: writing runs 60-300s and the review ~30s more. Past this, stop. */
-export const RECOVERY_GIVE_UP_MS = 8 * 60_000;
+/** Longer than any plan takes to reach `ready`: the server's own generate cap (`itineraryTimeoutMs`,
+ *  up to 480s) plus setup and up to 45s placing. The review runs after `ready`. Past this, stop. */
+export const RECOVERY_GIVE_UP_MS = 10 * 60_000;
 
 const FAILED = "The planner didn't finish this plan. Try generating again.";
 const TOO_LONG = 'This plan is taking far longer than any plan should. Try generating again.';

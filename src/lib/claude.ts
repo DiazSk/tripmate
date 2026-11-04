@@ -193,7 +193,7 @@ function resolveCliBin(pathEnv: string): string {
 }
 
 const BASE_TIMEOUT_MS = 300_000;
-const PER_DAY_TIMEOUT_MS = 2_000;
+const PER_DAY_TIMEOUT_MS = 15_000;
 const MAX_TIMEOUT_MS = 480_000;
 
 /**
@@ -222,13 +222,21 @@ const MAX_TIMEOUT_MS = 480_000;
  * again. Raising the cap is also the instrument: at 218s every slow call was censored, so the
  * tail could never be learned. At 300s a 240s call gets recorded instead of clipped.
  *
- * The per-day term stays at 2s/day and is not load-bearing. Prompt size correlates with duration
- * at r = 0.27 across this era's 7.5k-9.2k range, and that figure is itself unstable — it read
- * 0.09 twenty rows ago and 0.13 before that, which is what noise looks like. (The r = 0.77 you
- * get over the full table is era confounding: the old corpus was both shorter and faster, for
- * unrelated reasons.) Every trip measured is 3-8 days; the term is retained as a knob for the
- * 30-day itinerary nobody has run, which genuinely does emit several times more JSON, not because
- * the data asks for it. Raising it would be inventing a slope — that is how it got to 12s/day.
+ * **The per-day term is 15s, measured rather than invented (2026-11-03).** It was 2s, on the grounds
+ * that prompt size barely predicts duration — still true (10.5k-15k chars, no visible slope). The
+ * slope is in the *output*: the envelope's `ttft_ms` and thinking-token count split each call into
+ * thinking and writing, across 72 generate traces from this era (69 ok, 3 killed):
+ *
+ *     thinking  1.6k-16.2k tokens at ~55-60 tok/s -> first word at 28-264s, no link to trip length
+ *     writing   3.2k-4.6k tokens for 3-4 days, 6.5k-9.2k for 7, at 70-130 tok/s -> 30-120s
+ *
+ * So writing grows ~1.2k tokens a day, ~15s a day at the slowest measured rate, and thinking is a
+ * per-call spike the CLI cannot cap (`MAX_THINKING_TOKENS` is a soft target: asked for 4,096, a run
+ * used 10,471). At 2s/day a 4-day trip had 308s and one succeeded at 304.5s; all three kills were
+ * 4-day plans on the heaviest prompts (14-15k chars), one still thinking at 308s with no stop
+ * written. 15s/day gives that trip 360s and a 7-day trip 405s: room for the worst thinking measured
+ * plus the writing its length needs, still bounded by MAX_TIMEOUT_MS. The phone's lost-stream give-up
+ * (`RECOVERY_GIVE_UP_MS`) has to outlast this plus setup and placing; it moved with it.
  *
  * Re-derive rather than nudging, and note both things the old query here got wrong: it filtered
  * `status='ok'` (dropping exactly the rows that prove a tail exists) and it pooled the eras.

@@ -18,8 +18,10 @@ import test from "node:test";
 
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs } from "./claude.ts";
 
-/** Slowest `type='generate'` call that ever returned successfully (a 6-day trip). */
-const OBSERVED_MAX_OK_GENERATE_MS = 220_813;
+/** Slowest `type='generate'` call of the current prompt era (10.5k-15k chars) that returned
+ *  successfully: a 4-day trip, 2026-11-03. Two August calls on 30k-char prompts ran longer and
+ *  describe a prompt that no longer exists. */
+const OBSERVED_MAX_OK_GENERATE_MS = 304_547;
 /** Slowest `type='critique'` call that ever returned successfully — it cleared the old cap by 201ms. */
 const OBSERVED_MAX_OK_CRITIQUE_MS = 149_799;
 
@@ -37,11 +39,12 @@ test("the critique budget outlasts the slowest critique on record", () => {
   );
 });
 
-test("critique is not given less room than generate", () => {
-  // Critique reasons over a whole generated itinerary on prompts roughly twice the size, and it
-  // runs on the traveller's critical path. Budgeting it below generate would assert it is the
-  // cheaper call; every measurement says otherwise.
-  assert.ok(CRITIQUE_TIMEOUT_MS >= itineraryTimeoutMs(1) - 2_000);
+test("critique is not given less room than generate's base", () => {
+  // Critique reasons over a whole generated itinerary on prompts roughly twice the size. Its
+  // budget is flat, generate's grows with the writing a longer trip needs (critique runs after the
+  // hand-over on the streaming path, so its length is not what a traveller waits for). What must
+  // hold is that it is not treated as the cheaper call: no less than generate's own thinking room.
+  assert.ok(CRITIQUE_TIMEOUT_MS >= itineraryTimeoutMs(0));
 });
 
 test("the budget never shrinks as a trip gets longer", () => {
