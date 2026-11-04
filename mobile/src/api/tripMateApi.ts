@@ -43,6 +43,7 @@ import type {
 import type { IdeaRead } from "@shared/ideaRead";
 import type { MeriAnswer } from "@shared/meriAnswer";
 import type { ReadyTrip } from "@shared/readyTrips";
+import { storyCacheKey } from "@shared/storyScript";
 import type { RawFetch } from "@shared/types";
 
 export async function listTrips(status: TripStatus = "saved"): Promise<TripSummary[] | undefined> {
@@ -784,14 +785,29 @@ export async function arrivalPoints(lat: number, lng: number): Promise<ArrivalPo
  * (`fallbackScript`). The route already answers model failures with its own fallback, and caches
  * per owner — `proxy.ts` turns this app's owner header into the cookie `readOwnTrip` reads — so a
  * replayed day costs no model call.
+ *
+ * **The promise is cached, before it settles,** so a ▶ pressed while the trip screen's warm is
+ * still writing joins that call instead of starting a second model call (the web's `loadScript`
+ * does the same). A failure evicts its entry so the next press can try again.
  */
-export async function storyScript(params: {
-  destination: string;
-  day: DayPlan;
-  dayIndex: number;
-  dayCount: number;
-  tripId: string;
-}): Promise<StoryScript | undefined> {
+export function storyScript(params: StoryParams): Promise<StoryScript | undefined> {
+  const key = `${params.tripId}|${storyCacheKey(params)}`;
+  const hit = storyRequests.get(key);
+  if (hit) return hit;
+  const pending = fetchStoryScript(params);
+  storyRequests.set(key, pending);
+  void pending.then((script) => {
+    if (!script && storyRequests.get(key) === pending) storyRequests.delete(key);
+  });
+  return pending;
+}
+
+type StoryParams = { destination: string; day: DayPlan; dayIndex: number; dayCount: number; tripId: string };
+
+// ponytail: never pruned; one entry per day played or warmed this session, each a few KB.
+const storyRequests = new Map<string, Promise<StoryScript | undefined>>();
+
+async function fetchStoryScript(params: StoryParams): Promise<StoryScript | undefined> {
   try {
     const res = await fetchWithSession("/api/trip-story", {
       method: "POST",

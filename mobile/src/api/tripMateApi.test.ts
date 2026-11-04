@@ -1,6 +1,6 @@
 import { fetchWithSession } from "./session";
 import type { TravelerProfile } from "./types";
-import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip, getReadyTrips, readIdea, completePlan } from "./tripMateApi";
+import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip, getReadyTrips, readIdea, completePlan, storyScript } from "./tripMateApi";
 
 // Reads as though it runs too late, and does not: babel-jest hoists every `jest.mock` above the
 // imports, so the mock is registered before `tripMateApi` resolves `./session`.
@@ -357,4 +357,23 @@ test("completePlan puts a caller's sentence in place of the server's for that st
   expect(await completePlan(body, { 422: "Try again later." })).toBe("Try again later.");
   mockedFetch.mockResolvedValue(new Response(JSON.stringify({ error: "Check where it is." }), { status: 422 }));
   expect(await completePlan(body)).toBe("Check where it is.");
+});
+
+test("storyScript shares one request for the same day, and a failure lets the next press retry", async () => {
+  const day = { dayNumber: 1, stops: [{ name: "Alfama", lat: 38.71, lng: -9.13 }] } as never;
+  const params = { destination: "Lisbon", day, dayIndex: 0, dayCount: 2, tripId: "t-warm" };
+  const script = { beats: [{ kind: "open", text: "Lisbon wakes slowly." }] };
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ script }), { status: 200 }));
+
+  // A warm and a ▶ landing while it is still in flight: one model call between them.
+  const [warm, play] = await Promise.all([storyScript(params), storyScript(params)]);
+  expect(warm).toEqual(script);
+  expect(play).toBe(warm);
+  expect(mockedFetch).toHaveBeenCalledTimes(1);
+
+  const other = { ...params, tripId: "t-fail" };
+  mockedFetch.mockResolvedValueOnce(new Response("", { status: 429 }));
+  expect(await storyScript(other)).toBeUndefined();
+  mockedFetch.mockResolvedValueOnce(new Response(JSON.stringify({ script }), { status: 200 }));
+  expect(await storyScript(other)).toEqual(script);
 });
