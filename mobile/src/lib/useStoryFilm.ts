@@ -13,6 +13,10 @@ import { filmReducer, filmStopFor, initialFilm, type FilmState } from '@/lib/sto
 
 import { filmNowPlaying } from '../../modules/film-now-playing';
 
+/** The web's `WARM_DWELL_MS`: long enough to sit out a swipe along the days, short enough that
+ *  reading the day's first stop has already bought the ▶. */
+const WARM_DWELL_MS = 1200;
+
 type Place = { beat: number; sentence: number; words: number };
 
 /** The film as the Now Playing player shows it, from where the voice is and the latest artwork. */
@@ -109,6 +113,18 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
       filmAudio(false);
     };
   }, [active, dayIndex]);
+
+  // Warm the day on screen so ▶ starts a film instead of a wait: after `WARM_DWELL_MS` on one day,
+  // so swiping along a week writes only the day landed on. `storyScript` shares the promise, so
+  // a ▶ mid-warm joins it.
+  useEffect(() => {
+    const day = trip.itinerary.days[dayIndex];
+    if (active || !trip.id || !day?.stops.length) return;
+    const timer = setTimeout(() => {
+      void storyScript({ destination: trip.destination, day, dayIndex, dayCount: trip.itinerary.days.length, tripId: trip.id });
+    }, WARM_DWELL_MS);
+    return () => clearTimeout(timer);
+  }, [active, trip, dayIndex]);
 
   const beat = script && state.phase !== 'loading' ? script.beats[state.beat] : undefined;
 
