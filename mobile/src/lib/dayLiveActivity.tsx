@@ -30,7 +30,8 @@ import { placePhotoFor } from '@/api/placePhotos';
 import type { Trip } from '@/api/types';
 import { dayActivityProps, type DayActivityProps } from '@/lib/dayActivity';
 import { savePhoto } from '@/lib/planLiveActivity';
-import { nowInZone } from '@/lib/tripClock';
+import { tripClockNow } from '@/lib/tripClock';
+import { dayIndexFor } from '@/lib/tripPhase';
 
 /**
  * A trip day in the Dynamic Island and on the Lock Screen — the canvas design "Live Activity · 1 Day
@@ -254,21 +255,29 @@ export function useDayLiveActivity(input: { trip: Trip; dayIndex: number } | nul
 
   useEffect(() => {
     if (!dayLiveActivity || !day || !trip) return;
-    const nowMinutes = nowInZone(trip.timezone);
-    if (nowMinutes === null) return;
+    // The same rule as Home's widgets: the previous day runs on past midnight until its last stop
+    // has ended. Re-derived here because this effect ticks on its own, and the `dayIndex` it was
+    // handed is only as fresh as Home's last render.
+    const clockNow = tripClockNow(trip);
+    if (!clockNow) return;
+    const nowMinutes = clockNow.minutes;
     const days = trip.itinerary.days;
-    const tomorrow = days[dayIndex + 1];
+    const index = dayIndexFor(trip, clockNow.today) ?? dayIndex;
+    const stops = days[index]?.stops ?? day.stops ?? [];
+    const tomorrow = days[index + 1];
     const { props, staleAt } = dayActivityProps({
       city: trip.destination.split(',')[0]?.trim() || trip.destination,
-      dayNumber: dayIndex + 1,
+      dayNumber: index + 1,
       dayCount: days.length,
-      stops: day.stops ?? [],
+      stops,
       tomorrow: tomorrow ? (tomorrow.theme ?? tomorrow.stops?.[0]?.name ?? null) : null,
       now: Date.now(),
       nowMinutes,
     });
-    props.face.photo = photos[props.face.stopIndex] ?? null;
-    if (props.next) props.next.photo = photos[props.next.stopIndex] ?? null;
+    // Photographs are fetched for the day Home handed over; another day's stops have none yet.
+    const photoOf = (k: number) => (index === dayIndex ? (photos[k] ?? null) : null);
+    props.face.photo = photoOf(props.face.stopIndex);
+    if (props.next) props.next.photo = photoOf(props.next.stopIndex);
 
     if (!activity.current) {
       const [running, ...extra] = dayLiveActivity.getInstances();

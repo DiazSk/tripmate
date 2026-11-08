@@ -9,7 +9,7 @@ const climate = [{ month: 3, highC: 21, rainDays: 3 }, { month: 7, highC: 33, ra
 
 function fakes(over = {}) {
   const calls = [];
-  const base = { climate: async () => climate, dietPlaces: async () => null, nearby: async () => null, pois: async () => null, venues: async () => null, ...over };
+  const base = { climate: async () => climate, dietPlaces: async () => null, nearby: async () => null, pois: async () => null, venues: async () => null, pages: async () => null, ...over };
   const deps = Object.fromEntries(Object.entries(base).map(([name, fn]) => [name, async (...args) => { calls.push(name); return fn(...args); }]));
   return { calls, deps };
 }
@@ -82,13 +82,54 @@ test("food de-duplicates by name, numbers the places and cites each source once"
   const e = await gatherEvidence({ kind: "food", point, place: "Petra", diet: "Halal", readyTrip: null }, deps);
   assert.deepEqual(e.places.map((p) => [p.id, p.name, p.sourceId]), [["p1", "Al Baik", "osm"], ["p2", "Zad", "osm"], ["p3", "Nile", "yelp"]]);
   assert.deepEqual(e.sources.map((s) => s.id), ["osm", "yelp"]);
-  assert.deepEqual(calls, ["dietPlaces", "venues"]);
+  assert.deepEqual(calls, ["dietPlaces", "venues", "pages"]);
 });
 
 test("food with no diet never asks Yelp", async () => {
   const { deps, calls } = fakes();
   await gatherEvidence({ kind: "food", point, place: "Petra", diet: null, readyTrip: null }, deps);
-  assert.deepEqual(calls, ["dietPlaces"]);
+  assert.deepEqual(calls, ["dietPlaces", "pages"]);
+});
+
+test("food cites web pages by their own link and quotes them as a page's claim, never as places", async () => {
+  const asked = [];
+  const { deps } = fakes({
+    pages: async (q) => {
+      asked.push(q);
+      return [
+        { title: "The 10 Best <strong>Halal</strong> Restaurants in Wadi Musa, a very long headline", description: "Al Qantarah serves <strong>halal</strong> mansaf.", url: "https://www.tripadvisor.com/halal-wadi-musa" },
+        { title: "Plain http page", description: "Skipped.", url: "http://example.com/x" },
+        { title: "No snippet", description: "", url: "https://example.org/y" },
+        { title: "Petra food guide", description: "Halal is the norm in Jordan.", url: "https://jordantraveler.com/food" },
+      ];
+    },
+  });
+  const e = await gatherEvidence({ kind: "food", point, place: "Petra", diet: "Halal", readyTrip: null }, deps);
+  assert.deepEqual(asked, ["Halal restaurants near Petra"]);
+  assert.deepEqual(e.places, []);
+  assert.deepEqual(e.sources, [
+    { id: "web1", label: "The 10 Best Halal Restaurants in Wadi M… (tripadvisor.com)", url: "https://www.tripadvisor.com/halal-wadi-musa" },
+    { id: "web2", label: "Petra food guide (jordantraveler.com)", url: "https://jordantraveler.com/food" },
+  ]);
+  assert.equal(e.facts[0].text, "A web page on tripadvisor.com says: The 10 Best Halal Restaurants in Wadi Musa, a very long headline. Al Qantarah serves halal mansaf.");
+  // A page is a citable source: an answer standing on it alone is checked, one pointing elsewhere is not.
+  const answer = (sources) => parseMeriAnswer(JSON.stringify({ answer: "These pages list halal options.", places: [], months: [], sources, nothing: false }), e);
+  assert.equal(answer(["web2"]).nothingChecked, false);
+  assert.equal(answer(["web9"]).nothingChecked, true);
+});
+
+test("food's web query adds the trip's destination to a stop's bare name, once", async () => {
+  const asked = [];
+  const { deps } = fakes({ pages: async (q) => { asked.push(q); return null; } });
+  await gatherEvidence({ kind: "food", point, place: "Treasury", diet: null, readyTrip: null, region: "Petra, Jordan" }, deps);
+  await gatherEvidence({ kind: "food", point, place: "Petra, Jordan", diet: "Vegan", readyTrip: null, region: "Petra, Jordan" }, deps);
+  assert.deepEqual(asked, ["restaurants near Treasury, Petra, Jordan", "Vegan restaurants near Petra, Jordan"]);
+});
+
+test("food with no Brave key or a failed search adds no pages", async () => {
+  const { deps } = fakes({ pages: async () => null });
+  const e = await gatherEvidence({ kind: "food", point, place: "Petra", diet: null, readyTrip: null }, deps);
+  assert.deepEqual(e, { sources: [], places: [], months: [], facts: [] });
 });
 
 test("see tags places with the provider that answered", async () => {

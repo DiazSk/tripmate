@@ -23,6 +23,7 @@ import { enclosingCircle, pointInPolygon, type LatLng } from "./searchArea";
  */
 
 import { askOverpass } from "./overpass";
+import { categorySelectors } from "./placeQueryTags";
 import { parseWheelchair, parseWikidataId, parseYesNo, tagValue } from "./osmTags";
 
 export interface FoundPlace {
@@ -399,7 +400,10 @@ async function searchOverpass({
   const selectors = chosen.length
     ? chosen.flatMap((c) => OSM_FILTERS[c])
     : Object.values(OSM_FILTERS).flat();
-  const clauses = selectors.map((f) => `nwr${f}${nameFilter}${around};`).join("");
+  // A typed word that names a kind of place ("coffee", "halal food") also matches by tag, in this
+  // same query: those clauses carry no name filter, since the tag *is* the match.
+  const tagClauses = categorySelectors(text).map((f) => `nwr${f}${around};`);
+  const clauses = selectors.map((f) => `nwr${f}${nameFilter}${around};`).concat(tagClauses).join("");
   const body = `[out:json][timeout:20];(${clauses});out center ${MAX_RESULTS * 3};`;
 
   const elements = await askOverpass(body, { timeoutMs: OVERPASS_TIMEOUT_MS, deadline: Date.now() + OVERPASS_SEARCH_DEADLINE_MS });

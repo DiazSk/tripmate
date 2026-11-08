@@ -56,7 +56,7 @@ import { publishTripSheets } from '@/lib/tripSheets';
 import { useStoryFilm } from '@/lib/useStoryFilm';
 import { budgetEach, surenessFields, tripSpend, type Sureness } from '@/lib/spend';
 import { loadTrip } from '@/lib/tripCache';
-import { todayInZone } from '@/lib/tripClock';
+import { tripClockNow } from '@/lib/tripClock';
 import { openingDay } from '@/lib/tripPhase';
 import { todayISO } from '@/lib/tripsWall';
 
@@ -105,7 +105,7 @@ export default function TripDetail() {
    */
   const [chosen, setChosen] = useState<number | null>(null);
   const runningDay = useMemo(
-    () => (trip ? openingDay(trip, todayInZone(trip.timezone) ?? todayISO()) : 0),
+    () => (trip ? openingDay(trip, tripClockNow(trip)?.today ?? todayISO()) : 0),
     [trip]
   );
   const day = chosen ?? (opensOnAsk ? askedDay : runningDay);

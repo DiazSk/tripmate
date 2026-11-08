@@ -16,10 +16,37 @@ interface WebCitation {
   url: string | null;
 }
 
-interface BraveResult {
+export interface BraveResult {
   title: string | null;
   description: string | null;
   url: string | null;
+}
+
+/**
+ * Brave's raw web-search response, or `null` on a missing key or a failed search. Shared by the
+ * festival lookup here and Meri's food pages (`meriEvidence.ts`), so both send the same key the
+ * same way.
+ */
+async function braveSearch(query: string): Promise<unknown | null> {
+  const apiKey = process.env.BRAVE_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const url = new URL(BRAVE_SEARCH_URL);
+    url.searchParams.set("q", query);
+    const res = await fetch(url, {
+      headers: { "X-Subscription-Token": apiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The first `limit` results of a Brave web search, or `null` when the search could not run. */
+export async function braveWebResults(query: string, limit: number): Promise<BraveResult[] | null> {
+  const data = await braveSearch(query);
+  return data === null ? null : distilBraveResults(data, limit);
 }
 
 /** Calendar dates are parsed as UTC midnight in this app — see CLAUDE.md. A month label built
@@ -118,18 +145,9 @@ export async function fetchFestivals(
   startDate: string,
   runId?: string
 ): Promise<Festival[] | null> {
-  const apiKey = process.env.BRAVE_API_KEY;
-  if (!apiKey) return null;
-
   try {
-    const url = new URL(BRAVE_SEARCH_URL);
-    url.searchParams.set("q", `festivals events in ${destination} ${monthYearLabel(startDate)}`);
-    const res = await fetch(url, {
-      headers: { "X-Subscription-Token": apiKey, Accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await braveSearch(`festivals events in ${destination} ${monthYearLabel(startDate)}`);
+    if (data === null) return null;
     if (!hasExtractableContent(data)) return [];
 
     const { text, citations } = buildTextAndCitations(distilBraveResults(data));

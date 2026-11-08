@@ -111,6 +111,12 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
   const fit = scene.elsewhere
     ? ({ "--fit": `calc((100vw - 2 * var(--wd-pad)) / ${monumentEms(scene.elsewhere).toFixed(3)})` } as CSSProperties)
     : undefined;
+  // On a phone the edge tab is fixed over the right of the screen, so the word must also fit between
+  // two tab-wide gutters (the word is centred, so both sides give way). `--fit-sm` is read only by the
+  // phone rule; desktop never sees it, so its sizing is untouched. Every word gets one, the five
+  // by-eye words included: at 26vw "Engadin" ran 7px under the tab.
+  const word = scene.elsewhere ?? dest.word;
+  const fitSm = { "--fit-sm": `calc((100vw - 2 * var(--wd-tab-clear)) / ${monumentEms(word).toFixed(3)})` } as CSSProperties;
   // A named hero place becomes the rotation's own place, so clearing the idea rotates on from it.
   const follow = (i: number) => {
     if (i >= 0) setDestId(DESTS[i].id);
@@ -281,8 +287,8 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           </div>
 
           <div className="tm-monument-wrap" ref={wordRef}>
-            <p className="tm-monument" key={scene.elsewhere ?? dest.id} aria-hidden="true" style={fit}>
-              {scene.elsewhere ?? dest.word}
+            <p className="tm-monument" key={scene.elsewhere ?? dest.id} aria-hidden="true" style={{ ...fit, ...fitSm }}>
+              {word}
             </p>
           </div>
         </section>

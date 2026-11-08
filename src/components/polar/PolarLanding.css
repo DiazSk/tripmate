@@ -52,6 +52,8 @@
 
   --wd-gutter: 0.75em;
   --wd-pad: 1.25em;
+  /* What the phone's edge tab (37px) and a gap take off each side of the monument word. */
+  --wd-tab-clear: 3em;
   --wd-rule: rgba(31, 42, 68, 0.12);
   --wd-gridline: rgba(31, 42, 68, 0.07);
 }
@@ -1102,6 +1104,13 @@
   background: var(--wd-ink);
   color: #fff;
 }
+/* Meri is drawn for dark surfaces: her body is near-white, and on the cream card (and the white sheet
+   behind it) it all but vanishes. An ink ring, the same ink as the sibling way's disc, gives her an
+   edge here without touching how she looks anywhere else. */
+.tm-way-head [data-meri] {
+  box-shadow: 0 0 0 3px var(--wd-ink);
+  margin: 3px;
+}
 .tm-way .tm-body {
   font-size: 0.88em;
   line-height: 1.45;
@@ -1167,7 +1176,7 @@
 /* ── Small screens ── */
 @media (width < 48rem) {
   .tm-monument {
-    font-size: min(26vw, var(--fit, 26vw));
+    font-size: min(26vw, var(--fit, 26vw), var(--fit-sm, 26vw));
   }
   .tm-hide-sm {
     display: none;

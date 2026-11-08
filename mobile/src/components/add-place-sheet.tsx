@@ -1,33 +1,23 @@
-import Constants from 'expo-constants';
-import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  FlatList,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
-  type StyleProp,
-  type ViewStyle,
 } from 'react-native';
-import { Marker, Polyline } from 'react-native-maps';
 import Animated, { FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory, type PlaceSearchResult } from '@/api/types';
-import { BlurView } from '@/components/blur';
-import { MARKER_SKEW_PT } from '@/components/day-map';
-import MapView, { type MapViewRef } from '@/components/map-view';
 import { SignalButton, usePolarFonts } from '@/components/polar-ui';
 import { SheetDone } from '@/components/sheet-done';
 import { SymbolView } from '@/components/symbol';
 import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
-import { MapObjectShadow } from '@/constants/theme';
 import {
   KINDS,
   addPlaceToDay,
@@ -35,7 +25,6 @@ import {
   detourShort,
   foundLine,
   insertionDetour,
-  insertionPath,
   slotLine,
   slotPreview,
   suggestDay,
@@ -44,9 +33,7 @@ import {
   type TimeOfDay,
 } from '@/lib/addPlace';
 import { metresBetween } from '@/lib/anchors';
-import { activeCard } from '@/lib/cardRail';
 import { formatDayChip } from '@/lib/dayDisplay';
-import { drawableStops, regionForStops } from '@/lib/mapRegion';
 import { describeDistance } from '@/lib/savedPlaces';
 import { Text, TextInput } from '@/components/themed-text';
 
@@ -67,24 +54,6 @@ const PROBE_RADIUS_M = 200;
 const GUTTER = PolarSpace.s3;
 /** Both side lanes of the header, so the title between them stays centred. Wide enough for Cancel. */
 const LANE = 92;
-const CARD_GAP = 10;
-/** The search field and the chips float over the top of the map; pins are framed below them. */
-const FLOAT_H = 104;
-/** The place card's map, a strip across the top of it. */
-const STRIP_H = 190;
-
-/**
- * ponytail: the form sheet's height never reaches JS — react-native-screens sizes only the
- * ScrollView, natively — so the results map is sized from the window, and these are the header's
- * and the card tray's heights as drawn at the default text size. Off by a little, the ScrollView
- * absorbs it: a few points of scroll, or of ground under the tray. Measure them if a device shows
- * either.
- */
-const HEADER_H = 64;
-const TRAY_H = 200;
-/** What iOS leaves above a large-detent sheet, below the status bar. */
-const SHEET_TOP_GAP = 10;
-const MAP_MIN = 240;
 
 /** Night's own card fill and rule, a step under `Polar.frost10`. Not tokens because nothing else
  *  draws on the night at these alphas yet. */
@@ -92,6 +61,15 @@ const FROST_06 = 'rgba(255,255,255,0.06)';
 const LINE = 'rgba(255,255,255,0.12)';
 /** "Fits" on a chosen (ice) slot: the route's cyan does not read on white, so its dark green. */
 const FITS_ON_ICE = '#1D6B3A';
+
+/** The loading rows' bones, title then line, narrowing down the list so four rows read as a list
+ *  rather than one row stamped four times. Literals because a percentage width is a typed string. */
+const BONES = [
+  ['62%', '70%'],
+  ['55%', '66%'],
+  ['48%', '62%'],
+  ['41%', '58%'],
+] as const;
 
 type Answer = {
   asked: string;
@@ -101,8 +79,14 @@ type Answer = {
 };
 
 /**
- * Find a place and put it in a day — Variant B, "Map", of the canvas design: the search drawn over
- * a map of what it found, the results as a rail of cards under it, one pin per card.
+ * Find a place and put it in a day — the canvas design "Phone · Add a place — combo": Variant C's
+ * header (the stop being asked about as a ticket, then the search and the chips), Variant A's ruled
+ * list of what was found, and Variant B's place card without its map.
+ *
+ * **No map, on purpose.** B drew the answer as numbered pins over a map and the place card opened on
+ * a strip of one. The list answers "which of these, and what does it cost my day" in a column a
+ * thumb can scan, and the stop card already says whose neighbourhood it is; the map was a second
+ * answer to the same question, two MapViews' worth of tiles and markers behind a form sheet.
  *
  * **Two questions, and the app answers both before asking.** Which day a place belongs to is
  * geometry — distance to each day's centroid, normalised by that day's own radius — and what
@@ -147,11 +131,10 @@ export function AddPlaceSheet({
   const fonts = usePolarFonts();
   const reduced = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
 
   // No category when asking about a stop's surroundings: "what else is here" is a question about
   // every kind of place at once, and the route reads an absent category as the union of all of
-  // them. The chips stay on the map either way — they are how you narrow a busy corner to cafes.
+  // them. The chips stay either way — they are how you narrow a busy corner to cafes.
   const [category, setCategory] = useState<PlaceCategory | null>(at ? null : 'cafe');
   const [query, setQuery] = useState('');
   // An empty stop's way out: its block had nothing, so ask the whole day's neighbourhood instead.
@@ -177,8 +160,11 @@ export function AddPlaceSheet({
    */
   const asked = `${wide ? 'day' : ''}|${category ?? ''}|${query.trim()}|${attempt}`;
   const [answer, setAnswer] = useState<Answer | null>(null);
-  // Which card the rail rests on, stored with the answer it indexes so a new answer starts at 1.
-  const [focus, setFocus] = useState({ asked: '', index: 0 });
+  // Where the list was scrolled when a place was opened, stored with the answer it measures so Back
+  // lands on the row that was opened, and a new answer starts at its top.
+  // Raw offsets as the ScrollView reports them; null until the list has been scrolled at all.
+  const [back, setBack] = useState<{ asked: string; y: number | null }>({ asked: '', y: null });
+  const listY = useRef<number | null>(null);
 
   // Primitives, never the `centre` object: the parent builds it inline, so a new identity every
   // render would restart the debounce on every render and never actually search.
@@ -215,11 +201,6 @@ export function AddPlaceSheet({
 
   const searching = answer?.asked !== asked;
   const places = !searching && answer ? answer.places : NO_PLACES;
-  const focusIndex = focus.asked === asked ? focus.index : 0;
-  const rail = useRef<FlatList<FoundPlace>>(null);
-  // Set while a pin's press scrolls the rail: the animation passes over every card between, and
-  // each would otherwise take the focus on its way past and flick the pin back.
-  const pinning = useRef(false);
   const failKey = `${asked}#${chosen?.id ?? ''}`;
   const failed = failedAt === failKey;
 
@@ -231,16 +212,19 @@ export function AddPlaceSheet({
     AccessibilityInfo.announceForAccessibility(foundLine(answer.available, answer.places.length));
   }, [answer, asked]);
 
-  const cardWidth = Math.round(width * 0.82);
-  const step = cardWidth + CARD_GAP;
-  const mapHeight = Math.max(
-    MAP_MIN,
-    Math.round(height - Constants.statusBarHeight - SHEET_TOP_GAP - HEADER_H - TRAY_H - insets.bottom),
-  );
   const near = probe?.name ?? `Day ${dayIndex + 1}`;
   const title = wide ? `Around Day ${dayIndex + 1}` : at ? `Near ${at.name}` : 'Add a stop';
+  const within = `places within ${describeDistance(radius)}`;
+  const chip = formatDayChip(itinerary.days[dayIndex]?.date ?? '');
+  // The stop's own clock time, found in the day it came from: the route's params carry only where
+  // it is and what it is called. Matched on the exact coordinates, which survive the trip through
+  // the URL unchanged (a number's string form round-trips); no match, and the ticket has no time.
+  const probeTime = probe
+    ? itinerary.days[dayIndex]?.stops.find((stop) => stop.lat === probe.lat && stop.lng === probe.lng)?.time
+    : undefined;
 
   function open(place: FoundPlace) {
+    setBack({ asked, y: listY.current });
     // The day being read wins; geometry only answers when there is no day in context. Here there
     // always is one, so the suggestion is a fallback rather than the rule.
     setDay(dayIndex ?? suggestDay(itinerary, place) ?? 0);
@@ -258,22 +242,33 @@ export function AddPlaceSheet({
     else setFailedAt(key);
   }
 
-  function pin(index: number) {
-    setFocus({ asked, index });
-    // Cleared by the scroll's end, or by a finger taking the rail over. An unanimated jump fires
-    // no end event, so it never sets the flag.
-    pinning.current = !reduced;
-    rail.current?.scrollToOffset({ offset: index * step, animated: !reduced });
-  }
+  // The one ScrollView's position, kept by hand because it is never remounted (see the return).
+  // A place's card opens at its top; Back puts the list where it was left, if it is still the same
+  // answer. After the commit, so the list being returned to is laid out before it is scrolled.
+  //
+  // **Its top is not y 0.** The form sheet insets the content below the header, so resting at the
+  // top is `-inset`, and `scrollTo({ y: 0 })` parks the content under "‹ Results" and Cancel,
+  // taking their taps. The inset is read off the scroll events; before any, nothing has moved
+  // and the view still rests at its own top, so there is nothing to do.
+  const scroller = useRef<ScrollView>(null);
+  const insetTop = useRef<number | null>(null);
+  useEffect(() => {
+    const top = insetTop.current;
+    if (top === null) return;
+    const y = !chosen && back.asked === asked && back.y !== null ? back.y : -top;
+    scroller.current?.scrollTo({ y, animated: false });
+    // `asked` and `back` are read, not watched: only opening and leaving a card moves the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen]);
 
   let body: ReactNode;
   if (!origin) {
     body = (
-      <ScrollView key="nowhere" contentContainerStyle={styles.nowhere}>
+      <View style={styles.nowhere}>
         <Text maxFontSizeMultiplier={1.6} style={styles.muted}>
           This day has nowhere to search around yet.
         </Text>
-      </ScrollView>
+      </View>
     );
   } else if (chosen) {
     body = (
@@ -291,54 +286,48 @@ export function AddPlaceSheet({
         onAdd={() => add(chosen, day, slot)}
         fonts={fonts}
         reduced={reduced}
-        bottom={insets.bottom}
       />
     );
   } else {
     body = (
-      <ScrollView
-        key="results"
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets
-        contentContainerStyle={{ paddingBottom: insets.bottom }}>
-        <View style={{ height: mapHeight }}>
-          <ResultsMap
-            originLat={origin.lat}
-            originLng={origin.lng}
-            probe={probe}
-            stops={itinerary.days[dayIndex]?.stops ?? []}
-            // The last answer's pins stay up while the next is asked, untouchable and unfocused, so
-            // the camera moves once per answer rather than to the middle and back each keystroke.
-            places={answer?.places ?? NO_PLACES}
-            focusIndex={searching ? -1 : focusIndex}
-            onPin={searching ? undefined : pin}
-            reduced={reduced}
+      <>
+        {/* The header's second half — the stop, the search, the chips — inside the ScrollView,
+            because the form sheet allows the body one child (see below). It scrolls away with a
+            long list, which is what a long list wants. */}
+        <View style={styles.head}>
+          <Ticket
+            time={probeTime}
+            name={probe ? probe.name : wide ? title : `Day ${dayIndex + 1}`}
+            sub={
+              probe
+                ? `${dayLabel(itinerary, dayIndex)} · ${within}`
+                : [chip ? `${chip.weekday} ${chip.dayOfMonth}` : '', within].filter(Boolean).join(' · ')
+            }
+            tag={probe ? 'Nearby' : null}
+            fonts={fonts}
           />
-          <View style={styles.float} pointerEvents="box-none">
-            <SearchField query={query} onQuery={setQuery} />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={styles.chipRow}
-              contentContainerStyle={styles.chips}>
-              <Chip label="All nearby" on={category === null} onPress={() => setCategory(null)} />
-              {PLACE_CATEGORIES.map((kind) => (
-                <Chip
-                  key={kind}
-                  label={LABELS[kind]}
-                  on={category === kind}
-                  onPress={() => setCategory(category === kind ? null : kind)}
-                />
-              ))}
-            </ScrollView>
-          </View>
+          <SearchField query={query} onQuery={setQuery} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            style={styles.chipRow}
+            contentContainerStyle={styles.chips}>
+            <Chip label="All nearby" on={category === null} onPress={() => setCategory(null)} />
+            {PLACE_CATEGORIES.map((kind) => (
+              <Chip
+                key={kind}
+                label={LABELS[kind]}
+                on={category === kind}
+                onPress={() => setCategory(category === kind ? null : kind)}
+              />
+            ))}
+          </ScrollView>
         </View>
 
-        <View style={styles.tray}>
+        <View style={styles.body}>
           {searching ? (
-            <Searching line={searchingLine(category, query, near)} width={cardWidth} reduced={reduced} />
+            <Searching line={searchingLine(category, query, near)} reduced={reduced} />
           ) : !answer?.available ? (
             <Nothing
               title="Couldn’t reach search"
@@ -360,66 +349,27 @@ export function AddPlaceSheet({
               fonts={fonts}
             />
           ) : (
-            <>
-              <Animated.View entering={reduced ? undefined : FadeIn.duration(220)}>
-                <FlatList
-                  ref={rail}
-                  // A new answer is a new rail, starting at its first card like the focus does.
-                  key={asked}
-                  data={places}
-                  horizontal
-                  keyExtractor={(place) => place.id}
-                  showsHorizontalScrollIndicator={false}
-                  snapToInterval={step}
-                  decelerationRate="fast"
-                  disableIntervalMomentum
-                  contentContainerStyle={styles.rail}
-                  getItemLayout={(_, index) => ({ length: step, offset: step * index, index })}
-                  // Back from a place's card, the rail opens on the card that was opened.
-                  initialScrollIndex={Math.min(focusIndex, places.length - 1)}
-                  scrollEventThrottle={32}
-                  onScroll={(event) => {
-                    if (pinning.current) return;
-                    const index = activeCard(event.nativeEvent.contentOffset.x, step, places.length);
-                    if (index !== focusIndex) setFocus({ asked, index });
-                  }}
-                  onScrollBeginDrag={() => {
-                    pinning.current = false;
-                  }}
-                  onMomentumScrollEnd={() => {
-                    pinning.current = false;
-                  }}
-                  renderItem={({ item, index }) => (
-                    <Card
-                      place={item}
-                      index={index}
-                      on={index === focusIndex}
-                      width={cardWidth}
-                      itinerary={itinerary}
-                      dayIndex={dayIndex}
-                      distanceFrom={probe}
-                      busy={adding === item.id}
-                      disabled={adding !== null}
-                      onOpen={() => {
-                        setFocus({ asked, index });
-                        open(item);
-                      }}
-                      onAdd={() => add(item, dayIndex, suggestTimeOfDay(item))}
-                    />
-                  )}
-                />
-              </Animated.View>
-              {failed ? <Failure /> : null}
-              <View style={styles.under}>
-                <Text maxFontSizeMultiplier={1.6} style={styles.count}>
-                  {`${focusIndex + 1} of ${places.length}`}
+            <Animated.View entering={reduced ? undefined : FadeIn.duration(220)}>
+              <View style={styles.countRow}>
+                <Text maxFontSizeMultiplier={1.4} style={[styles.count, styles.grow]}>
+                  {`${places.length} ${places.length === 1 ? 'place' : 'places'} ${probe ? 'within a short walk' : 'nearby'}`}
                 </Text>
-                {answer?.provider === 'apple' ? <SourceNote /> : null}
+                {/* "detour", not the canvas's "walk it adds": a hop too far to walk is costed by
+                    tram, and each row already says "adds" (see `detourShort`). */}
+                <Text maxFontSizeMultiplier={1.4} style={styles.count}>
+                  Time · detour
+                </Text>
               </View>
-            </>
+              <View style={styles.list}>
+                {places.map((place) => (
+                  <Row key={place.id} place={place} itinerary={itinerary} dayIndex={dayIndex} onOpen={() => open(place)} />
+                ))}
+              </View>
+              {answer?.provider === 'apple' ? <SourceNote /> : null}
+            </Animated.View>
           )}
         </View>
-      </ScrollView>
+      </>
     );
   }
 
@@ -429,11 +379,20 @@ export function AddPlaceSheet({
           shape react-native-screens' form sheet sizes to the detent (`RNSScreenContentWrapper`
           coerces a ScrollView at index 0 or 1 and gives up past two siblings). A wrapping View,
           or a header flattened into its Text and Pressable, left the ScrollView at the sheet's
-          top, over the title and over Done. So every view the body has — the map, the cards, a
-          place's card — lives inside that one ScrollView. */}
+          top, over the title and over Done. So every view the body has — the stop card, the
+          search, the list, a place's card — lives inside that one ScrollView.
+
+          And it is the *same* ScrollView for all of them, never remounted: the wrapper places the
+          one it found when the sheet opened, so a card that brought its own ScrollView started at
+          the sheet's top, over the header, and took "‹ Results" and Cancel's taps (hidden while
+          the card opened on a map strip; plain once the strip went). Hence the one `ref` and the
+          hand-kept scroll position above. */}
       <Header
-        title={title}
-        sub={chosen ? `Adding to ${dayLabel(itinerary, day)}` : `Adding to ${dayLabel(itinerary, dayIndex)}`}
+        // The results' stop card says whose neighbourhood this is, so their bar only names the task.
+        title={chosen || !origin ? title : 'Add a place'}
+        sub={chosen ? `Adding to ${dayLabel(itinerary, day)}` : origin ? null : `Adding to ${dayLabel(itinerary, dayIndex)}`}
+        // The results rule their header under the chips instead, so bar, stop and search read as one.
+        ruled={!!chosen || !origin}
         onBack={
           chosen
             ? () => {
@@ -443,7 +402,20 @@ export function AddPlaceSheet({
         }
         onCancel={onClose}
       />
-      {body}
+      <ScrollView
+        ref={scroller}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          insetTop.current = event.nativeEvent.contentInset.top;
+          // Only the list's position is worth coming back to.
+          if (!chosen) listY.current = event.nativeEvent.contentOffset.y;
+        }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + PolarSpace.s5 }}>
+        {body}
+      </ScrollView>
     </>
   );
 }
@@ -463,11 +435,13 @@ const NO_PLACES: FoundPlace[] = [];
 function Header({
   title,
   sub,
+  ruled,
   onBack,
   onCancel,
 }: {
   title: string;
-  sub: string;
+  sub: string | null;
+  ruled: boolean;
   onBack: (() => void) | null;
   onCancel: () => void;
 }) {
@@ -475,7 +449,7 @@ function Header({
   // would take the whole row and leave the title no lane at all.
   const lane = { maxWidth: useWindowDimensions().width * 0.4 };
   return (
-    <View collapsable={false} style={styles.bar}>
+    <View collapsable={false} style={[styles.bar, ruled && styles.barRuled]}>
       <View style={[styles.lane, lane]}>
         {onBack ? (
           <Pressable
@@ -495,9 +469,11 @@ function Header({
         <Text maxFontSizeMultiplier={1.3} numberOfLines={1} accessibilityRole="header" style={styles.title}>
           {title}
         </Text>
-        <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.sub}>
-          {sub}
-        </Text>
+        {sub ? (
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.sub}>
+            {sub}
+          </Text>
+        ) : null}
       </View>
       <View style={[styles.lane, styles.laneEnd, lane]}>
         <SheetDone onPress={onCancel} label="Cancel" />
@@ -506,31 +482,64 @@ function Header({
   );
 }
 
-/** Night glass over the map: Liquid Glass where the system has it, the chrome blur where not. */
-function Glass({ style, children }: { style: StyleProp<ViewStyle>; children: ReactNode }) {
-  return isLiquidGlassAvailable() ? (
-    <GlassView glassEffectStyle="regular" colorScheme="dark" style={style}>
-      {children}
-    </GlassView>
-  ) : (
-    <BlurView intensity={60} tint="systemChromeMaterialDark" style={style}>
-      {children}
-    </BlurView>
+/**
+ * The stop being asked about, as a ticket: its time, its name, the day, how far "near" reaches.
+ * Signal down its left edge, the way a chosen stop is marked on the day. A label, not a control —
+ * one accessible element, read as the sentence it is.
+ */
+function Ticket({
+  time,
+  name,
+  sub,
+  tag,
+  fonts,
+}: {
+  time: string | undefined;
+  name: string;
+  sub: string;
+  tag: string | null;
+  fonts: boolean;
+}) {
+  return (
+    <View style={styles.ticket} accessible accessibilityLabel={[time, name, sub].filter(Boolean).join(', ')}>
+      {time ? (
+        <Text maxFontSizeMultiplier={1.4} style={styles.ticketTime}>
+          {time}
+        </Text>
+      ) : null}
+      <View style={styles.grow}>
+        <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.ticketName, fonts && styles.condFont]}>
+          {name}
+        </Text>
+        <Text maxFontSizeMultiplier={1.4} style={styles.ticketSub}>
+          {sub}
+        </Text>
+      </View>
+      {tag ? (
+        <Text maxFontSizeMultiplier={1.3} style={[styles.ticketTag, fonts && styles.italicFont]}>
+          {tag}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
 /**
- * A search field as iOS draws one — magnifier, placeholder from the left, clear button — on glass
- * over the map. The clear button is drawn here rather than by `clearButtonMode`, which is iOS-only
- * and only while editing; a query left in the field after the keyboard goes is still worth clearing.
+ * A search field as iOS draws one — magnifier, placeholder from the left, clear button. The clear
+ * button is drawn here rather than by `clearButtonMode`, which is iOS-only and only while editing;
+ * a query left in the field after the keyboard goes is still worth clearing. Its rule turns signal
+ * while the field has the keyboard, the one cue that typing goes here.
  */
 function SearchField({ query, onQuery }: { query: string; onQuery: (q: string) => void }) {
+  const [focused, setFocused] = useState(false);
   return (
-    <Glass style={styles.search}>
+    <View style={[styles.search, focused && styles.searchFocused]}>
       <SymbolView name="magnifyingglass" tintColor={Polar.nightText2} size={16} />
       <TextInput
         value={query}
         onChangeText={onQuery}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         placeholder="Search by name"
         placeholderTextColor={Polar.nightText2}
         selectionColor={Polar.signal}
@@ -546,14 +555,12 @@ function SearchField({ query, onQuery }: { query: string; onQuery: (q: string) =
           <SymbolView name="xmark" size={10} weight="bold" tintColor={Polar.deep} />
         </Pressable>
       ) : null}
-    </Glass>
+    </View>
   );
 }
 
-/**
- * One kind of place. Over the map, so an unchosen chip carries its own night fill rather than a
- * hairline on nothing; the chosen one is ice with ink, the way every chosen thing on the night is.
- */
+/** One kind of place: a hairline on the night, and the chosen one ice with ink, the way every
+ *  chosen thing on the night is. */
 function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -569,270 +576,67 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
 }
 
 /**
- * The map of what was found: one numbered pin per card, in the cards' order, the chosen card's pin
- * in signal. The stop that was asked about is marked and named; the day's other stops are small
- * rings, enough to say where this is in the day without competing with the answer.
+ * One found place, as a ruled row: its name, the clock time it would land at, what it is and where,
+ * and on the right what it would cost the day to go there.
  *
- * Apple's own places are off. The pins *are* the places of interest here, and the basemap's
- * would put a second, unnumbered answer to the same question under the first.
+ * The time and the detour are worked out at the defaults the place's card opens on — `slotPreview`
+ * and `insertionDetour` are the same two it calls — so the row is a preview of the decision, not a
+ * different answer to it. A list of cafes is a search engine; the app has already worked out where
+ * each one goes, and this is where it says so. The whole row opens the card.
  */
-function ResultsMap({
-  originLat,
-  originLng,
-  probe,
-  stops,
-  places,
-  focusIndex,
-  onPin,
-  reduced,
-}: {
-  originLat: number;
-  originLng: number;
-  probe: { lat: number; lng: number; name: string } | null;
-  stops: { lat: number; lng: number }[];
-  places: FoundPlace[];
-  focusIndex: number;
-  onPin?: (index: number) => void;
-  reduced: boolean;
-}) {
-  const map = useRef<MapViewRef>(null);
-  const [initialRegion] = useState(() => regionForStops([{ lat: originLat, lng: originLng }]) ?? undefined);
-  const probeLat = probe?.lat;
-  const probeLng = probe?.lng;
-
-  // Reframed once per answer, around the stop asked about and everything found — or back to the
-  // search's middle when nothing was. Primitives again: `probe` is rebuilt every render.
-  useEffect(() => {
-    const around = probeLat !== undefined && probeLng !== undefined ? [{ lat: probeLat, lng: probeLng }] : [];
-    const region = regionForStops(places.length ? [...around, ...places] : [{ lat: originLat, lng: originLng }]);
-    if (region) map.current?.animateToRegion(region, reduced ? 0 : 420);
-  }, [places, probeLat, probeLng, originLat, originLng, reduced]);
-
-  const context = drawableStops(stops).filter(
-    ({ stop }) => !probe || stop.lat !== probe.lat || stop.lng !== probe.lng,
-  );
-
-  return (
-    <MapView
-      ref={map}
-      style={StyleSheet.absoluteFill}
-      initialRegion={initialRegion}
-      // The trip's sheets are drawn on the night whatever the appearance, so the map is too.
-      userInterfaceStyle="dark"
-      mapType="mutedStandard"
-      showsPointsOfInterests={false}
-      pitchEnabled={false}
-      rotateEnabled={false}
-      toolbarEnabled={false}
-      // The camera frames below the floating search and chips rather than under them.
-      mapPadding={{ top: FLOAT_H, right: 0, bottom: 0, left: 0 }}
-      accessibilityLabel="Map of the places found">
-      {context.map(({ stop, index }) => (
-        <MapMark key={`stop-${index}`} lat={stop.lat} lng={stop.lng} paint="ring" zIndex={1}>
-          <View style={styles.ring} />
-        </MapMark>
-      ))}
-      {probe ? (
-        <MapMark lat={probe.lat} lng={probe.lng} paint="anchor" zIndex={5} label={probe.name}>
-          <Anchor name={probe.name} />
-        </MapMark>
-      ) : null}
-      {drawableStops(places).map(({ stop: place, index }) => {
-        const on = index === focusIndex;
-        return (
-          <MapMark
-            key={place.id}
-            lat={place.lat}
-            lng={place.lng}
-            paint={on ? 'on' : 'off'}
-            zIndex={on ? 999 : 10 + index}
-            label={`${index + 1}, ${place.name}`}
-            onPress={onPin ? () => onPin(index) : undefined}>
-            <View style={styles.target}>
-              <View style={[styles.pin, on && styles.pinOn]}>
-                <Text maxFontSizeMultiplier={1} style={[styles.pinText, on && styles.pinTextOn]}>
-                  {index + 1}
-                </Text>
-              </View>
-            </View>
-          </MapMark>
-        );
-      })}
-    </MapView>
-  );
-}
-
-/**
- * The stop that was asked about: a white-ringed dot with its name beside it.
- *
- * Laid out symmetrically — an empty box the label's width on the left — because a custom marker is
- * centred on its coordinate, and the dot, not the middle of "dot plus name", is where the stop is.
- */
-function Anchor({ name }: { name: string }) {
-  return (
-    <View style={styles.anchor}>
-      <View style={styles.anchorSide} />
-      <View style={styles.anchorDot} />
-      <Text maxFontSizeMultiplier={1} numberOfLines={1} style={[styles.anchorSide, styles.anchorText]}>
-        {name}
-      </Text>
-    </View>
-  );
-}
-
-/**
- * A mark on the map, drawn by us.
- *
- * `tracksViewChanges` for the reason `StopMarker` in `day-map.tsx` records: on Android a marker
- * with children is re-snapshotted every frame while it is true, and never painted at all if it
- * starts false. So it starts true, settles after a beat, and re-arms when `paint` — what the mark
- * looks like — changes, which is what lets the chosen pin actually turn orange there.
- */
-function MapMark({
-  lat,
-  lng,
-  paint,
-  zIndex,
-  label,
-  onPress,
-  children,
-}: {
-  lat: number;
-  lng: number;
-  paint: string;
-  zIndex: number;
-  label?: string;
-  onPress?: () => void;
-  children: ReactNode;
-}) {
-  const [tracking, setTracking] = useState(true);
-  const [painted, setPainted] = useState(paint);
-  if (paint !== painted) {
-    setPainted(paint);
-    setTracking(true);
-  }
-  useEffect(() => {
-    if (!tracking) return;
-    const settle = setTimeout(() => setTracking(false), 300);
-    return () => clearTimeout(settle);
-  }, [tracking]);
-
-  return (
-    <Marker
-      coordinate={{ latitude: lat, longitude: lng }}
-      anchor={{ x: 0.5, y: 0.5 }}
-      // `anchor` is Google-only; Apple Maps needs this, measured — see `MARKER_SKEW_PT`.
-      centerOffset={{ x: -MARKER_SKEW_PT, y: 0 }}
-      zIndex={zIndex}
-      tracksViewChanges={tracking}
-      onPress={onPress}
-      tappable={!!onPress}
-      accessibilityLabel={label}
-      accessibilityElementsHidden={!label}
-      importantForAccessibility={label ? 'auto' : 'no-hide-descendants'}>
-      {children}
-    </Marker>
-  );
-}
-
-/**
- * One found place, as a card on the rail.
- *
- * The top opens the place; the foot answers "where would this go and what does it cost me" at the
- * defaults the place's card opens on — `slotPreview` and `insertionDetour` are the same two it
- * calls — and Add takes those defaults without opening anything. A list of cafes is a search
- * engine; the app has already worked out where each one goes, and this is where it says so.
- */
-function Card({
+function Row({
   place,
-  index,
-  on,
-  width,
   itinerary,
   dayIndex,
-  distanceFrom,
-  busy,
-  disabled,
   onOpen,
-  onAdd,
 }: {
   place: FoundPlace;
-  index: number;
-  on: boolean;
-  width: number;
   itinerary: Itinerary;
   dayIndex: number;
-  distanceFrom: { lat: number; lng: number } | null;
-  busy: boolean;
-  disabled: boolean;
   onOpen: () => void;
-  onAdd: () => void;
 }) {
   const slot = suggestTimeOfDay(place);
   const preview = slotPreview(itinerary, dayIndex, slot);
   const detour = insertionDetour(itinerary, dayIndex, place, slot);
   const fit = slotLine(preview.time, preview.tight, detour);
-  // The same line the stop will carry once it is added, when there is no street to show instead.
-  const line = place.address || describePlace(place);
+  // The same line the stop will carry once it is added: the kind, then the street when there is one.
+  const line = describePlace(place);
 
   return (
-    <View style={[styles.card, { width }, on && styles.cardOn]}>
-      <Pressable
-        onPress={onOpen}
-        accessibilityRole="button"
-        // Everything the card shows, since a label replaces what is under it rather than adding to it.
-        accessibilityLabel={[`${index + 1}. ${place.name}`, eyebrow(place, distanceFrom), line].filter(Boolean).join(', ')}
-        accessibilityState={{ selected: on }}
-        accessibilityHint={`Would land at ${fit}. Opens the day and time.`}
-        style={({ pressed }) => [styles.cardOpen, pressed && styles.cardPressed]}>
-        <View style={styles.cardTop}>
-          <View style={[styles.num, on && styles.numOn]}>
-            <Text maxFontSizeMultiplier={1} style={[styles.numText, on && styles.numTextOn]}>
-              {index + 1}
-            </Text>
-          </View>
-          <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.eyebrow, styles.grow]}>
-            {eyebrow(place, distanceFrom)}
-          </Text>
-        </View>
-        <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.cardName}>
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      // Everything the row shows, since a label replaces what is under it rather than adding to it.
+      accessibilityLabel={[place.name, line].filter(Boolean).join(', ')}
+      accessibilityHint={`Would land at ${fit}. Opens the day and time.`}
+      style={({ pressed }) => [styles.row, pressed && styles.pressedFill]}>
+      <View style={[styles.rowMain, styles.grow]}>
+        <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.rowName}>
           {place.name}
         </Text>
-        {line ? (
-          <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.cardLine}>
-            {line}
-          </Text>
-        ) : null}
-      </Pressable>
-      <View style={styles.cardFoot}>
-        <View style={[styles.fit, styles.grow]} accessible accessibilityLabel={fit}>
+        <View style={styles.fit}>
           <Text maxFontSizeMultiplier={1.4} style={styles.fitTime}>
             {preview.time}
           </Text>
           {preview.tight ? (
             <Text maxFontSizeMultiplier={1.4} style={styles.tight}>
-              tight
+              tight fit
             </Text>
           ) : null}
-          <DetourNote detour={detour} />
         </View>
-        <Pressable
-          onPress={onAdd}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={`Add ${place.name} to ${dayLabel(itinerary, dayIndex)} at ${preview.time}`}
-          accessibilityState={{ busy, disabled }}
-          style={({ pressed }) => [styles.addSmall, pressed && styles.addPressed, disabled && !busy && styles.off]}>
-          {busy ? (
-            <ActivityIndicator size="small" color={Polar.ink} />
-          ) : (
-            <Text maxFontSizeMultiplier={1.3} style={styles.addSmallText}>
-              Add
-            </Text>
-          )}
-        </Pressable>
+        {line ? (
+          <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.rowLine}>
+            {line}
+          </Text>
+        ) : null}
       </View>
-    </View>
+      {/* Capped rather than a fixed column: "on the way" and "adds 12 min" are different widths,
+          and at large text a fixed one would clip the minutes, the figure the column exists for. */}
+      <View style={styles.rowCost}>
+        <DetourNote detour={detour} />
+      </View>
+      <SymbolView name="chevron.right" size={13} weight="semibold" tintColor={Polar.nightText2} />
+    </Pressable>
   );
 }
 
@@ -861,8 +665,8 @@ function eyebrow(place: FoundPlace, from: { lat: number; lng: number } | null): 
   return from ? `${kind} · ${describeDistance(metresBetween(from, place))}` : kind;
 }
 
-/** Where the place goes, and the sign it is waiting: one card's outline, breathing. */
-function Searching({ line, width, reduced }: { line: string; width: number; reduced: boolean }) {
+/** What is being looked for, and where the answer will go: the list's rows in outline, breathing. */
+function Searching({ line, reduced }: { line: string; reduced: boolean }) {
   const glow = useSharedValue(0.45);
   useEffect(() => {
     if (reduced) return;
@@ -878,10 +682,14 @@ function Searching({ line, width, reduced }: { line: string; width: number; redu
           {line}
         </Text>
       </View>
-      <Animated.View style={[styles.card, styles.skeleton, { width }, pulse]}>
-        <View style={[styles.bone, { width: '34%' }]} />
-        <View style={[styles.bone, styles.boneLead, { width: '62%' }]} />
-        <View style={[styles.bone, { width: '48%' }]} />
+      <Animated.View style={[styles.list, pulse]}>
+        {BONES.map(([title, rest], index) => (
+          <View key={index} style={styles.skeleton}>
+            <View style={[styles.bone, styles.boneLead, { width: title }]} />
+            <View style={[styles.bone, { width: '38%' }]} />
+            <View style={[styles.bone, { width: rest }]} />
+          </View>
+        ))}
       </Animated.View>
     </View>
   );
@@ -984,12 +792,12 @@ function Nothing({
   );
 }
 
-/** Where the places came from, said once under the rail: Apple Maps answered, not TripMate. */
+/** Where the places came from, said once under the list: Apple Maps answered, not TripMate. */
 function SourceNote() {
   return (
     <View style={styles.source}>
       <SymbolView name="map" size={13} tintColor={Polar.nightText2} />
-      <Text maxFontSizeMultiplier={1.6} style={styles.count}>
+      <Text maxFontSizeMultiplier={1.6} style={styles.sourceText}>
         Places from Apple Maps
       </Text>
     </View>
@@ -1013,9 +821,9 @@ function searchingLine(category: PlaceCategory | null, query: string, near: stri
 /**
  * One place, and the two decisions about it.
  *
- * A strip of map first, with the line the place would be walked on — the stop before it, the
- * place, the stop after, for the day and time chosen below, so the line moves as they do. Then
- * each slot shows the clock time it would actually produce, not just its name: "Afternoon" is a
+ * Variant B's card, without the strip of map it opened on: the name leads, and the detour the
+ * eyebrow names is the line that map used to draw. Each slot shows the clock time it would
+ * actually produce, not just its name: "Afternoon" is a
  * guess, "2:30 PM" is the answer. A slot with no clear gap says so rather than quietly
  * shoulder-to-shouldering the day.
  */
@@ -1032,7 +840,6 @@ function PlaceDetail({
   onAdd,
   fonts,
   reduced,
-  bottom,
 }: {
   place: FoundPlace;
   itinerary: Itinerary;
@@ -1046,191 +853,113 @@ function PlaceDetail({
   onAdd: () => void;
   fonts: boolean;
   reduced: boolean;
-  bottom: number;
 }) {
   const detour = insertionDetour(itinerary, day, place, slot);
   const time = slotPreview(itinerary, day, slot).time;
   const head = [eyebrow(place, distanceFrom), detourShort(detour)].filter(Boolean).join(' · ');
 
+  // Content only: the sheet's one ScrollView holds it (see `AddPlaceSheet`'s return).
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: bottom + PolarSpace.s5 }}>
-      <Animated.View entering={reduced ? undefined : FadeIn.duration(220)}>
-        <PlaceMap itinerary={itinerary} day={day} slot={slot} place={place} reduced={reduced} />
-        <View style={styles.detail}>
-          <View style={styles.hero}>
-            <Text maxFontSizeMultiplier={1.4} style={styles.eyebrow}>
-              {head}
-            </Text>
-            <Text maxFontSizeMultiplier={1.3} accessibilityRole="header" style={[styles.heroName, fonts && styles.condFont]}>
-              {place.name}
-            </Text>
-            {place.address ? (
-              <Text maxFontSizeMultiplier={1.6} style={styles.muted}>
-                {place.address}
-              </Text>
-            ) : null}
-          </View>
-
-          <PlaceFacts place={place} fonts={fonts} />
-
-          <Text maxFontSizeMultiplier={1.4} style={[styles.label, fonts && styles.condFont]}>
-            Which day
+    <Animated.View entering={reduced ? undefined : FadeIn.duration(220)}>
+      <View style={styles.detail}>
+        <View style={styles.hero}>
+          <Text maxFontSizeMultiplier={1.4} style={styles.eyebrow}>
+            {head}
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            accessibilityRole="radiogroup"
-            accessibilityLabel="Which day"
-            style={styles.daysRow}
-            contentContainerStyle={styles.days}>
-            {itinerary.days.map((plan, index) => {
-              const chip = formatDayChip(plan.date ?? '');
-              const on = index === day;
-              return (
-                <Pressable
-                  key={index}
-                  onPress={() => onDay(index)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={dayLabel(itinerary, index)}
-                  style={({ pressed }) => [styles.day, on && styles.iceCell, pressed && !on && styles.cellPressed]}>
-                  <Text maxFontSizeMultiplier={1.3} style={[styles.cellCaps, on && styles.onIceSoft]}>
-                    {chip?.weekday ?? 'Day'}
-                  </Text>
-                  <Text maxFontSizeMultiplier={1.3} style={[styles.dayNumber, on && styles.onIce]}>
-                    {chip?.dayOfMonth ?? index + 1}
-                  </Text>
-                  <Text maxFontSizeMultiplier={1.3} style={[styles.dayOrdinal, on && styles.onIceSoft]}>
-                    {chip ? `Day ${index + 1}` : ' '}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <Text maxFontSizeMultiplier={1.4} style={[styles.label, fonts && styles.condFont]}>
-            When
+          <Text maxFontSizeMultiplier={1.3} accessibilityRole="header" style={[styles.heroName, fonts && styles.condFont]}>
+            {place.name}
           </Text>
-          <View style={styles.slots} accessibilityRole="radiogroup" accessibilityLabel="When">
-            {SLOTS.map((option) => {
-              const preview = slotPreview(itinerary, day, option);
-              // Per slot, not per place: the same café costs a different detour depending on which
-              // two stops it would end up between.
-              const cost = insertionDetour(itinerary, day, place, option);
-              const on = option === slot;
-              return (
-                <Pressable
-                  key={option}
-                  onPress={() => onSlot(option)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={`${option}, ${slotLine(preview.time, preview.tight, cost)}`}
-                  style={({ pressed }) => [styles.slot, on && styles.iceCell, on && styles.slotOn, pressed && !on && styles.cellPressed]}>
-                  <Text maxFontSizeMultiplier={1.3} style={[styles.cellCaps, on && styles.onIceSoft]}>
-                    {option}
-                  </Text>
-                  <Text maxFontSizeMultiplier={1.3} style={[styles.slotTime, on && styles.onIce]}>
-                    {preview.time}
-                  </Text>
-                  <DetourNote detour={cost} light={on} />
-                  <Text
-                    maxFontSizeMultiplier={1.3}
-                    style={[preview.tight ? styles.tight : styles.fits, on && (preview.tight ? styles.tightOnIce : styles.fitsOnIce)]}>
-                    {preview.tight ? 'Tight fit' : 'Fits'}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {failed ? <Failure /> : null}
-
-          <SignalButton
-            large
-            title={`Add to ${dayLabel(itinerary, day)} · ${time}`}
-            onPress={onAdd}
-            busy={busy}
-            disabled={busy}
-            style={styles.addLarge}
-          />
+          {place.address ? (
+            <Text maxFontSizeMultiplier={1.6} style={styles.muted}>
+              {place.address}
+            </Text>
+          ) : null}
         </View>
-      </Animated.View>
-    </ScrollView>
-  );
-}
 
-/**
- * The place card's strip of map: the place in signal, its neighbours in the day as rings, and the
- * dashed line between them. A picture, not a control — it does not take touches, so a drag on it
- * scrolls the card instead of panning a map nobody asked to pan.
- */
-function PlaceMap({
-  itinerary,
-  day,
-  slot,
-  place,
-  reduced,
-}: {
-  itinerary: Itinerary;
-  day: number;
-  slot: TimeOfDay;
-  place: FoundPlace;
-  reduced: boolean;
-}) {
-  const map = useRef<MapViewRef>(null);
-  const path = useMemo(() => insertionPath(itinerary, day, place, slot), [itinerary, day, place, slot]);
-  const region = useMemo(() => regionForStops(path), [path]);
-  const [initialRegion] = useState(region ?? undefined);
+        <PlaceFacts place={place} fonts={fonts} />
 
-  useEffect(() => {
-    if (region) map.current?.animateToRegion(region, reduced ? 0 : 420);
-  }, [region, reduced]);
+        <Text maxFontSizeMultiplier={1.4} style={[styles.label, fonts && styles.condFont]}>
+          Which day
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Which day"
+          style={styles.daysRow}
+          contentContainerStyle={styles.days}>
+          {itinerary.days.map((plan, index) => {
+            const chip = formatDayChip(plan.date ?? '');
+            const on = index === day;
+            return (
+              <Pressable
+                key={index}
+                onPress={() => onDay(index)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={dayLabel(itinerary, index)}
+                style={({ pressed }) => [styles.day, on && styles.iceCell, pressed && !on && styles.cellPressed]}>
+                <Text maxFontSizeMultiplier={1.3} style={[styles.cellCaps, on && styles.onIceSoft]}>
+                  {chip?.weekday ?? 'Day'}
+                </Text>
+                <Text maxFontSizeMultiplier={1.3} style={[styles.dayNumber, on && styles.onIce]}>
+                  {chip?.dayOfMonth ?? index + 1}
+                </Text>
+                <Text maxFontSizeMultiplier={1.3} style={[styles.dayOrdinal, on && styles.onIceSoft]}>
+                  {chip ? `Day ${index + 1}` : ' '}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
-  return (
-    <View
-      style={styles.strip}
-      pointerEvents="none"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants">
-      <MapView
-        ref={map}
-        style={StyleSheet.absoluteFill}
-        initialRegion={initialRegion}
-        userInterfaceStyle="dark"
-        mapType="mutedStandard"
-        showsPointsOfInterests={false}
-        scrollEnabled={false}
-        zoomEnabled={false}
-        pitchEnabled={false}
-        rotateEnabled={false}
-        toolbarEnabled={false}
-        mapPadding={{ top: 24, right: 24, bottom: 24, left: 24 }}>
-        {path.length > 1 ? (
-          <Polyline
-            coordinates={path.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
-            strokeColor={Polar.route}
-            strokeWidth={2.5}
-            lineDashPattern={[6, 5]}
-            lineCap="round"
-          />
-        ) : null}
-        {path.map((p, index) =>
-          p.lat === place.lat && p.lng === place.lng ? (
-            <MapMark key={`p-${index}`} lat={p.lat} lng={p.lng} paint="place" zIndex={999}>
-              <View style={styles.target}>
-                <View style={[styles.pin, styles.pinOn]}>
-                  <SymbolView name="mappin" size={12} tintColor={Polar.ink} />
-                </View>
-              </View>
-            </MapMark>
-          ) : (
-            <MapMark key={`p-${index}`} lat={p.lat} lng={p.lng} paint="ring" zIndex={1}>
-              <View style={styles.ring} />
-            </MapMark>
-          ),
-        )}
-      </MapView>
-    </View>
+        <Text maxFontSizeMultiplier={1.4} style={[styles.label, fonts && styles.condFont]}>
+          When
+        </Text>
+        <View style={styles.slots} accessibilityRole="radiogroup" accessibilityLabel="When">
+          {SLOTS.map((option) => {
+            const preview = slotPreview(itinerary, day, option);
+            // Per slot, not per place: the same café costs a different detour depending on which
+            // two stops it would end up between.
+            const cost = insertionDetour(itinerary, day, place, option);
+            const on = option === slot;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => onSlot(option)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`${option}, ${slotLine(preview.time, preview.tight, cost)}`}
+                style={({ pressed }) => [styles.slot, on && styles.iceCell, on && styles.slotOn, pressed && !on && styles.cellPressed]}>
+                <Text maxFontSizeMultiplier={1.3} style={[styles.cellCaps, on && styles.onIceSoft]}>
+                  {option}
+                </Text>
+                <Text maxFontSizeMultiplier={1.3} style={[styles.slotTime, on && styles.onIce]}>
+                  {preview.time}
+                </Text>
+                <DetourNote detour={cost} light={on} />
+                <Text
+                  maxFontSizeMultiplier={1.3}
+                  style={[preview.tight ? styles.tight : styles.fits, on && (preview.tight ? styles.tightOnIce : styles.fitsOnIce)]}>
+                  {preview.tight ? 'Tight fit' : 'Fits'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {failed ? <Failure /> : null}
+
+        <SignalButton
+          large
+          title={`Add to ${dayLabel(itinerary, day)} · ${time}`}
+          onPress={onAdd}
+          busy={busy}
+          disabled={busy}
+          style={styles.addLarge}
+        />
+      </View>
+    </Animated.View>
   );
 }
 
@@ -1299,7 +1028,7 @@ function PlaceFacts({ place, fonts }: { place: FoundPlace; fonts: boolean }) {
               onPress={() => Linking.openURL(link.href).catch(() => {})}
               accessibilityRole="link"
               accessibilityLabel={`${link.label}, ${link.value}`}
-              style={({ pressed }) => [styles.tile, pressed && styles.cardPressed]}>
+              style={({ pressed }) => [styles.tile, pressed && styles.pressedFill]}>
               <SymbolView
                 name={link.icon === 'phone' ? { ios: 'phone.fill', android: 'call' } : { ios: 'globe', android: 'language' }}
                 size={18}
@@ -1347,30 +1076,29 @@ const LABELS: Record<string, string> = {
   place: 'Places',
 };
 
-const PIN = 22;
-
 const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   dim: { opacity: 0.6 },
-  off: { opacity: 0.45 },
   centred: { textAlign: 'center' },
   muted: { fontFamily: PolarFonts.sans, fontSize: 13, lineHeight: 19, color: Polar.nightText2 },
+  pressedFill: { backgroundColor: Polar.frost10 },
   // Applied only once `usePolarFonts` says Oswald and the display cut are in: an unloaded family
   // is not an error in RN, it is a silent fallback.
   condFont: { fontFamily: PolarFonts.condensed },
   displayFont: { fontFamily: PolarFonts.display },
+  // The italic is its own file, so the style that asked for a synthesised slant comes off with it.
+  italicFont: { fontFamily: PolarFonts.displayItalic, fontStyle: 'normal' },
 
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: HEADER_H - PolarSpace.s2,
+    minHeight: 53,
     paddingHorizontal: GUTTER,
     paddingTop: PolarSpace.s2,
     paddingBottom: 6,
     backgroundColor: Polar.deep,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LINE,
   },
+  barRuled: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
   lane: { minWidth: LANE, flexShrink: 0, alignItems: 'flex-start', justifyContent: 'center' },
   laneEnd: { alignItems: 'flex-end' },
   centre: { flex: 1, minWidth: 0, alignItems: 'center' },
@@ -1381,7 +1109,39 @@ const styles = StyleSheet.create({
 
   nowhere: { padding: GUTTER },
 
-  float: { position: 'absolute', top: 12, left: 0, right: 0, gap: 8 },
+  head: {
+    gap: 12,
+    paddingTop: 6,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: LINE,
+  },
+  ticket: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: GUTTER,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: PolarRadius.card,
+    backgroundColor: FROST_06,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    borderLeftWidth: 3,
+    borderLeftColor: Polar.signal,
+  },
+  ticketTime: { fontFamily: PolarFonts.sans, fontSize: 13, color: Polar.nightText2, fontVariant: ['tabular-nums'] },
+  ticketName: {
+    fontFamily: PolarFonts.sansSemi,
+    fontSize: 20,
+    lineHeight: 25,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+    color: Polar.ice,
+  },
+  ticketSub: { fontFamily: PolarFonts.sans, fontSize: 12, lineHeight: 16, color: Polar.nightText2 },
+  ticketTag: { fontFamily: PolarFonts.sans, fontStyle: 'italic', fontSize: 16, color: Polar.signal },
+
   search: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1392,10 +1152,11 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingRight: 10,
     borderRadius: PolarRadius.sm,
+    backgroundColor: FROST_06,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Polar.frost20,
-    overflow: 'hidden',
+    borderColor: LINE,
   },
+  searchFocused: { borderColor: Polar.signal },
   // Sized by its own text and centred by the row, not stretched to it: stretched, the field kept the
   // row's height while the 1.4x text inside it grew, and at AX3 the placeholder's descenders were cut.
   searchInput: { flex: 1, paddingVertical: 0, fontFamily: PolarFonts.sans, fontSize: 15, color: Polar.ice },
@@ -1415,107 +1176,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     justifyContent: 'center',
     borderRadius: PolarRadius.hairline,
-    backgroundColor: 'rgba(14,17,24,0.82)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Polar.frost20,
   },
   chipOn: { backgroundColor: Polar.ice, borderColor: Polar.ice },
-  chipText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
+  chipText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.nightText2 },
   chipTextOn: { color: Polar.ink },
 
-  target: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  pin: {
-    width: PIN,
-    height: PIN,
-    borderRadius: PIN / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(14,17,24,0.92)',
-    borderWidth: 1.5,
-    borderColor: Polar.frost20,
-    ...MapObjectShadow,
-  },
-  // Larger as well as orange, so the chosen pin is found by its size before its colour.
-  pinOn: { backgroundColor: Polar.signal, borderColor: 'rgba(255,126,21,0.35)', borderWidth: 3, transform: [{ scale: 1.3 }] },
-  pinText: { fontFamily: PolarFonts.sansSemi, fontSize: 11, color: Polar.ice },
-  pinTextOn: { color: Polar.ink },
-  ring: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: Polar.ice, backgroundColor: Polar.deep },
-  anchor: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  anchorSide: { width: 104 },
-  anchorDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 3,
-    borderColor: Polar.ice,
-    backgroundColor: Polar.deep,
-    ...MapObjectShadow,
-  },
-  anchorText: {
-    fontFamily: PolarFonts.sansSemi,
-    fontSize: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: Polar.ice,
-    textShadowColor: '#000',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-
-  tray: {
-    paddingTop: 12,
-    paddingBottom: PolarSpace.s4,
-    backgroundColor: Polar.deep,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LINE,
-  },
-  rail: { paddingLeft: GUTTER, paddingRight: GUTTER - CARD_GAP },
-  card: {
-    marginRight: CARD_GAP,
-    borderRadius: PolarRadius.card,
-    backgroundColor: FROST_06,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LINE,
-    overflow: 'hidden',
-  },
-  cardOn: { borderColor: Polar.frost20 },
-  cardOpen: { gap: 4, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
-  cardPressed: { backgroundColor: Polar.frost10 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  num: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Polar.frost20,
-  },
-  numOn: { backgroundColor: Polar.signal, borderColor: Polar.signal },
-  numText: { fontFamily: PolarFonts.sansSemi, fontSize: 10.5, color: Polar.ice },
-  numTextOn: { color: Polar.ink },
-  eyebrow: {
+  body: { paddingHorizontal: GUTTER },
+  countRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingTop: PolarSpace.s3, paddingBottom: 8 },
+  count: {
     fontFamily: PolarFonts.sansSemi,
     fontSize: 11,
     lineHeight: 15,
-    letterSpacing: 1.7,
+    letterSpacing: 1.3,
     textTransform: 'uppercase',
     color: Polar.nightText2,
+    fontVariant: ['tabular-nums'],
   },
-  cardName: { fontFamily: PolarFonts.sansSemi, fontSize: 17, lineHeight: 22, color: Polar.ice },
-  cardLine: { fontFamily: PolarFonts.sans, fontSize: 13, lineHeight: 18, color: Polar.nightText2 },
-  cardFoot: {
+  list: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingLeft: 14,
-    paddingRight: 10,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LINE,
+    minHeight: 44,
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: LINE,
   },
-  // Wraps rather than truncating the detour ("adds 1…") once large text fills the row.
-  fit: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 2 },
+  rowMain: { gap: 2 },
+  rowName: { fontFamily: PolarFonts.sansSemi, fontSize: 17, lineHeight: 22, color: Polar.ice },
+  rowLine: { fontFamily: PolarFonts.sans, fontSize: 12.5, lineHeight: 17, color: Polar.nightText2 },
+  rowCost: { maxWidth: '38%', alignItems: 'flex-end' },
+  // Wraps rather than truncating once large text fills the row.
+  fit: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8, rowGap: 2 },
   fitTime: { fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ice, fontVariant: ['tabular-nums'] },
   tight: { fontFamily: PolarFonts.sansSemi, fontSize: 11.5, color: Polar.alertNight },
   tightOnIce: { color: Polar.alertText },
@@ -1523,30 +1217,10 @@ const styles = StyleSheet.create({
   fitsOnIce: { color: FITS_ON_ICE },
   detour: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },
   detourText: { fontFamily: PolarFonts.sans, fontSize: 12.5, flexShrink: 1 },
-  addSmall: {
-    minHeight: 34,
-    minWidth: 58,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: PolarRadius.hairline,
-    backgroundColor: Polar.signal,
-  },
-  addPressed: { backgroundColor: Polar.signalPressed },
-  addSmallText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ink },
-  under: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingTop: 10,
-    paddingHorizontal: GUTTER,
-  },
-  count: { fontFamily: PolarFonts.sans, fontSize: 12, color: Polar.nightText2, fontVariant: ['tabular-nums'] },
-  source: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  source: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 18 },
+  sourceText: { fontFamily: PolarFonts.sans, fontSize: 12, color: Polar.nightText2 },
   failure: {
     marginTop: 10,
-    marginHorizontal: GUTTER,
     paddingVertical: 9,
     paddingHorizontal: PolarSpace.s3,
     borderLeftWidth: 2,
@@ -1557,13 +1231,13 @@ const styles = StyleSheet.create({
     color: Polar.alertNight,
   },
 
-  searching: { gap: 10, paddingHorizontal: GUTTER },
+  searching: { gap: 10, paddingTop: PolarSpace.s3 },
   searchingLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  skeleton: { gap: 8, padding: 14, height: 118 },
+  skeleton: { gap: 7, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
   bone: { height: 10, borderRadius: 2, backgroundColor: Polar.frost10 },
-  boneLead: { height: 15 },
+  boneLead: { height: 14 },
 
-  nothing: { alignItems: 'center', gap: 8, paddingHorizontal: PolarSpace.s4, paddingTop: 4, paddingBottom: 4 },
+  nothing: { alignItems: 'center', gap: 8, paddingHorizontal: PolarSpace.s2, paddingTop: PolarSpace.s4 },
   nothingMark: {
     width: 44,
     height: 44,
@@ -1586,8 +1260,15 @@ const styles = StyleSheet.create({
   quietPressed: { backgroundColor: Polar.frost20 },
   quietText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ice },
 
-  strip: { height: STRIP_H, backgroundColor: Polar.night },
   detail: { paddingHorizontal: GUTTER },
+  eyebrow: {
+    fontFamily: PolarFonts.sansSemi,
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 1.7,
+    textTransform: 'uppercase',
+    color: Polar.nightText2,
+  },
   hero: { gap: 6, paddingTop: GUTTER },
   heroName: { fontFamily: PolarFonts.sansSemi, fontSize: 34, lineHeight: 38, textTransform: 'uppercase', color: Polar.ice },
   tiles: { flexDirection: 'row', gap: 8, marginTop: GUTTER },

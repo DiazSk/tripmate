@@ -521,6 +521,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setConstraintsNote(restore("constraintsNote", ""));
     setStep("plan");
     setPlanStep(urlStep);
+    // Mount-only by design: this restores a refreshed page once. `startPlanning` reads
+    // `initialProfile`, a server prop that never changes after the first render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -1487,6 +1490,24 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // A new wizard is a new attempt; the id is shared with everything this attempt sends.
     attemptRef.current = newAttemptId();
     track("plan_started", { entry, attempt_id: attemptRef.current });
+    // Back to the traveller's saved profile before anything is prefilled. This component stays mounted
+    // while the landing and the wizard trade places (`backToLanding` keeps every answer, for the Back
+    // press), so without this the next attempt opened on the last one's pace: the sessionStorage draft
+    // is cleared below and was never the source. Only the answers the profile seeds are reset here, the
+    // ones a prefill's "leaves out" promise above is about; the free-form fields (place, dates, budget)
+    // still carry over.
+    const style = travelStyleOf(initialProfile ?? {});
+    const baseGroup = initialProfile?.group ?? "solo";
+    setPace(style.pace);
+    setDiscovery(style.discovery);
+    setEnergy(initialProfile?.energy ?? "moderate");
+    setCrowds(initialProfile?.crowds ?? "mixed");
+    setInterests(initialProfile?.priorities ?? []);
+    setStarredInterests(initialProfile?.topPriorities ?? []);
+    setGroup(baseGroup);
+    setParty(defaultPartyForGroup(baseGroup));
+    setDietary(initialProfile?.dietary ?? { tags: [], note: "" });
+    setAccessibility(initialProfile?.accessibility ?? null);
     if (prefill) {
       // Only the keys the prefill spoke for: a partial prefill must leave everything it did not
       // ask about exactly as the traveller's saved profile left it. See PlanPrefill.
