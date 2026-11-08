@@ -81,3 +81,17 @@ test('each change of face is found ahead of time, and the activity carries the o
   expect(staleAt?.getTime()).toBe(now + 30 * 60_000);
   expect(props.next?.leaveAt).toBe(now + 60 * 60_000);
 });
+
+test('past midnight: 00:15 on a night running to 2 AM is still the night, with the next stop ahead', () => {
+  const lateStops = [stop('Fado', '10:00 PM', 38.71, -9.13), stop('Rooftop', '12:30 AM', 38.72, -9.14, true)];
+  const night = { city: 'Lisbon', dayNumber: 3, stops: lateStops, tomorrow: 'Sintra' };
+  const f = dayFace(night, 24 * 60 + 15, epoch);
+  expect([f.stopIndex, f.title]).toEqual([1, 'Rooftop']);
+  expect(f.kind).not.toBe('done');
+  // The 12:30 AM stop starts at 1470 on the rolled clock, so the face after the next change is later still.
+  const change = nextChange(night, 24 * 60 + 15);
+  expect(change).not.toBeNull();
+  expect(change!).toBeGreaterThan(24 * 60 + 15);
+  const { props } = dayActivityProps({ ...night, dayCount: 5, now: epoch(24 * 60 + 15), nowMinutes: 24 * 60 + 15 });
+  expect(props.face.title).toBe('Rooftop');
+});

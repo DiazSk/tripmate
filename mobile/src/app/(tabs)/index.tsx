@@ -24,7 +24,7 @@ import { Polar, PolarFonts } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
 import { homeIsUnreachable, pillCounts, type Pill } from '@/lib/readyTrips';
 import { loadReadyTrips, loadSavedPlaces, loadTrip, loadTrips, readCachedReadyTrips, type Cached } from '@/lib/tripCache';
-import { todayInZone } from '@/lib/tripClock';
+import { tripClockNow } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
 import { daysUntil, todayISO, tripShelves } from '@/lib/tripsWall';
 import { useFocusedFetch, useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
@@ -116,7 +116,7 @@ export default function Home() {
   const onTrip = current && loaded?.id === current.id ? loaded.hit : null;
   const trip = onTrip?.value;
   // Today where the trip is, which is not always the same day as here.
-  const tripToday = (trip && todayInZone(trip.timezone)) ?? todayISO();
+  const tripToday = (trip && tripClockNow(trip)?.today) ?? todayISO();
   /** The saved pile, read on every focus unconditionally: a guard on `trip` here never re-ran on a cold launch. */
   const saved = useFocusedFetch(loadSavedPlaces)?.value ?? undefined;
 

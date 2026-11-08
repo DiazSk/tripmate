@@ -1,6 +1,7 @@
 import type { Stop } from '@/api/types';
 
-import { clockInZone, describeGap, minutesUntil, nextStop, nowInZone, todayInZone, todayState } from './tripClock';
+import { clockInZone, dayEnd, describeGap, minutesUntil, nextStop, nowInZone, todayInZone, todayState, tripClockNow } from './tripClock';
+import { dayIndexFor } from './tripPhase';
 
 const stop = (name: string, time: string): Stop =>
   ({ name, time, lat: 38.7, lng: -9.1, cost: 0, note: '', durationLabel: '1 hour', category: 'other' }) as Stop;
@@ -191,4 +192,91 @@ test('the gap reads the way somebody would say it', () => {
   expect(describeGap(60)).toBe('1 hr');
   expect(describeGap(210)).toBe('3 hr 30 min');
   expect(describeGap(0)).toBe('0 min');
+});
+
+/* --- a day that runs past midnight stays the day until its last stop has ended --- */
+
+const late = (name: string, time: string, durationLabel: string): Stop => ({ ...stop(name, time), durationLabel });
+// Day 3 (index 2) of a five-day Lisbon trip: dinner 10 PM for 2h, then a booked 12:30 AM stop for
+// 1.5h, so the night ends at 2:00 AM on the 22nd.
+const night = [late('Fado', '10:00 PM', '2 hours'), late('Rooftop', '12:30 AM', '1.5 hours')];
+const trip = (lastDayStops: Stop[] = night, timezone: string | null = 'Europe/Lisbon') => ({
+  startDate: '2026-09-19',
+  endDate: '2026-09-23',
+  timezone,
+  itinerary: { days: [[], [], night, [stop('Cafe', '9:00 AM')], lastDayStops].map((stops) => ({ stops })) },
+});
+// Lisbon is UTC+1 here, so 23:15Z on the 21st is 00:15 on the 22nd.
+const lisbon = (iso: string) => new Date(`${iso}:00Z`);
+
+test('a day ends when its last stop ends, rolled past midnight', () => {
+  expect(dayEnd(night)).toBe(26 * 60);
+  expect(dayEnd([late('Lunch', '12:30 PM', '1 hour')])).toBe(13 * 60 + 30);
+  expect(dayEnd([stop('Mystery', 'sometime')])).toBeNull();
+  expect(dayEnd([])).toBeNull();
+});
+
+test('00:15 is still day 3, and the next stop is the one after midnight', () => {
+  const now = tripClockNow(trip(), lisbon('2026-09-21T23:15'))!;
+  expect(now).toEqual({ today: '2026-09-21', minutes: 24 * 60 + 15 });
+  expect(dayIndexFor(trip(), now.today)).toBe(2);
+  expect(nextStop(night, now.minutes)).toBe(1);
+  const s = todayState(night, now.minutes, () => null);
+  expect(s.kind === 'upcoming' && s.index === 1 && s.minutes === 15).toBe(true);
+});
+
+test('the stop you are standing in after midnight is behind you, but the day is not over', () => {
+  // 01:00: Rooftop (12:30 AM) has started; nothing follows it, so Today says done, on day 3.
+  const now = tripClockNow(trip(), lisbon('2026-09-22T00:00'))!;
+  expect(now.today).toBe('2026-09-21');
+  expect(todayState(night, now.minutes, () => null).kind).toBe('done');
+});
+
+test('a stop after midnight keeps its departure on the rolled clock', () => {
+  // Leaving for the 12:30 AM stop at 12:20 AM: 10 minutes ahead at 00:10, late at 00:25 when booked.
+  const booked = [night[0], { ...night[1], timeFlexibility: 'FIXED' } as Stop];
+  const leave = () => '12:20 AM';
+  const s = todayState(booked, 24 * 60 + 10, leave);
+  expect(s.kind === 'imminent' && s.minutes === 10).toBe(true);
+  const l = todayState(booked, 24 * 60 + 25, leave);
+  expect(l.kind === 'late' && l.minutes === 5).toBe(true);
+});
+
+test('02:30 is day 4: the night has ended', () => {
+  const now = tripClockNow(trip(), lisbon('2026-09-22T01:30'))!;
+  expect(now).toEqual({ today: '2026-09-22', minutes: 150 });
+  expect(dayIndexFor(trip(), now.today)).toBe(3);
+});
+
+test('exactly at the end the new day begins', () => {
+  expect(tripClockNow(trip(), lisbon('2026-09-22T01:00'))!.today).toBe('2026-09-22'); // 02:00
+  expect(tripClockNow(trip(), lisbon('2026-09-22T00:59'))!.today).toBe('2026-09-21'); // 01:59
+});
+
+test('a day with no late stops hands over at midnight', () => {
+  const t = { ...trip(), itinerary: { days: [[], [], [late('Dinner', '7:00 PM', '2 hours')], [stop('Cafe', '9:00 AM')], []].map((stops) => ({ stops })) } };
+  expect(tripClockNow(t, lisbon('2026-09-21T23:01'))).toEqual({ today: '2026-09-22', minutes: 1 });
+});
+
+test('the last day of the trip carries past midnight instead of ending', () => {
+  const t = trip(night); // day 5 is 2026-09-23
+  const now = tripClockNow(t, lisbon('2026-09-23T23:15'))!;
+  expect(now).toEqual({ today: '2026-09-23', minutes: 24 * 60 + 15 });
+  expect(dayIndexFor(t, now.today)).toBe(4);
+  // And once it has ended the trip is over, as before.
+  expect(dayIndexFor(t, tripClockNow(t, lisbon('2026-09-24T01:30'))!.today)).toBeNull();
+});
+
+test('the zone decides, not the device: Tokyo is already on the 22nd', () => {
+  // 23:15Z on the 21st is 08:15 on the 22nd in Tokyo; a late Lisbon night does not follow it there.
+  expect(tripClockNow(trip(night, 'Asia/Tokyo'), lisbon('2026-09-21T23:15'))).toEqual({ today: '2026-09-22', minutes: 8 * 60 + 15 });
+});
+
+test('a day before the trip begins is not carried', () => {
+  expect(tripClockNow(trip(), lisbon('2026-09-18T23:15'))).toEqual({ today: '2026-09-19', minutes: 15 });
+});
+
+test('no timezone is silence', () => {
+  expect(tripClockNow(trip(night, null), lisbon('2026-09-21T23:15'))).toBeNull();
+  expect(tripClockNow({ ...trip(), timezone: undefined }, lisbon('2026-09-21T23:15'))).toBeNull();
 });

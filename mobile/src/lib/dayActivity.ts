@@ -1,10 +1,10 @@
-import { parseClock } from '@shared/itinerary';
+import { dayClocks } from '@shared/itinerary';
 import type { TransportMode } from '@shared/types';
 
 import type { Stop } from '@/api/types';
 
 import { dayLegs, leaveBy } from './dayTravel';
-import { describeGap, todayState } from './tripClock';
+import { describeGap, leaveMinute, todayState } from './tripClock';
 
 /**
  * A trip day in the Dynamic Island and on the Lock Screen: the canvas design "Live Activity · 1
@@ -99,7 +99,8 @@ export function dayFace(day: Day, at: number, epochAt: (minutes: number) => numb
   const { stops } = day;
   const state = todayState(stops, at, (i) => leaveBy(stops, i));
   if (state.kind === 'done' || state.kind === 'empty') {
-    const last = stops.length ? (parseClock(stops[stops.length - 1].time) ?? at) : at;
+    const last = dayClocks(stops).reduce<number>((m, c) => (c === null ? m : Math.max(m, c)), -1);
+    const ended = last < 0 ? at : last;
     return {
       kind: 'done',
       eyebrow: `${day.city} · day ${day.dayNumber} done`,
@@ -109,9 +110,9 @@ export function dayFace(day: Day, at: number, epochAt: (minutes: number) => numb
       unit: 'ended',
       compact: '',
       countdown: false,
-      leaveAt: epochAt(last),
-      barFrom: epochAt(last),
-      fromLabel: clock(last),
+      leaveAt: epochAt(ended),
+      barFrom: epochAt(ended),
+      fromLabel: clock(ended),
       toLabel: '',
       mode: null,
       stopIndex: Math.max(0, stops.length - 1),
@@ -121,9 +122,10 @@ export function dayFace(day: Day, at: number, epochAt: (minutes: number) => numb
   }
 
   const stop = stops[state.index];
-  const stopAt = parseClock(stop.time) ?? at;
+  // Rolled clocks throughout: `at` can be past 1440 while a day carries over midnight.
+  const stopAt = dayClocks(stops)[state.index] ?? at;
   const departure = leaveBy(stops, state.index);
-  const leaveMin = departure === null ? stopAt : (parseClock(departure) ?? stopAt);
+  const leaveMin = leaveMinute(stops, state.index, departure) ?? stopAt;
   const booked = stop.timeFlexibility === 'FIXED';
   const legOf = dayLegs(stops).find((l) => l.toIndex === state.index) ?? null;
   const leg = legOf ? `${legOf.minutes} min ${MOVING[legOf.mode]}` : null;
@@ -167,9 +169,9 @@ export function nextChange(day: Day, at: number): number | null {
   const now = dayFace(day, at, () => 0);
   if (now.kind === 'done') return null;
   const stop = day.stops[now.stopIndex];
-  const stopAt = parseClock(stop.time) ?? at;
+  const stopAt = dayClocks(day.stops)[now.stopIndex] ?? at;
   const departure = leaveBy(day.stops, now.stopIndex);
-  const leaveMin = departure === null ? stopAt : (parseClock(departure) ?? stopAt);
+  const leaveMin = leaveMinute(day.stops, now.stopIndex, departure) ?? stopAt;
   // A booked stop skips the departure minute's "Leave now" for the late alert a minute on: with one
   // change carried ahead, the alert is the one worth having, and the countdown reaches 0:00 itself.
   const booked = stop.timeFlexibility === 'FIXED';

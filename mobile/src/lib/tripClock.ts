@@ -1,6 +1,8 @@
-import { formatClock, parseClock } from '@shared/itinerary';
+import { dayClocks, formatClock, parseClock, parseDuration } from '@shared/itinerary';
 
 import type { Stop } from '@/api/types';
+
+import { dayBefore, dayIndexFor } from './tripPhase';
 
 /**
  * What time it is where the trip is, and which stop that makes next.
@@ -78,11 +80,79 @@ export function clockInZone(timezone: string | null | undefined, at: Date = new 
  * answer and the screen says something different for each.
  */
 export function nextStop(stops: Stop[], nowMinutes: number): number | null {
-  for (let i = 0; i < stops.length; i++) {
-    const at = parseClock(stops[i]?.time);
+  // `dayClocks` rolls a stop after midnight forward (1:00 AM after a 10 PM dinner is 1500), so a
+  // `nowMinutes` past 1440 — 00:15 while the previous day is still running, see `tripClockNow` —
+  // compares against it on one line. For a day that never crosses midnight it is `parseClock`.
+  const clocks = dayClocks(stops);
+  for (let i = 0; i < clocks.length; i++) {
+    const at = clocks[i];
     if (at !== null && at > nowMinutes) return i;
   }
   return null;
+}
+
+/**
+ * When the day's last stop ends, in the day's own minutes (past 1440 when it runs on after
+ * midnight), or null when no stop has a readable time. The latest start + duration rather than the
+ * last row's, since a plan's order is not a promise about which stop runs longest. A duration that
+ * will not parse counts as zero (`parseDuration`): the stop still marks where the day got to.
+ */
+export function dayEnd(stops: Stop[]): number | null {
+  const clocks = dayClocks(stops);
+  let end: number | null = null;
+  clocks.forEach((start, i) => {
+    if (start === null) return;
+    const stopEnd = start + parseDuration(stops[i]?.durationLabel ?? '');
+    if (end === null || stopEnd > end) end = stopEnd;
+  });
+  return end;
+}
+
+/**
+ * **Which day it is, and what minute of it, where the trip is — the one rule every "today" reads.**
+ *
+ * A day's plan can run past midnight (a 10 PM dinner for two hours, a booked 12:30 AM stop), and
+ * the calendar does not care: at 00:15 a clock-and-date reading says it is day 4 and the traveller,
+ * who is still out on day 3, loses the stops of the night they are in. So the previous day stays
+ * current until its last stop has ended (`dayEnd`), and only then does the new one begin.
+ *
+ * `today` is the date of the *itinerary day* in force, which is yesterday's date while one is
+ * carrying over, so `dayIndexFor`, `tripPhase` and `openingDay` need no second rule. `minutes` is
+ * on that day's own clock: 1455 for 00:15 carried over, matching the rolled stops (`dayClocks`).
+ * Null without a timezone, as everything here is: the device's clock is not the destination's.
+ *
+ * The last day carries over too: its date stays `today` after midnight rather than flipping to
+ * "past" while its last stop is still running.
+ */
+export function tripClockNow(
+  trip: { startDate: string; endDate: string; timezone?: string | null; itinerary: { days: { stops?: Stop[] }[] } },
+  at: Date = new Date()
+): { today: string; minutes: number } | null {
+  const date = todayInZone(trip.timezone, at);
+  const minutes = nowInZone(trip.timezone, at);
+  if (date === null || minutes === null) return null;
+
+  // Dates stay ISO text and the day index comes from `dayIndexFor`, which is UTC arithmetic, so
+  // no device offset can shift the day (see `tripPhase.ts`).
+  const yesterday = dayBefore(date);
+  const index = dayIndexFor(trip, yesterday);
+  const end = index === null ? null : dayEnd(trip.itinerary.days[index]?.stops ?? []);
+  if (end !== null && minutes + 1440 < end) return { today: yesterday, minutes: minutes + 1440 };
+  return { today: date, minutes };
+}
+
+/**
+ * The minute to leave for `stops[index]`, from the clock text `leaveBy` returned for it, on the
+ * same rolled clock as `dayClocks`. `leaveBy` formats modulo a day, so "12:20 AM" for a 12:30 AM
+ * stop would read as 20 against a stop at 1470; the gap to the stop is taken instead and
+ * subtracted from the stop's own rolled start. Null when there is no departure or a time will not parse.
+ */
+export function leaveMinute(stops: Stop[], index: number, leave: string | null): number | null {
+  const start = dayClocks(stops)[index];
+  const stopRaw = parseClock(stops[index]?.time);
+  const leaveRaw = leave === null ? null : parseClock(leave);
+  if (start == null || stopRaw === null || leaveRaw === null) return null;
+  return start - ((stopRaw - leaveRaw + 1440) % 1440);
 }
 
 /**
@@ -145,8 +215,11 @@ export function todayState(
   const index = nextStop(stops, nowMinutes);
   if (index === null) return { kind: 'done' };
 
-  const until = minutesUntil(stops[index], nowMinutes);
-  if (until === null) return { kind: 'done' };
+  // Off the rolled clocks rather than `minutesUntil`, which reads the stop's own text and would
+  // put a 12:30 AM stop 22 hours behind a `nowMinutes` of 1455.
+  const startAt = dayClocks(stops)[index];
+  if (startAt === null || startAt === undefined) return { kind: 'done' };
+  const until = Math.max(0, startAt - nowMinutes);
 
   const leaveBy = leaveByFor(index);
 
@@ -158,7 +231,7 @@ export function todayState(
   // those are the two states the alert colour has to tell apart. The window is real: `nextStop`
   // keys on `at > now`, so at 12:20 a 12:30 stop is still next while its 12:10 departure has
   // passed — the window is as wide as the leg is long.
-  const raw = leaveBy === null ? until : (parseClock(leaveBy) ?? 0) - nowMinutes;
+  const raw = leaveBy === null ? until : (leaveMinute(stops, index, leaveBy) ?? 0) - nowMinutes;
 
   // Strictly `< 0`: standing at the departure minute is the last honest moment to go, not a
   // missed one.

@@ -14,7 +14,7 @@ import { formatMoney } from '@/lib/spend';
 import { tripDays } from '@/lib/tiers';
 import { useDayLiveActivity } from '@/lib/dayLiveActivity';
 import { glanceFor, type NextGlance } from '@/lib/todayGlance';
-import { clockInZone, nowInZone } from '@/lib/tripClock';
+import { clockInZone, tripClockNow } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
 import { Text } from '@/components/themed-text';
 
@@ -146,8 +146,12 @@ export function TripWidgets({
   onOpenTrip: () => void;
   saved?: SavedPlace[];
 }) {
-  const phase = tripPhase(trip, today);
-  const dayIndex = phase === 'today' ? (dayIndexFor(trip, today) ?? 0) : 0;
+  // The day in force and the minute on its clock, read together so a day running past midnight is
+  // still the day and its minutes keep counting (`tripClockNow`); without a zone, `today` stands.
+  const clockNow = tripClockNow(trip);
+  const effectiveToday = clockNow?.today ?? today;
+  const phase = tripPhase(trip, effectiveToday);
+  const dayIndex = phase === 'today' ? (dayIndexFor(trip, effectiveToday) ?? 0) : 0;
   // The day in the Dynamic Island and on the Lock Screen, while it is a trip day (iOS).
   useDayLiveActivity(phase === 'today' && trip.itinerary.days[dayIndex] ? { trip, dayIndex } : null);
   if (phase !== 'today' && phase !== 'eve') return null;
@@ -155,7 +159,7 @@ export function TripWidgets({
   if (!day) return null;
   const stops = day.stops ?? [];
   // No clock without a zone, and none on the eve: the day still draws, only "now" goes quiet.
-  const now = phase === 'today' ? nowInZone(trip.timezone) : null;
+  const now = phase === 'today' ? (clockNow?.minutes ?? null) : null;
   const glance = now === null ? null : glanceFor(stops, now);
   const clock = phase === 'today' ? clockInZone(trip.timezone) : null;
 

@@ -20,7 +20,7 @@ import type { TripSummary } from '@/api/types';
 export type TripPhase = 'upcoming' | 'eve' | 'today' | 'past';
 
 /** `YYYY-MM-DD` one day before `date`, via UTC accessors so no local offset can shift it. */
-function dayBefore(date: string): string {
+export function dayBefore(date: string): string {
   const [y, m, d] = date.split('-').map(Number);
   const t = Date.UTC(y, m - 1, d) - 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
