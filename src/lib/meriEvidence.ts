@@ -6,6 +6,7 @@ import { googlePlacesMemo } from "./fetchCache";
 import { getCandidatePois } from "./pois";
 import { fetchDietaryVenues } from "./dietaryVenues";
 import type { ReadyTrip } from "./readyTrips";
+import { braveWebResults, type BraveResult } from "./destinationFestivals";
 
 type Point = { lat: number; lng: number };
 
@@ -17,7 +18,12 @@ export interface EvidenceDeps {
   nearby: (point: Point) => Promise<{ provider: "google" | "osm"; places: EvidencePlace[] } | null>;
   pois: (point: Point) => Promise<EvidencePlace[] | null>;
   venues: (point: Point, diet: string) => Promise<EvidencePlace[] | null>;
+  /** Web pages about eating there (Brave search): read and cited, never turned into places. */
+  pages: (query: string) => Promise<BraveResult[] | null>;
 }
+
+/** How many web pages a food answer may cite. Few, so the model reads them rather than skims. */
+const FOOD_PAGES = 4;
 
 const SOURCE_LABELS: Record<string, string> = {
   osm: "OpenStreetMap",
@@ -65,7 +71,37 @@ const realDeps: EvidenceDeps = {
     const venues = await fetchDietaryVenues({ lat: point.lat, lon: point.lng }, { tags: [diet], note: "" });
     return venues && venues.map((v, i) => ({ id: `yelp${i}`, name: v.name, lat: point.lat, lng: point.lng, ...(v.rating !== null ? { detail: `${v.rating}★` } : {}), sourceId: "yelp" }));
   },
+  pages: (query) => braveWebResults(query, FOOD_PAGES),
 };
+
+/**
+ * One web page as a source and the fact it states. **The exception to `SOURCE_URLS`, and why:** a
+ * page *is* its URL, so citing one means linking it. What keeps it safe is that the link comes
+ * from Brave's result record, never from the model's prose, exactly like every other source; only
+ * https pages are kept. The fact says it is a page's claim, so the answer can say "these pages list
+ * …" rather than vouch for a restaurant nothing here checked.
+ */
+function pageEvidence(results: BraveResult[]): { source: EvidenceSource; fact: Evidence["facts"][number] }[] {
+  const out: { source: EvidenceSource; fact: Evidence["facts"][number] }[] = [];
+  for (const r of results) {
+    const title = r.title?.replace(/<[^>]+>/g, "").trim();
+    const text = r.description?.replace(/<[^>]+>/g, "").trim();
+    let host: string;
+    try {
+      const url = new URL(r.url ?? "");
+      if (url.protocol !== "https:") continue;
+      host = url.hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+    if (!title || !text) continue;
+    const id = `web${out.length + 1}`;
+    // The label is a tag under the answer, so a 70-character headline is cut to fit one.
+    const short = title.length > 40 ? `${title.slice(0, 39).trimEnd()}…` : title;
+    out.push({ source: { id, label: `${short} (${host})`, url: r.url! }, fact: { text: `A web page on ${host} says: ${title}. ${text}`, sourceId: id } });
+  }
+  return out;
+}
 
 /**
  * The facts Meri may answer a question from. Never throws: a source that fails is left out, so the
@@ -81,6 +117,9 @@ export async function gatherEvidence(
     readyTrip: ReadyTrip | null;
     extraSources?: EvidenceSource[];
     extraPlaces?: EvidencePlace[];
+    /** The trip's destination, added to the web query when `place` is a stop's bare name: "halal
+     *  restaurants near Petra" also finds a Petra Halal Food in Virginia. */
+    region?: string;
   },
   deps: EvidenceDeps = realDeps
 ): Promise<Evidence> {
@@ -133,6 +172,14 @@ export async function gatherEvidence(
     // Yelp is searched by diet, so with none stated there is nothing to ask it.
     const venues = diet ? await attempt(() => deps.venues(point, diet)) : null;
     if (venues) found.push(...venues);
+    // OSM's diet tags are sparse (0 halal places within 3 km of central Jaipur), so the pages are
+    // usually what a food answer stands on.
+    const where = input.region && !input.place.toLowerCase().includes(input.region.toLowerCase()) ? `${input.place}, ${input.region}` : input.place;
+    const pages = await attempt(() => deps.pages(`${diet ? `${diet} ` : ""}restaurants near ${where}`));
+    for (const { source: s, fact } of pageEvidence(pages ?? [])) {
+      sources.push(s);
+      facts.push(fact);
+    }
   }
 
   const seen = new Set<string>();

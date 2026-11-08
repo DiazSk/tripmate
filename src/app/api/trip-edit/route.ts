@@ -533,7 +533,7 @@ async function answerLookup(input: {
 
   // The diet is interpolated into an Overpass query, so only a value from the closed list goes on.
   const diet = IDEA_DIETS.find((d) => d.toLowerCase() === String(lookup.diet ?? "").toLowerCase()) ?? null;
-  const base = { place, diet, readyTrip: null, extraSources: plan.sources, extraPlaces: plan.places };
+  const base = { place, diet, readyTrip: null, extraSources: plan.sources, extraPlaces: plan.places, region: destination };
   const point = { lat: anchor.lat, lng: anchor.lng };
   const gathered = (async () => {
     const readyTrip = kind === "best_time" ? pickReadyTrip((await fetchReadyTrips()) ?? [], place) : null;
