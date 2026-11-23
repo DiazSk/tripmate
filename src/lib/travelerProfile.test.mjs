@@ -92,7 +92,8 @@ test('a saved profile with the "other" group parses', () => {
 test("an absent accessibility is an old row, not a bad one", () => {
   // Rows written before the field existed must still parse — rejecting them would wipe a
   // traveler's saved preferences the first time they loaded the page.
-  const { accessibility: _omitted, ...withoutIt } = valid;
+  const withoutIt = { ...valid };
+  delete withoutIt.accessibility;
   assert.deepEqual(parseProfile(withoutIt).accessibility, {
     stepFreeRequired: false,
     limitStairs: false,
