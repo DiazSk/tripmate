@@ -1,7 +1,7 @@
 /**
  * How TripMate plans, in four steps: Home's widget of that name and the screen it opens
  * (`app/how-it-works.tsx`). Static, and true today: this is what the backend actually does when a
- * plan is generated. Transcribed from `ios/TripMate/TripMate/Home/LandingContent.swift`.
+ * plan is generated. Transcribed from the earlier SwiftUI client's landing.
  *
  * **Step 02 no longer matches the Swift original, deliberately.** It said "forecast for your
  * actual dates" full stop, which for a trip a month out is a promise the product cannot keep:

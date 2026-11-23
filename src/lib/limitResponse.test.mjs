@@ -5,8 +5,8 @@ import { listTraces } from "./db.ts";
 import { OFF_TOPIC_SENTENCES, capResponse, limitResponse, modelFailureResponse, offTopicResponse, prefilterRefusal, routeLimitSentence, unit } from "./limitResponse.ts";
 import { ModelTimeoutError } from "./modelTimeout.ts";
 
-// Copy table rows SV-01..SV-13, SV-18, SV-19, SV-25 (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
-// section 9), with {minutes} = 5 for retryAfterSeconds 241..300.
+// Copy table rows SV-01..SV-13, SV-18, SV-19, SV-25 of the error-message copy table, with
+// {minutes} = 5 for retryAfterSeconds 241..300.
 const SV = {
   plan: "You’ve planned 3 trips in the last 10 minutes, which is the limit. You can plan another in about 5 minutes.",
   edit: "You’ve asked TripMate for 6 changes in the last 10 minutes, which is the limit. You can ask for another in about 5 minutes.",

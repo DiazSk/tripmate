@@ -3769,7 +3769,7 @@ html[data-story-mode="true"] .nav-account {
      backdrop detail into soft color blobs, saturate keeps what little color
      bleeds through from looking washed out. Alpha tuned for that same soft/dark
      feel, not for the contrast floor the previous (lighter-blur) version was
-     tuned for — see docs/superpowers/specs/2026-08-08-glass-blur-refinement-design.md.
+     tuned for.
      56px is where large backdrop structures (city blocks, coastlines) stop reading
      as recognizable shapes; 32px still leaves their edges visible. 0.62 keeps it
      "moderately dark" — at 0.5 the muted text starts washing out over bright terrain.

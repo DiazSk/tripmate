@@ -18,8 +18,7 @@ function dailyCapUsd(): number {
  * Unset/invalid DAILY_SPEND_CAP_USD means no cap — the default in local dev, where the
  * LLM_TRANSPORT=cli path costs nothing extra anyway. Bounds overshoot to "one extra generation's
  * worth", not an exact ceiling: a single in-flight expensive run can push spend past the cap
- * before the next request's check sees it. Fine for a demo guard, not a precise billing control —
- * see docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+ * before the next request's check sees it. Fine for a demo guard, not a precise billing control.
  */
 export function dailyCapResumesAt(now = Date.now()): Date | null {
   const cap = dailyCapUsd();

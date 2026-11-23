@@ -106,9 +106,7 @@ that the one recorded sweep ran a single fixture, not that fixtures were missing
 
 ## Refine path — first sweep (2026-08-22)
 
-Extends the benchmark from whole-itinerary generation to the "Refine with AI" chat path (spec:
-`docs/superpowers/specs/2026-08-21-refine-bench-design.md`, plan:
-`docs/superpowers/plans/2026-08-21-refine-bench.md`). The question: does Haiku 4.5 degrade a
+Extends the benchmark from whole-itinerary generation to the "Refine with AI" chat path. The question: does Haiku 4.5 degrade a
 refine patch compared with Sonnet 4.5, and by how much — the same downgrade question the
 generation sweep above already asked, on a narrower task.
 
@@ -175,7 +173,7 @@ new `UserAnswers` fields (`mustInclude`, `avoid`, `constraintsNote`) carried thr
 both prompt paths and the critique. Four guardrail rules and four benchmark scorers were added to
 check them. This section is the measurement, not the change.
 
-`docs/superpowers/plans/baseline-2026-09-23.json` is raw model output from the seven frozen
+`baseline-2026-09-23.json` (kept locally, not published) is raw model output from the seven frozen
 fixtures, captured before a single prompt edit landed. `candidate-2026-09-23.json` is the same
 seven, same staged path, run at the end — 7/7 cells, no failures, 241s mean. **Neither arm stores
 a score.** `--compare` re-scores both with today's scorer code, so one copy of the scorer grades
@@ -412,8 +410,8 @@ instead. Anyone re-running `AB_PATH=legacy` will hit this whenever the route exc
 The first measurement of the path travellers actually get (`POST /api/itinerary`, critique
 included), repeated rather than run once. `scripts/skill-ab.mjs` gained `AB_RUNS`, a `node:http`
 transport (the route answered in 302-574s; `fetch` dies at 300s), a hard-failure gate
-(`src/lib/bench/criticalFailures.ts`) and `--report`. Raw output is in
-`docs/superpowers/plans/legacy-baseline-2026-09-25.json`, re-scored at report time like every arm.
+(`src/lib/bench/criticalFailures.ts`) and `--report`. Raw output
+(`legacy-baseline-2026-09-25.json`, kept locally) is re-scored at report time like every arm.
 
 **Partial by decision.** The plan was 7 fixtures × 3. It was stopped after 9 runs because the CLI
 transport, though free per call, spends the developer's Claude subscription — ~7 minutes and several
@@ -498,13 +496,13 @@ forecast days. **Both still broke an anchor's hours:** Kyoto scheduled Nijo Cast
   plausible real hours and still stand as misses — unverified guesses from memory, since the model
   had nothing else.
 
-Next is `docs/superpowers/specs/2026-09-26-anchor-hours-before-generation-design.md`: look anchor
+Next: look anchor
 hours up **before** generation, by any OSM name tag, and write them beside each anchor — and score
 the legacy arm's hours checks against the hours the route actually had, the way weather already is.
 
 #### After: anchor hours in the prompt (2026-09-26, Claude)
 
-Built from `docs/superpowers/specs/2026-09-26-anchor-hours-before-generation-design.md`. The legacy
+The legacy
 route now looks each anchor's OSM hours up before generating (`src/lib/anchorHours.ts`, a 20s race
 overlapping the context and sketch calls), and `formatAnchors` writes them beside the place. The OSM
 lookup itself was fixed for every caller: it matches the exact local `name` and an accent- and

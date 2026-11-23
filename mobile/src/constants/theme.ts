@@ -1,13 +1,13 @@
 /**
  * The Kiln, as it reaches React Native.
  *
- * Transcribed from `DESIGN.md` (repo root) via `ios/TripMate/TripMate/Shell/DesignTokens.swift`,
- * which is the same system's proven port to a native mobile platform. When this file disagrees
+ * Transcribed from `DESIGN.md` (repo root) via the earlier SwiftUI client's design tokens, which
+ * were the same system's proven port to a native mobile platform. When this file disagrees
  * with DESIGN.md, this file is the bug.
  *
  * **This file used to assert that there is no light theme and cite DESIGN.md for it.** DESIGN.md
  * did not contain that. "No light mode" existed in exactly one place — a line written into
- * `docs/design-board/REVIEW-PROMPT.md` for outside reviewers — so a code comment was the most
+ * a design board's review prompt for outside reviewers — so a code comment was the most
  * authoritative statement of a rule nobody had ratified, and it fenced three reviewers off a
  * live question. The same failure as last cycle's stop-disc comment.
  *
@@ -212,7 +212,7 @@ export const dayCore = (dayIndex: number) =>
  * day's route as a thin core inside a soft spill, and using the core colour for both would make
  * the spill darker than the line it spills from, which inverts the whole effect.
  *
- * Transcribed from `ios/TripMateKit/Sources/TripMateKit/RouteGeometry.swift:76-82`.
+ * Transcribed from the earlier SwiftUI client's route geometry.
  */
 export const RouteDayGlow = ['#7FB3BD', '#C596B6', '#DFA079', '#A6BF89', '#A6A2D0'] as const;
 

@@ -149,8 +149,8 @@ Four non-obvious CLI-path constraints are already handled there; don't "fix" the
 
 `src/lib/skill.ts` is unaffected by the transport either way — it only ever produced a prompt-text string to splice into the prompt or the message array, independent of how the call is carried.
 
-See `docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md` for the full design and
-why (LinkedIn demo needed a public deploy link, which the CLI-only mechanism blocked). The session
+`DECISIONS.md` records the decision and why (a demo needed a public deploy link, which the CLI-only
+mechanism blocked). The session
 table this describes lives in `src/lib/db.ts` as `llm_sessions`.
 
 ### Two generation paths coexist
@@ -160,7 +160,7 @@ table this describes lives in `src/lib/db.ts` as `llm_sessions`.
 
 The pipeline's governing separation: the **skill** (`.claude/skills/itinerary-planner/SKILL.md`) holds planning *rules*, `trip-context.md` holds *facts only* (no instructions), and `src/lib/generationPrompt.ts` holds the *ask* with no trip data. Don't duplicate rules into the prompt or facts into the skill.
 
-**A third way a plan comes into being: imported.** `POST /api/import-plan` reads a traveller's own plan into days, and `POST /api/import-plan/complete` saves it as a draft with `Itinerary.origin: "imported"`. The model only copies and fills cost, duration, category and description — `parseFill` refuses any reply whose stop ids differ from the traveller's, so nothing is added, dropped or reordered. Stops carry `estimated` (what TripMate supplied) and `closedDays` (read by the `closed` guardrail). Spec: `docs/superpowers/specs/2026-10-10-import-own-itinerary-design.md`.
+**A third way a plan comes into being: imported.** `POST /api/import-plan` reads a traveller's own plan into days, and `POST /api/import-plan/complete` saves it as a draft with `Itinerary.origin: "imported"`. The model only copies and fills cost, duration, category and description — `parseFill` refuses any reply whose stop ids differ from the traveller's, so nothing is added, dropped or reordered. Stops carry `estimated` (what TripMate supplied) and `closedDays` (read by the `closed` guardrail).
 
 ### Meri answers from checked facts, not from memory
 
@@ -182,8 +182,7 @@ prompt alone.
 
 **A question turn costs one extra, cheap call** (the answer, on `cheapModel()`); ideas, plan changes and
 ordinary chat cost none, and the whole question takes one allowance. Fetchers are fail-soft, so an
-Overpass outage reads as "nothing checked" rather than an error. Spec:
-`docs/superpowers/specs/2026-10-24-meri-grounded-answers-design.md`.
+Overpass outage reads as "nothing checked" rather than an error. See `DECISIONS.md`.
 
 ### Story mode owns the camera, and the beat is the clock
 

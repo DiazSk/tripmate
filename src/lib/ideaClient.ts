@@ -26,7 +26,7 @@ export async function readIdea(idea: string, signal?: AbortSignal): Promise<Idea
   }
 }
 
-/** Copy rows SV-25..SV-28, PH-01 and LM-01 (docs/superpowers/plans/2026-10-17-error-messages-copy.md). */
+/** Copy rows SV-25..SV-28, PH-01 and LM-01 of the error-message copy table. */
 export function ideaFailureCopy(f: Failure): string {
   switch (f.kind) {
     case "rate_limited": {

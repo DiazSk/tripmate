@@ -1,6 +1,5 @@
 /**
- * Profile photos, the parts both clients and the server agree on. Spec:
- * `docs/superpowers/specs/2026-10-12-profile-photos-and-onboarding-design.md`.
+ * Profile photos, the parts both clients and the server agree on.
  *
  * **No `Buffer`.** Expo imports this through `@shared/avatar` for the initials and the tint, and
  * Hermes has no Node globals; `atob` and `Uint8Array` exist in both runtimes.

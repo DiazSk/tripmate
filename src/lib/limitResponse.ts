@@ -10,8 +10,8 @@ import { screenRequest } from "./promptScope";
  * (`code`, `bucket`, `retryAfterSeconds`) so it never has to parse the sentence; the sentence is
  * for a client with no row of its own, such as the phone app.
  *
- * Every `error` sentence is a copy-table row (docs/superpowers/plans/2026-10-17-error-messages-copy.md,
- * section 9, SV-*), typographic apostrophes included. Change them there first.
+ * Every `error` sentence is a row of the error-message copy table (SV-*), typographic apostrophes
+ * included. The tests hold the same sentences, so change both together.
  */
 
 /** The unit for a count: `unit(1, "minute")` is "minute", `unit(2, "minute")` is "minutes". */

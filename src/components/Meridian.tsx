@@ -5,8 +5,7 @@ import { useId, type CSSProperties } from "react";
 import { blinkCycleMs, meridianMotion, type MeridianState } from "@/lib/meri";
 
 /**
- * Meri, the Frosted Meridian — the phone's character, drawn for the web. Spec:
- * `docs/superpowers/specs/2026-10-11-meri-web-design.md`.
+ * Meri, the Frosted Meridian — the phone's character, drawn for the web.
  *
  * **Motion is CSS, not JavaScript.** `meridianMotion` picks classes and the keyframes in globals.css do
  * the rest, on `transform` alone, so the whole character is compositor work. Three of its four hosts sit

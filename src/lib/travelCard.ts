@@ -1,7 +1,7 @@
 /**
  * The welcome's decisions, as pure functions both clients draw from: which stamps land on the travel
  * card, what the closing sentence says, what the character says, and how the answers become a
- * traveller profile. Spec: `docs/superpowers/specs/2026-10-12-profile-photos-and-onboarding-design.md`.
+ * traveller profile.
  *
  * On screen the character is "your TripMate". Nothing here, or anywhere a traveller can read it,
  * says "Meri".

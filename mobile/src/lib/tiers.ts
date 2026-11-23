@@ -1,7 +1,7 @@
 import type { TierId } from '@/api/types';
 
 /**
- * A spending style. Ported from `ios/TripMateKit/Sources/TripMateKit/Tiers.swift`, itself a port
+ * A spending style. Ported from the earlier SwiftUI client, itself a port
  * of `src/lib/tiers.ts` in the web app.
  *
  * **Nothing selects one of these, and that is the point.** The web app had a tier picker and

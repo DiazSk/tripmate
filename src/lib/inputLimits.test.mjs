@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CAPS, UNREADABLE_REQUEST, capFailureResponse, chatHistory, checkItinerary, checkText, readJsonCapped } from "./inputLimits.ts";
 
-// Copy table row SV-17 (docs/superpowers/plans/2026-10-17-error-messages-copy.md, section 9).
+// Copy table row SV-17 of the error-message copy table.
 const SV17 = (n) => `That’s longer than TripMate can read at once. Shorten it to under ${n} characters and send it again.`;
 
 const BODY_BIG = "That’s more than TripMate can read at once. Send less and try again.";

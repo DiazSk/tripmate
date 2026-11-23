@@ -64,7 +64,7 @@ function readFields(r: IdeaRead): [string, string][] {
 }
 
 /**
- * Meri's sentence box on the landing (spec: docs/superpowers/specs/2026-10-23-landing-meri-pill-design.md),
+ * Meri's sentence box on the landing,
  * with what it shows under itself (the example prompts, the reading, a failure) and the equal
  * "Plan step by step" under all of it. One centred group: the hero positions it, this sizes it.
  */

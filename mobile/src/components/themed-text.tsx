@@ -69,7 +69,7 @@ export function TextInput({
 export type TextInput = NativeTextInput;
 
 /**
- * The Kiln type scale, from `ios/TripMateKit/Sources/TripMateKit/Typography.swift`.
+ * The Kiln type scale, carried over from the earlier SwiftUI client.
  *
  * Two RN-specific conversions are baked in at authoring time rather than computed:
  *

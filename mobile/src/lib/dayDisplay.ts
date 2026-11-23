@@ -1,7 +1,7 @@
 import type { DayPlan } from '@/api/types';
 import { aboutDuration } from '@shared/travelTime';
 /**
- * How a day states itself. Ported from `ios/TripMateKit/Sources/TripMateKit/DayDisplay.swift`.
+ * How a day states itself. Ported from the earlier SwiftUI client.
  *
  * **No `Date` is constructed anywhere in this file, and that is the point.** `2026-09-19` parses
  * as UTC midnight, so any local-timezone formatter rolls it back a day everywhere west of

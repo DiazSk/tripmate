@@ -917,7 +917,7 @@ function runClaudeViaApi(
  * local dev unchanged) or `runClaudeViaApi()` (a direct Anthropic API call, used only where
  * `LLM_TRANSPORT=api` is set — Railway's deployed environment, which has no CLI binary at all).
  * This is a deliberate, permanent dual-path design, not a migration in progress. See
- * docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+ * DECISIONS.md.
  *
  * Every call is logged to `llm_traces` regardless of transport (prompt + raw response, on every
  * outcome including errors/timeouts) — see the LLM trace FAB (src/components/LlmTraceFab.tsx).

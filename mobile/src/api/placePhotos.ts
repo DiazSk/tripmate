@@ -6,7 +6,7 @@ import type { PlacePhoto } from './types';
 /**
  * One photo lookup per place name, for the whole process.
  *
- * Ported from `ios/TripMate/TripMate/Photos/PlacePhotoStore.swift`, with its two load-bearing
+ * Ported from the earlier SwiftUI client's photo store, with its two load-bearing
  * rules intact:
  *
  * 1. **One request per name.** A grid of memory tiles, the Home card and a trip's day mastheads

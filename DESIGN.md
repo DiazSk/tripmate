@@ -716,7 +716,7 @@ beside the day (title, stay, travel modes, Refine with AI, Edit day, then stop c
 strip with walking legs between them, then the day's total). It shuts to a one-line ticket over the
 map and becomes a day strip while a stop's drawer is open. **Decided 2026-10-16:** wider than 60rem
 the board becomes the right-hand column of "Trip page · A", stops first, with the map full height
-beside it (see `docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`). **Unsaved (2026-10-18):**
+beside it. **Unsaved (2026-10-18):**
 when a finished plan's draft cannot be written (after one quiet retry), `/` shows this same board
 read-only: the tools that need a saved trip are gone, and the draft notice reads "Not saved yet" with
 Keep this trip and the reason it didn't save beneath (copy W-16/W-17/W-17a).
@@ -861,8 +861,7 @@ means covering Apple's logo and Legal link, which must stay visible, so while it
 just above the sheet, and centres every dive in the map that is left. The sheet's lines are
 spaced generously (20pt insets, 12pt beside Meri, 16pt before the narration and before the
 controls, 8pt between the two lines) so the header, the narration and the controls read as three
-things rather than one block. Its layout is the Frosted Meridian reference (column 02 of
-`docs/superpowers/specs/assets/2026-10-11-meri-reference.webp`): Meri, the day's title — with
+things rather than one block. Its layout is the Frosted Meridian reference: Meri, the day's title — with
 "Read from your plan" or "Voice unavailable" beneath it only when true — the beat count and
 Close; the line being spoken and the next one in a single muted row; then three centred
 controls, the middle one the panel's only fill (a 48pt disc in the ink at 14%). While it plays,
@@ -1116,7 +1115,7 @@ thinks it is open.
 
 ### Error messages: Toast, Error dialog, Inline note
 Three patterns, chosen in this order: **inline** unless the failure has no place on screen, **toast**
-unless it blocks, **dialog** only then. Copy is a table row each (`docs/superpowers/plans/2026-10-17-error-messages-copy.md`);
+unless it blocks, **dialog** only then. Copy is a table row each;
 no screen shows a status code, `e.message` from a fetch, or "something went wrong". Glyph plus words,
 never colour alone, at 11px or more. The alert text on dark glass is the token `--alert-on-night`
 (`#ffb3b3`, 11.1:1 on deep); on a light surface it is `--wd-alert-text`; positive on night is
@@ -1460,8 +1459,8 @@ grammar is drawn with lines and circles, not silhouette.
 
 Findings the build carries today, recorded so nothing here is inherited by a new surface. The
 layout and performance findings of the 2026-10-16 evaluation (sliced text, stacks that collide on short
-screens, the trip map framing a hill town off screen) are tracked in
-`docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`, not repeated here.
+screens, the trip map framing a hill town off screen) were tracked separately and are not repeated
+here.
 
 1. ~~**Muted text below AA on light surfaces.**~~ Fixed: stone as text is `--wd-stone-text`, ember is
    `#a64c09`, and the spotlight's category counts are ember rather than signal.

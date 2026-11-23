@@ -158,8 +158,7 @@ db.exec(`
 
 // One row per persisted API-transport chat/edit session — the LLM_TRANSPORT=api counterpart to
 // the CLI's local JSONL session file. `messages` is a JSON array of Anthropic message turns (both
-// user and assistant), replayed in full on every resume. See claude.ts's runClaudeViaApi and
-// docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+// user and assistant), replayed in full on every resume. See claude.ts's runClaudeViaApi.
 db.exec(`
   CREATE TABLE IF NOT EXISTS llm_sessions (
     id TEXT PRIMARY KEY,

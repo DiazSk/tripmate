@@ -93,30 +93,6 @@ Trace-*.json
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
 
-# Xcode, for the native client under ios/. Listed before that project exists on purpose: these
-# appear the instant someone opens Xcode, and with two people on the repo `xcuserdata/` — window
-# layout, breakpoints, the last-selected scheme — conflicts on every single pull. Added after is
-# added too late. Only what is actually in use: no CocoaPods or Carthage entries until there are
-# CocoaPods or Carthage.
-xcuserdata/
-DerivedData/
-.swiftpm/
-
-# SwiftPM build output. 117MB after a single `swift test` on TripMateKit, and unlike the Xcode
-# entries above this one is not hypothetical — it exists the moment anyone runs the package's
-# tests. `Package.resolved` is deliberately NOT ignored: it pins transitive dependency versions,
-# and for an app (as opposed to a library) it belongs in git so two machines build the same thing.
-.build/
-
-# xcodebuild's output when it is run without `-derivedDataPath`, which it will be. Scoped to
-# ios/ rather than a bare `build/` so it cannot silently swallow a directory somebody means to
-# track elsewhere; the existing `/build` above is root-anchored and does not reach here.
-ios/**/build/
-
-# Design board: the full-resolution simulator captures. The 880px copies under
-# shots/web/ are what build.py actually reads, and index.html embeds them, so these
-# originals are only worth keeping locally for a higher-resolution rebuild.
-docs/design-board/shots/*.png
 
 # Layout gate screenshots (scripts/layout-matrix.mjs)
 .layout-matrix/
