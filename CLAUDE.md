@@ -12,89 +12,47 @@ npm run build    # next build, then verify-build.mjs (see below)
 npm run lint     # eslint (no path arg needed)
 npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
 node scripts/browser-matrix.mjs     # cross-engine boot check against a running server
-npm run verify-hero                 # asserts the hero film works (needs a running server)
 npm run verify-layout               # layout gate: 10 viewports × landing/planner/writing/trip (needs a production server, default :3200)
 ```
 
-**`npm run build` fails the build if any emitted chunk cannot be parsed.** That second step is
-not ceremony. `next build` reported success for months while shipping a Cesium chunk no browser
-could parse: `@spz-loader/core` embeds its WASM decoder as a string of raw bytes, and SWC's
-minifier re-encoded it as a template literal, where a NUL byte followed by a digit is an illegal
-escape. Production served a 200 and rendered the whole interface **with no globe at all** — in
-Chromium, Firefox and WebKit alike. `next dev` never showed it because dev does not minify, and
-neither `tsc`, `eslint` nor `node --test` can see a bundler's output. `shims/spz-loader-core.ts`
-is the fix (aliased in `next.config.ts`); `scripts/verify-build.mjs` is the guard.
+**`npm run build` fails if any emitted chunk cannot be parsed.** `@spz-loader/core` embeds its WASM
+decoder as a string of raw bytes, and SWC's minifier re-encodes it as a template literal in which a
+NUL byte followed by a digit is an illegal escape. The result is a Cesium chunk that no browser can
+parse while `next build` still reports success, and `next dev` never shows it because dev does not
+minify; `tsc`, `eslint` and `node --test` cannot see a bundler's output either.
+`shims/spz-loader-core.ts` is the fix (aliased in `next.config.ts`) and `scripts/verify-build.mjs`
+is the guard.
 
-**Pending decision (2026-10-13):** the Petra hero film this gate tests is no longer rendered — `/`
-now shows the Polar landing (`src/components/polar/`), and the Blue Hour landing code is kept,
-unmounted, until it is retired or deleted. See the "Pending decision" row in `docs/frontend.md`.
+**Node ≥ 22.** `.nvmrc` pins it; run `nvm use` if the shell drifts. 22 is the tested floor.
 
-**`npm run verify-hero` is the manual gate for the landing hero, and it is manual for a reason.**
-Every defect the hero film shipped with was *silent*: `position: sticky` inside an
-`overflow-hidden` ancestor renders identically to sticky never being applied; `img.decode()`'s
-promise never settling looks like slow footage; `Cache-Control: immutable` on unversioned filenames
-serves a stale cut to returning visitors only. None threw, none logged, none failed a build. The
-script asserts nine properties whose failure is invisible by eye on a fast machine, and it is
-proven to catch them — adding `overflow: hidden` to `.hero-track` fails it with exit 1 while
-`getComputedStyle(stage).position` still reads `sticky`.
+**The test suite covers deterministic logic.** `npm test` runs
+`node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"`:
+about 1,900 tests with no framework and no build step. Nothing renders and no route is booted, so
+verifying a change means `npm test`, `tsc --noEmit`, `eslint`, **and** exercising the routes it
+touches against a running dev server with `curl`. Typecheck alone is not verification.
 
-It needs a browser and a running server, and Playwright is deliberately not a dependency here (see
-`scripts/browser-matrix.mjs` for why). So it is not wired into `npm run build`. Run it by hand after
-touching `Hero`, `HeroFrames`, the `.hero-*` rules, or `scripts/build-frame-sequence.mjs`.
-
-**Node ≥ 22.** `.nvmrc` pins it — run `nvm use` if the shell drifts. This was once a hard requirement for a specific reason: `better-sqlite3`'s native binding silently killed the dev server on Node 20 the moment any DB-touching route was hit. That package is gone (see Storage below); `libsql` declares no `engines` floor and has not been tried lower, so treat 22 as the tested floor rather than a proven cliff.
-
-**The test suite is deliberately narrow, not small.** `npm test` runs
-`node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` —
-~155 files, ~1,850 tests, no framework and no build step. It covers mostly pure, deterministic logic,
-much of it logic that has already broken once. Nothing renders and no route is booted.
-
-**A few tests do open a database, and it is always an in-memory one.** `db.test.mjs`,
-`claimOwner.test.mjs`, `savedPlacesDb.test.mjs` and `fetchCache.test.mjs` exercise real SQL, and
-`bench.test.mjs` reaches `db` transitively through `runBenchmark.ts`. That is the coverage working
-as intended — what was wrong was *which* database they reached. `db.ts` resolves
-`DB_PATH ?? cwd/tripmate.db` **at import time**, so before `scripts/test-db.mjs` existed every
-`npm test` inserted four real trips into the developer's own `tripmate.db`: fixture destinations
-("Kyoto", "Legacy town") accumulating on the memories wall beside real ones, with nothing failing
-and nobody told. That module sets `DB_PATH` to `:memory:` before anything loads, and since
-`node --test` forks a process per file, each file gets its own empty database — more isolation
-than the shared file ever gave, which is why no test needed changing. `db.test.mjs` carries the
-assert that fails if the `--import` is ever dropped from the script. An explicit `DB_PATH` still
-wins, for a one-off run against a real file.
-
-So passing tests prove far less here than in a normally-covered repo. Verification still means: `npm test`, `tsc --noEmit`, `eslint`, **and** exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
+**Tests that open a database use an in-memory one.** `db.test.mjs`, `claimOwner.test.mjs`,
+`savedPlacesDb.test.mjs` and `fetchCache.test.mjs` exercise real SQL, and `bench.test.mjs` reaches
+`db` through `runBenchmark.ts`. `db.ts` resolves `DB_PATH ?? cwd/tripmate.db` at import time, so
+`scripts/test-db.mjs` sets `DB_PATH` to `:memory:` before anything loads; `node --test` forks a
+process per file, so each file gets its own empty database. `db.test.mjs` fails if the `--import`
+is dropped from the script. An explicit `DB_PATH` still wins, for a one-off run against a real file.
 
 **A `.test.mjs` can import any `.ts` module, value imports included.** `scripts/ts-resolve.mjs`
 registers an ESM resolve hook that retries an extensionless relative specifier as `.ts`, then
-`/index.ts`, then `.tsx` — so `import { TIERS } from "./tiers"` inside a module under test resolves
-fine. `src/lib/tripDays.test.mjs` imports `applyPatch` from `itineraryPatch.ts`, which value-imports
-`./tripDays`; `src/lib/bench/bench.test.mjs` reaches `runBenchmark.ts`, which pulls in `../db` and
-`libsql`. Write the test where the logic lives.
+`/index.ts`, then `.tsx`, so `import { TIERS } from "./tiers"` inside a module under test resolves.
+Write the test where the logic lives. The hook is registered by `--import` in the `test` script only,
+so the dev server and the build never load it, and import specifiers inside a `.test.mjs` itself
+keep the explicit `.ts` extension.
 
-The hook is registered by `--import` in the `test` script only, so the dev server and the build never
-load it. Import specifiers **inside a `.test.mjs` itself** still need the explicit `.ts` extension —
-the hook fires on the failed resolve of a relative import, and the test files all write `./foo.ts`
-directly.
+**Import types with `import type`.** Node erases `import type { X }`, but a plain `import { X }` of an
+`interface` or `type` stays in the emitted module and throws at instantiation
+(`SyntaxError: The requested module './types' does not provide an export named 'X'`). Keep type-only
+names in `import type` blocks or `type`-prefixed specifiers so every module stays loadable from a
+`.mjs` script.
 
-**What the hook does NOT fix: a type imported without the `type` keyword.** Node erases
-`import type { X }`, but a plain `import { X }` stays in the emitted module, so if `X` is an
-`interface` or `type` the loader throws at instantiation:
-
-```
-SyntaxError: The requested module './types' does not provide an export named 'CritiqueResult'
-```
-
-That is `src/lib/generationRunner.ts` today (line 11 pulls `CritiqueResult` into a value import
-block), which is why `runGeneration()` cannot be reached from a `.mjs` script at all — a script that
-needs it has to go through `/api/itinerary` over HTTP against a running dev server, the way
-`scripts/perf-bench.mjs` does. Path resolution is solved; import *kind* is not. Move the type into an
-`import type` block if you need a module to be script-reachable.
-
-The glob in the `test` script needs **double** quotes. Single quotes reach Node literally on Windows and it matches nothing — the suite reported success while running zero tests.
-
-## Git commits
-
-**No signature or trailer of any kind.** Never append `Co-Authored-By`, "Generated with Claude Code", or any similar attribution line to a commit message in this repo. This overrides the harness's default commit-message template — write the message and stop at the description.
+The glob in the `test` script needs **double** quotes: single quotes reach Node literally on Windows
+and match nothing.
 
 ## Architecture
 
@@ -190,29 +148,19 @@ Pressing Play on a day narrates it: the camera flies to each stop while a voice 
 script and the matching line lights up. `src/lib/storyMode.tsx` is the controller, `StoryStage.tsx`
 the only thing that draws it, both mounted in `AppShell` beside the map chrome.
 
-**On `/trip/[id]` the film's controls are a bottom media-player bar with the narration as subtitles above it** (`StoryStage` over `polar/StoryPlayer.css`, canvas design "Story mode · 1 Subtitles", branch `feat/polar-redesign`), the trip page's board (`polar/trip/TripBoard.tsx`) hiding while it plays; the capsule hand-off below still describes the `/` result view's `ItineraryCard`, which has since gone (its capsule Play with it; `/` keeps that card only to draw a plan while it is written), though the stage it hands to is now that same bar. **The plan panel stays; it shuts to its capsule.** That single clean line — photo, destination,
-length, day in focus — *is* the film's header. Its action slot carries Play only while there is no
-film: the moment one starts, the button **leaves** for `StoryStage`'s transport row, between
-Previous and Next, and the capsule keeps only the trip. It travels rather than teleports —
-`src/lib/controlHandoff.ts` hands the capsule's rect to the stage, which flies from it with
-`Element.animate`. That hand-off is deliberately one-way (the capsule is clipped by two
-`overflow-hidden` ancestors, so a return flight would run behind them), which is why it is not
-Framer's symmetric `layoutId`. `StoryStage` otherwise repeats none of the capsule and docks
-directly beneath, its geometry copied from
-`DockedPanel`'s collapsed branch (same insets, same `sm:w-96`/`max-w-[520px]`, offset by the
-capsule's `h-14` plus a gap) so the two read as one stack in the column the plan already owned. An
-earlier revision hid the whole panel and floated the narration bottom-centre over the map; that put
-the film's controls nowhere near the control that started it and covered the ground the camera had
-just flown to. What *is* hidden is chrome — the map search box, the zoom/2D/tilt/compass
-stack and the install prompt, by `display: none` on a wrapper so each keeps its own state. The
-Map/Satellite toggle stays: it chooses the world being filmed rather than acting on the page. **The
-navbar stays too, and stays usable** — hiding it left a playing film with no visible way out — so
-**leaving the page ends the film**: the provider watches `usePathname()` and any change of path is
-the same `exit()` Esc and Plan take, run as the outgoing path's effect cleanup. Before that, a navbar
-click mid-film left the subtitle, the "Next ·" line and the bar drawn over the next page (the Polar
-landing with Seattle's player on it), still narrating, because the provider and the stage live in
-`AppShell` above every route and nothing about a navigation reaches them on its own.
-`LlmTraceFab` mounts as a sibling of `.app-shell`, above the provider, so no context reaches it —
+**On `/trip/[id]` the film's controls are a bottom media-player bar with the narration as subtitles
+above it** (`StoryStage` over `polar/StoryPlayer.css`), and the trip page's board
+(`polar/trip/TripBoard.tsx`) hides while it plays. The Play control travels rather than teleports:
+`src/lib/controlHandoff.ts` hands the pressed control's rect to the stage, which flies from it with
+`Element.animate`. The hand-off is one-way, because the source sits inside two `overflow-hidden`
+ancestors and a return flight would run behind them, which is why it is not Framer's symmetric
+`layoutId`. What *is* hidden is chrome: the map search box, the zoom/2D/tilt/compass stack and the
+install prompt, by `display: none` on a wrapper so each keeps its own state. The Map/Satellite toggle
+stays, since it chooses the world being filmed. **The navbar stays too, and stays usable**, so
+**leaving the page ends the film**: the provider watches `usePathname()` and any change of path runs
+the same `exit()` as Esc and Plan, as the outgoing path's effect cleanup. The provider and the stage
+live in `AppShell` above every route, so without that nothing about a navigation would reach them.
+`LlmTraceFab` mounts as a sibling of `.app-shell`, above the provider, so no context reaches it;
 `data-story-mode` on `<html>` plus one rule in globals.css is its lever.
 
 **The film draws stops, not a route.** `connectors: false` on `RouteDrawRequest` (set through
@@ -409,8 +357,7 @@ that reconfiguration, and leaving the app in the gap before the next sentence me
 also restarts the loop on `AVAudioEngineConfigurationChange` and checks it as the app enters the background.
 A stop's artist line reads "Now arriving · Stop 3 of 5" during its first sentence, then the day's line: iOS
 animates nothing in this player but a cross-fade, so an arrival is told as two changes. No travel beats — the app sends no `legs`.
-The player (`mobile/src/components/story-panel.tsx`) is the canvas design "Story mode · 1 Subtitles" at
-phone width, as the web's is: a subtitle above a night bar, chapters that slide up, Plan to leave. **The
+The player (`mobile/src/components/story-panel.tsx`) is the same design at phone width as the web's: a subtitle above a night bar, chapters that slide up, Plan to leave. **The
 words light on the voice's own events, not an estimate**: `speakBeat` reports each sentence
 (`onSentence`) and `expo-speech`'s `onBoundary` each word, both into shared values the panel alone reads,
 and a muted film or a failed voice is spoken by `silentSpeech` at the narrator's pace through the same path.
@@ -426,7 +373,7 @@ volume, so nothing here claims to measure audio.
 
 What blocks the migration is a data contract, not missing work: the staged path emits **markdown** into `trip_artifacts`, while every rendering surface (`ItineraryCard`, the day panel, the export, `applyPatch`) reads a strict-JSON `Itinerary` off `trips.itinerary_json`. Switching the wizard needs either a markdown renderer or a converter, and until one exists both paths stay.
 
-**The staged pipeline is not dead code, and it is easy to conclude that it is.** Its callers live under `src/components/backend/` and `src/app/backend/`, so a non-recursive grep over `src/app/*.tsx src/components/*.tsx` finds nothing and reports it unwired — that mistake has been made. What is actually true:
+**The staged pipeline is not dead code, and it is easy to conclude that it is.** Its callers live under `src/components/backend/` and `src/app/backend/`, so a non-recursive grep over `src/app/*.tsx src/components/*.tsx` finds nothing and reports it unwired. What is actually true:
 
 - `trip-fetch` runs on the **traveller path**. `HomeView.tsx` fires it unawaited when the traveller leaves the basics step, to warm the cache and fill `rawFetch` for the profile step's POI picker and the generation loader's facts. It is not optional.
 - `trip-submit` / `trip-prepare` / `trip-generate` are driven by `StagedPipelineConsole`, rendered at `/backend/pipeline`, whose `page.tsx` calls `notFound()` unless `NODE_ENV === "development"` — the same check `devLabel` uses. It is already unreachable in production, so it needs no further flagging.
@@ -469,11 +416,11 @@ Three things carry chat state, and only the first is the model's:
 Set `TURSO_DATABASE_URL` (+ `TURSO_AUTH_TOKEN`) to point the same code at a hosted database; unset, it uses `DB_PATH ?? cwd/tripmate.db`, so tests, the bench harness and `next dev` need no credentials. **One behavioural difference, handled once in `db.ts`'s `wrap()`:** libsql's native `.get()` appends a `_metadata` field that better-sqlite3 never had, and rows from this file reach `NextResponse.json` nearly unchanged — it is stripped at the driver, not at the 13 `.get()` call sites.
  `generations` holds one row per itinerary generation — the context payload, the full prompt and the full response, keyed by run id — written the moment the model answers and *before* the parse, so a response that fails `parseJsonResponse` is still on disk. It is deliberately **not** a `trips` row: it is keyed by run and holds unparsed text, so it can record a generation that never produced a renderable plan.
 
-A `trips` row, by contrast, now exists from the moment a plan does. `trips.status` is `'draft'` until the traveller presses Keep and `'saved'` after — an itinerary used to live in React state until Save ran, so a Back press threw the whole generation away. Save **promotes the same row** (`promoteTripToSaved`) rather than inserting, which is what keeps the plan's `chat_session_id`, its `generations.trip_id` link and its pre-save edits attached to the trip they belong to. `POST /api/trips` back-fills `generations.trip_id` when the draft is created. **The server saves that draft itself, the moment the plan exists** (`saveTripForRun`, from `/api/itinerary`'s `onPlan`), because iOS suspends an app that is left: the stream dropped, the plan was still written at full cost with the allowance already spent, and the client was the only thing that ever saved it. `saveTripForRun` makes **one row per run per owner**, so the client's own `POST /api/trips` for the same run returns that row (and a Keep promotes it). The stream's first frame is `run`, and `GET /api/itinerary/runs/:runId` answers `writing` / `ready` (with the trip, to its owner only) / `failed` (`llm_runs.failed_at`) / `unknown`, so the phone's writing screen recovers a lost stream (`mobile/src/lib/planRecovery.ts`) instead of failing and starting another. On iOS that screen also runs a **Live Activity** (`mobile/src/lib/planLiveActivity.tsx`, `expo-widgets`) **without push**, because the Apple team is a free one: it is updated only while the app is in front, so once left its words stay on the step it was on while the ring, the countdown and **each step's segment, filling over its own scheduled slot** (`STEP_SECONDS`, measured on real runs: about 7½ minutes in all), move by themselves (`timerInterval`); it goes stale a minute past the whole run's estimate. An estimate of the writing screen's 150s hand-off made it give up mid-writing, before Checking and Placing ever showed. The widget extension `app.tripmate.ExpoWidgetsTarget` needs the app group on its App ID; on the free team that was assigned once in Xcode's Signing & Capabilities, which `xcodebuild -allowProvisioningUpdates` would not do. **A trip day has one too** (`mobile/src/lib/dayLiveActivity.tsx`, the canvas design "Live Activity · 1 Day clock"), kept by Home's trip widgets: the next stop and when to leave, as `todayState` says (`dayActivity.ts`), each update carrying the face after the day's next change so it moves one step on its own. **A finished generation opens on `/trip/<id>` as that draft** (only when the draft insert fails twice does `/` keep it, on the trip board read-only with Keep), and the critique, which lands minutes later and which the server keeps running after the client has gone, is written to the row by `applyRevisionIfUnedited` only while the row still holds the plan as handed over, so a traveller's saved edit always wins; the still-open stream tells the trip page through `src/lib/draftRevision.ts`. **`listTrips()` defaults to `status = 'saved'`** — the memories wall, `/profile` and `/trip/latest` all mean "trips somebody kept" — and unkept drafts are swept after `DRAFT_TTL_DAYS` (`src/lib/drafts.ts`) on read from `/trips` and `GET /api/trips`, this app having no scheduler. `src/lib/db.ts` creates every table at import time with `CREATE TABLE IF NOT EXISTS`, and adds later columns through the `addColumnIfMissing()` PRAGMA guard — follow that pattern instead of writing migration files. Note the deliberate split: DB rows are `snake_case` (`TripRow.start_date`), API/type surfaces are `camelCase` (`TripSummary.startDate`), mapped by hand in each route.
+A `trips` row, by contrast, now exists from the moment a plan does. `trips.status` is `'draft'` until the traveller presses Keep and `'saved'` after — an itinerary used to live in React state until Save ran, so a Back press threw the whole generation away. Save **promotes the same row** (`promoteTripToSaved`) rather than inserting, which is what keeps the plan's `chat_session_id`, its `generations.trip_id` link and its pre-save edits attached to the trip they belong to. `POST /api/trips` back-fills `generations.trip_id` when the draft is created. **The server saves that draft itself, the moment the plan exists** (`saveTripForRun`, from `/api/itinerary`'s `onPlan`), because iOS suspends an app that is left: the stream dropped, the plan was still written at full cost with the allowance already spent, and the client was the only thing that ever saved it. `saveTripForRun` makes **one row per run per owner**, so the client's own `POST /api/trips` for the same run returns that row (and a Keep promotes it). The stream's first frame is `run`, and `GET /api/itinerary/runs/:runId` answers `writing` / `ready` (with the trip, to its owner only) / `failed` (`llm_runs.failed_at`) / `unknown`, so the phone's writing screen recovers a lost stream (`mobile/src/lib/planRecovery.ts`) instead of failing and starting another. On iOS that screen also runs a **Live Activity** (`mobile/src/lib/planLiveActivity.tsx`, `expo-widgets`) **without push notifications**: it is updated only while the app is in front, so once left its words stay on the step it was on while the ring, the countdown and **each step's segment, filling over its own scheduled slot** (`STEP_SECONDS`, measured on real runs: about 7½ minutes in all), move by themselves (`timerInterval`); it goes stale a minute past the whole run's estimate. An estimate of the writing screen's 150s hand-off made it give up mid-writing, before Checking and Placing ever showed. The widget extension `app.tripmate.ExpoWidgetsTarget` needs the app group on its App ID, assigned in Xcode's Signing & Capabilities. **A trip day has one too** (`mobile/src/lib/dayLiveActivity.tsx`), kept by Home's trip widgets: the next stop and when to leave, as `todayState` says (`dayActivity.ts`), each update carrying the face after the day's next change so it moves one step on its own. **A finished generation opens on `/trip/<id>` as that draft** (only when the draft insert fails twice does `/` keep it, on the trip board read-only with Keep), and the critique, which lands minutes later and which the server keeps running after the client has gone, is written to the row by `applyRevisionIfUnedited` only while the row still holds the plan as handed over, so a traveller's saved edit always wins; the still-open stream tells the trip page through `src/lib/draftRevision.ts`. **`listTrips()` defaults to `status = 'saved'`** — the memories wall, `/profile` and `/trip/latest` all mean "trips somebody kept" — and unkept drafts are swept after `DRAFT_TTL_DAYS` (`src/lib/drafts.ts`) on read from `/trips` and `GET /api/trips`, this app having no scheduler. `src/lib/db.ts` creates every table at import time with `CREATE TABLE IF NOT EXISTS`, and adds later columns through the `addColumnIfMissing()` PRAGMA guard — follow that pattern instead of writing migration files. Note the deliberate split: DB rows are `snake_case` (`TripRow.start_date`), API/type surfaces are `camelCase` (`TripSummary.startDate`), mapped by hand in each route.
 
 ### Accounts
 
-**Clerk authenticates; a UUID owns.** `clerkMiddleware` runs in `src/proxy.ts`, and is exported **only when `clerkConfigured()`** (`src/lib/clerkConfig.ts`: both `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`). Without the keys the bare owner proxy runs and the app works signed out with accounts off — the middleware fails without keys, and `auth()` cannot run without it, so anything that would call them asks first. **Set both keys or neither:** with the publishable key alone the sign-in UI mounts, the server stays anonymous, and the claim returns 401. With dev keys set, Clerk's middleware sends first document requests through a dev-browser handshake with Clerk's servers, so offline local dev with keys cannot load pages and `verify-hero` / `browser-matrix` need network (curl and the perf scripts are unaffected); without keys everything works offline. The `accounts` table maps a Clerk user to a UUIDv4 `owner_id` (`getOrCreateAccount`), so **nothing below `currentOwner()` in `ownerRequest.ts` knows Clerk exists**, and `isValidOwnerId`, `readableOwners` and `claimAnonymousOwner` are untouched.
+**Clerk authenticates; a UUID owns.** `clerkMiddleware` runs in `src/proxy.ts`, and is exported **only when `clerkConfigured()`** (`src/lib/clerkConfig.ts`: both `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`). Without the keys the bare owner proxy runs and the app works signed out with accounts off — the middleware fails without keys, and `auth()` cannot run without it, so anything that would call them asks first. **Set both keys or neither:** with the publishable key alone the sign-in UI mounts, the server stays anonymous, and the claim returns 401. With dev keys set, Clerk's middleware sends first document requests through a dev-browser handshake with Clerk's servers, so offline local dev with keys cannot load pages and `browser-matrix` needs network (curl and the perf scripts are unaffected); without keys everything works offline. The `accounts` table maps a Clerk user to a UUIDv4 `owner_id` (`getOrCreateAccount`), so **nothing below `currentOwner()` in `ownerRequest.ts` knows Clerk exists**, and `isValidOwnerId`, `readableOwners` and `claimAnonymousOwner` are untouched.
 
 **Claim after every sign-in, on both clients.** Clerk has no server hook for it, so `POST /api/account/claim` (which runs `claimAnonymousOwner`) is called by `/signin/finish` on web and `useFinishAuth` on mobile after every sign-in, not only sign-up; a client that skips it strands the anonymous trips. `user.deleted` on `POST /api/webhooks/clerk` calls `deleteAccountData`, which removes the account, its trips, every trip-keyed row (none has a foreign key, so they are listed by hand), saved places, profile and avatar.
 
@@ -499,6 +446,8 @@ A `trips` row, by contrast, now exists from the moment a plan does. `trips.statu
   format. `tagRunsCreatedBetween()` is safe because it compares ISO to ISO.
 - Geocoding misses are **deliberately non-blocking** (an Open-Meteo outage shouldn't read as "the app is broken"). Don't convert them into hard validation errors — see the comments in `src/app/page.tsx` and `src/app/api/itinerary/route.ts`.
 
-## Docs convention
+## Docs
 
-`docs/` holds living trackers (`backend.md`, `frontend.md`, `llm.md`, `system-design.md`), indexed by `docs/project-crux.md`, which also defines the maintenance rules: each has **Features / Enhancements / Bugs** tables with a **Developer** column. New feature → new row with a `Since` date and your name; a tweak → edit the row in place; a replacement → collapse `Status` into an `Eliminated` `<details>` and add the successor as its own row. Contributors log under their own name (Aryan, Zaid, Claude). Some rows describe superseded UI — treat `DESIGN.md` (rewritten from the built app) as more current for visual/theme questions.
+`DECISIONS.md` records the calls that shaped the app (decision, why, cost); add a section there when
+a new decision is made. `DESIGN.md` is the visual system and `PRODUCT.md` the product brief. `docs/`
+holds measurements: `map-engine-gpu.md`, `itinerary-quality.md` and `perf/`.

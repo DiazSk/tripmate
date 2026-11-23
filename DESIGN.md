@@ -304,8 +304,8 @@ components:
     typography: "{typography.map-day-label}"
 ---
 
-> **Recorded exceptions, the landing's "a day you can imagine" and the planner built from the canvas (2026-10-14, confirmed by Zaid).** These
-> values are off the ramp above on purpose: they are the approved MagicPath canvas's own steps for this
+> **Recorded exceptions, the landing's "a day you can imagine" and the planner.** These
+> values are off the ramp above on purpose: they are the approved design's own steps for this
 > one page, and they stay recorded here rather than widening the ramp. Web only; the phone's styles are
 > numbers and the design check does not read them.
 >
@@ -317,7 +317,7 @@ components:
 > | 20, 22px | `polar/PolarLanding.css` | the range calendar's month title, edge values and day numbers |
 > | `#bdbab3` | `polar/PolarLanding.css` | a range-calendar day that cannot be picked; always paired with a strike-through, so colour is never the only cue |
 > | MapLibre's own `#0096ff` and 12px radii | `polar/nightMapMaplibre.css` | vendored rules from `maplibre-gl`, kept as shipped |
-> | 1, 2, 3px radii | `polar/planner/PlanningFlow.css` | the planner's chips, rhythm-bar blocks and time-panel cells, from the canvas design "TripMate Planning flow (web)" |
+> | 1, 2, 3px radii | `polar/planner/PlanningFlow.css` | the planner's chips, rhythm-bar blocks and time-panel cells, from the approved planning-flow design |
 > | 20px | `polar/planner/PlanningFlow.css` | the time panel's typed readout, matching the range calendar's 20px edge values |
 > | `#d64545`, `#8a8780`, `#535353` | `polar/planner/PlanningFlow.css` | the time panel's invalid-entry ring, placeholder and labels, on its white panel like the calendar's |
 >
@@ -337,9 +337,9 @@ planner asks its questions over the place being planned; the plan writes itself 
 the trip lays its days out on paper beside a live map. One colour acts. Everything else is ink,
 night and the greys between them.
 
-The approved MagicPath canvas (project `460590324033662976`) is the visual reference for every Polar
-screen; code comments name the variant each was built from. Where the build and the latest revision
-disagree, the design wins unless code or `docs/` record a deliberate deviation. The register is
+The approved design is the visual reference for every Polar
+screen; code comments name the variant each was built from. Where the build and the design
+disagree, the design wins unless the code records a deliberate deviation. The register is
 **considered** rather than luxurious: precision, restraint, material quality, on a product whose whole
 thesis is that a trip costs what you said it would.
 
@@ -470,7 +470,7 @@ Every Polar size is an em of `{typography.polar-base}` — `clamp(14px, 1.111vw,
 screen stops scaling with the rest of it and drifts out of proportion at both ends of the range.
 Under-11px labels take `max(0.6875rem, …em)`, fields keep `{typography.field}`, and a root that is
 deliberately smaller than the base says so as `calc(var(--wd-base) * n)` (the spotlight's closed
-pill and its map tag). Recorded canvas exceptions are in the table above.
+pill and its map tag). Recorded exceptions are in the table above.
 
 **The Three Jobs Rule.** Cormorant speaks, Inter Tight is read, Oswald names. A paragraph is never
 set in Cormorant, a label never in Oswald, a place name never in Inter Tight at monument scale.
@@ -677,12 +677,12 @@ inset clips are scroll effects on photographs, not shapes.
 
 ### Navigation
 One bar, `.polar-nav`, `--nav-h` tall, always the same dark glass band on every route, landing
-included (the slate at 0.72, 16px blur, white text, a hairline under it; 2026-10-17 ruling: ink or
+included (the slate at 0.72, 16px blur, white text, a hairline under it; ink or
 white text on a bare photograph was unreadable, so there are no `photo` or `light` themes). The
 LogoMark and the Oswald wordmark sit centred in a three-column grid; route links are chips (2.5rem, `{rounded.nav}`) and the current one inverts to foreground on canvas; the landing
 adds a Plan a trip CTA in signal. The bar hides on scroll down and returns on scroll up. On a phone
 the links collapse into a full-screen menu (not a dropdown). The landing's CTA stays visible on phones
-(2026-10-16 ruling, as the design shows): beside the menu button, 44px tall with tighter padding
+(as the design shows): beside the menu button, 44px tall with tighter padding
 below `sm`, back to the chips' 2.5rem from `sm`.
 With accounts configured, the trailing cell carries the account control: signed out, an outlined
 Sign in chip (a 1px frost hairline inset) beside Profile, from the width where the cell has room for it; signed in, a 32px avatar (44px
@@ -710,26 +710,25 @@ and the forecast. Cancel appears after ten seconds. `html[data-writing-plan]` st
 chrome down while it shows.
 
 ### The Trip Board (signature)
-The trip page's plan, on ice, along the foot of the map (canvas "Trip page · B"): the trip column
+The trip page's plan, on ice, along the foot of the map (design "Trip page · B"): the trip column
 (city, span, Play, Share, Download, draft notice, budget bar, day rows each edged in its route colour)
 beside the day (title, stay, travel modes, Refine with AI, Edit day, then stop cards in a horizontal
 strip with walking legs between them, then the day's total). It shuts to a one-line ticket over the
-map and becomes a day strip while a stop's drawer is open. **Decided 2026-10-16:** wider than 60rem
+map and becomes a day strip while a stop's drawer is open. Wider than 60rem
 the board becomes the right-hand column of "Trip page · A", stops first, with the map full height
-beside it. **Unsaved (2026-10-18):**
-when a finished plan's draft cannot be written (after one quiet retry), `/` shows this same board
+beside it. When a finished plan's draft cannot be written (after one quiet retry), `/` shows this same board
 read-only: the tools that need a saved trip are gone, and the draft notice reads "Not saved yet" with
 Keep this trip and the reason it didn't save beneath (copy W-16/W-17/W-17a).
 
 ### Map Search (signature)
-The trip page's spotlight (canvas "Map search · 4"): ⌘K opens it over the map with the day's gaps on a
+The trip page's spotlight (design "Map search · 4"): ⌘K opens it over the map with the day's gaps on a
 timeline, category chips, results that fit a gap ("Add at 3:35 PM") and rows that open to the place's
 address and hours. A result's map callout is a card with a category-coloured pointer and a dot on its
-kind line, never a coloured side border. **Since 2026-10-16** it is the left side sheet of "Map search · 3" (27rem, narrowing
+kind line, never a coloured side border. It is the left side sheet of "Map search · 3" (27rem, narrowing
 to 36vw on smaller laptops), keeping every per-place detail: a row opens to it as in "Map search · 2".
 
 ### The Story Player (signature)
-A film of a day (canvas "Story mode · 1 Subtitles"): the narration as subtitles above a near-opaque
+A film of a day (design "Story mode · 1 Subtitles"): the narration as subtitles above a near-opaque
 night bar, 4.75rem tall, with a transport of exactly five — previous day, previous place, an ice Play
 disc, next place, next day — and a 3px scrub track under it that turns signal on hover, drag or focus.
 The row is mirrored so Play sits dead centre of it on every day: the day buttons (condensed "D2",
@@ -740,8 +739,8 @@ and Chapters, ahead of volume and Plan. The board hides while it plays, and foll
 ends the film.
 
 ### The Pass, the Postcard Wall, Field Notes
-Sign-in is a boarding pass on paper (canvas "Sign in · B"); `/trips` is a wall of 4:3
-postcards on paper (canvas "My memories · A"); `/profile` is a field notebook (canvas "Profile · B").
+Sign-in is a boarding pass on paper (design "Sign in · B"); `/trips` is a wall of 4:3
+postcards on paper (design "My memories · A"); `/profile` is a field notebook (design "Profile · B").
 All three are light Polar surfaces on the same tokens.
 
 ### Map Controls
@@ -1137,7 +1136,7 @@ never colour alone, at 11px or more. The alert text on dark glass is the token `
 - **Inline note** (`InlineNote`): the failure written on the thing that failed, in three sizes. `field`
   sits under its control (`aria-describedby` from the control); `item` rides a row or chip with its own
   text action; `section` stands in for a block that could not load, a dashed frame in the block's own
-  space with a "Couldn't load" tag (Oswald, as the canvas sets it: it names the state, like an
+  space with a "Couldn't load" tag (Oswald, as the design sets it: it names the state, like an
   eyebrow), the why and a retry. Polite, never moves focus, and kept mounted so
   a change is announced. `HeldNote` is its limit form, counting down and resolving to the ok tone.
 - **Page error** (`PageError`): the section note in a glass card with a way forward, shared by the route
@@ -1145,10 +1144,9 @@ never colour alone, at 11px or more. The alert text on dark glass is the token `
   renders outside the layout, so its alert colour is a literal `#ffb3b3` rather than the token.
 
 **Two deliberate exceptions.** The hold toast draws its rule, glyph and progress bar in **signal orange**
-(`--accent`), as on the approved canvas: a limit is a wait rather than a failure, and it is the one
+(`--accent`), as in the approved design: a limit is a wait rather than a failure, and it is the one
 place signal marks something that cannot be pressed — an exception to The One Hand Rule. And
 `#ffb3b3` is no longer a loose hex: it is `--alert-on-night`, declared once in `globals.css`.
-`ErrorNote.tsx` is kept only for the unmounted Blue Hour landing and mounts nowhere else.
 
 ### The Wait (signature)
 Since Polar, a new plan is written on **Writing the Plan** (above); this band shows only while an
@@ -1274,14 +1272,11 @@ both the trip-wide line and every day's own route line. The day index and the da
 device at two scales, not two different metaphors.
 
 ### Typography
-**Display Font:** Melodrama · **Body Font:** Switzer — Kiln's two, kept for the export and inlined as base64 `woff2`
+**Display Font:** Melodrama · **Body Font:** Switzer — kept for the export and inlined as base64 `woff2`
 data URIs by `exportFont.ts`, each degrading independently to the system stack if its file is
 missing. ~84KB against ~420KB of photographs in the same file.
 
-This was Archivo alone until 2026-09-09 — the face the app removed — with its own nine-size,
-five-weight ramp topping out at 900, and every tracking value tuned for it. The export is the one
-artifact a traveler keeps and forwards, so it looking like a different product than the one that
-made it was the worst possible place for that drift. The ramp below is now the app's.
+The export is the one artifact a traveler keeps and forwards, so it shares the app's type ramp below.
 
 - **Destination headline** (Melodrama 400, `clamp(3.2rem, 17vw, 5rem)`, .95, `-.018em`): the one
   large moment, and the same serif that sets the app's hero.
@@ -1291,7 +1286,7 @@ made it was the worst possible place for that drift. The ramp below is now the a
 - **Body** (Switzer 400, `.9375rem`, 1.6, `0`): day summaries, stop notes.
 - **Label / caption / figure** (Switzer 600, `.6875rem`–`.8125rem`, `0`, `tabular-nums` where a
   column exists): dates, meta, leg pills, times, the save note. No negative tracking at these sizes
-  — Archivo's `-.03em` to `-.05em` at 11–13px was a legibility loss the whole time.
+  — tight negative tracking at 11–13px costs legibility.
 
 ### Layout
 Single column, no breakpoints. `.mast` sits above `.tripline` — a horizontally-scrollable strip with one
@@ -1363,11 +1358,11 @@ grammar is drawn with lines and circles, not silhouette.
 - **Do** keep targets at 44px, and reach it with `min-h-11` plus horizontal padding rather than by
   growing type. Where the layout genuinely cannot — the floating marker cards are map labels pinned to
   world coordinates — the affordance has a 44px equivalent elsewhere, and those cards are `aria-hidden`
-  with `tabIndex={-1}` because they duplicate the panel's focusable rows. Where a canvas draws a
+  with `tabIndex={-1}` because they duplicate the panel's focusable rows. Where a design draws a
   control smaller than 44px (the trip board's tools, the map search's chips and gaps), the press
   reaches 44px on a coarse pointer through a transparent `::after` centred on it, at least 44px each
   way (`@media (pointer: coarse)` at the foot of `TripBoard.css` and `TripSpotlight.css`), so the
-  drawn size stays the canvas's.
+  drawn size stays the design's.
 - **Do** keep any field the user types into at 16px, including the small "Actual" spend inputs.
 - **Do** call `resetToHome()` on mount on every route that shows the globe but doesn't itself fly the
   camera anywhere specific. The globe never unmounts, so a flight from any prior route survives until
@@ -1384,8 +1379,7 @@ grammar is drawn with lines and circles, not silhouette.
   exceptions: the sheet's backdrop fades on a sine curve, ImagineDay keeps its own `--ease`, and
   the app shell's marker and map-curtain curves in `globals.css` predate Polar.
 - **Do** set a stagger delay as an inline `style={{ animationDelay }}`, never as `[animation-delay:90ms]`.
-  That Tailwind arbitrary property generates no rule in this project — the Hero shipped with the class
-  form for months and the stagger never once ran.
+  That Tailwind arbitrary property generates no rule in this project, so the stagger would never run.
 - **Do** leave the reduced-motion blanket rule alone. The keyframe gates cover *animations*; the
   `@media (prefers-reduced-motion: reduce)` block near the top of `globals.css` is what covers every
   Tailwind `transition-*` in the app. Durations go to `0.01ms`, not `none`, so `transitionend` /
@@ -1413,8 +1407,8 @@ grammar is drawn with lines and circles, not silhouette.
 - **Don't** unmount, re-key, or conditionally render `GlobeBackground`.
 - **Don't** introduce a new surface colour. Over the world, raise the glass alpha or blur; away from it,
   use ice, snow or paper.
-- **Don't** add a kicker or eyebrow above a headline the canvas does not draw. The landing and planner
-  carry the ones MagicPath specifies; new surfaces do not inherit them.
+- **Don't** add a kicker or eyebrow above a headline the design does not draw. The landing and planner
+  carry the ones the design specifies; new surfaces do not inherit them.
 - **Don't** use a hard offset shadow, and don't use glyph or icon-font icons — every icon in the system
   is inline SVG.
 - **Don't** let route cyan or the day pool into interface chrome (The Map Owns Cyan Rule).
@@ -1457,66 +1451,8 @@ grammar is drawn with lines and circles, not silhouette.
 
 ## Open Items
 
-Findings the build carries today, recorded so nothing here is inherited by a new surface. The
-layout and performance findings of the 2026-10-16 evaluation (sliced text, stacks that collide on short
-screens, the trip map framing a hill town off screen) were tracked separately and are not repeated
-here.
-
-1. ~~**Muted text below AA on light surfaces.**~~ Fixed: stone as text is `--wd-stone-text`, ember is
-   `#a64c09`, and the spotlight's category counts are ember rather than signal.
-2. ~~**Labels under the 11px floor.**~~ Fixed: `.tb-label`, `.tb-day-when`, the leg tags and the budget unit
-   are `max(0.6875rem, 0.6875em)`, 11px at the smallest base, and the map search's and the drawer's
-   labels follow (2026-10-17); `src/lib/contrast.test.mjs` fails on a bare em below 0.786 only for the selectors it lists, so a new label has to be added there.
-3. ~~**Faces named by family.**~~ Fixed: the time picker (`PlanningFlow.css` `.tmp-read input`,
-   `.tmp-k`) now asks for `--font-display-stack` and `--font-condensed-stack`, the `next/font`
-   variables, rather than the family names `next/font` never registers.
-4. ~~**A keyframe that does not exist.**~~ Fixed: `@keyframes tm-in` is defined in
-   `PolarLanding.css`, so the eight entrances in `WritingThePlan.css` and `PlanningFlow.css`,
-   including each rotating fact's, run.
-5. ~~**Sizes outside the one base.**~~ Fixed (2026-10-18): ImagineDay's `.pl` sections set their type
-   in ems of `--wd-base` (`.pl` itself is `var(--wd-base)`), and their action is `--wd-signal` with
-   the system's lightening `--wd-signal-hover`; `StoryPlayer.css` and `TripSpotlight.css` set every
-   font size in em, labels under 11px as `max(0.6875rem, …em)`. Each is the size it was at 1440 (two story-player labels rose to the 11px floor). Box
-   geometry there (bar height, control and touch-target sizes, sheet padding) stays rem, and the
-   spotlight's field keeps its rem size, since a field is never on the em scale.
-6. **The mark's stop is still Kiln jade** (`#28b981` in `LogoMark.tsx`), the one Kiln colour left in the
-   interface.
-7. ~~**The landing's only `h1` rotates.**~~ Fixed: the hero carries one stable visually-hidden `h1`,
-   the rotating place name is `aria-hidden`, and the ghost CTA reads "Picture a day ↓" — it names no place,
-   because `#day` is always the Petra story.
-8. ~~**Breakpoints are not shared.**~~ Fixed (2026-10-18): one set, 40 / 48 / 60 / 64 / 68.75 / 100rem,
-   in range syntax, with the JS mirrors on the same queries (see Layout).
-9. ~~**Radius drift on the older glass surfaces.**~~ Fixed (2026-10-18): `.glass-itinerary` panels and
-   the confirm dialog are `rounded-md`, `{rounded.card}` at the root's 16px, and `{rounded.panel}`
-   (16px) is gone from the frontmatter.
+- **The mark's stop keeps its own green** (`#28b981` in `LogoMark.tsx`), the one colour in the interface outside the Polar palette.
 
 ## History
 
-- **"Polar Interior"** (current; shipped 2026-10-13 on `feat/polar-redesign`, from the approved MagicPath
-  project `460590324033662976`). Replaced Kiln's warm near-black, its three colour roles (jade acts,
-  gold counts, coral warns) and its Melodrama / Switzer / Tabular faces with night and ice, one action
-  colour, money without a hue, and Cormorant Garamond / Inter Tight / Oswald. The landing became the
-  Polar landing (the Blue Hour landing code is kept unmounted pending a decision, `docs/frontend.md`).
-  Kept from Kiln: the four-layer shell, glass over the map, the route pool and the map's day rendering,
-  the focus-ring, unlayered-beats-utility and blur-of-nothing rules, and the export's own world.
-  `docs/design-history.md` records Kiln.
-- **Kiln II type revision** (superseded by Polar; 2026-09-09): Melodrama + Switzer + Tabular over Kiln
-  II's colour system, after a role-by-role census of the ramp.
-- **"Kiln II"** (superseded by Polar; approved 2026-09-08): a warm near-black `#121110` with jade, gold
-  and coral roles, fused from comps B Clay and C Negative after the first fusion read as muddy.
-- **"The Trip Line"** (additive, still current): the downloadable export's own world. Did not replace
-  anything — no app custom property was touched and no route's rendered output changed.
-- **"The Blue Hour Expedition"** (superseded by Kiln II's landing): a scoped cobalt-teal alternate
-  identity over the pre-generation flow, with its own scene faces, a `.scene-band` gradient, two
-  interlocking alpha-cut hero photographs and a closing poster that withheld the CTA to the very end.
-  The retint went because switching palette mid-app reads as a different product rather than a different
-  surface; the poster went because a reveal that lands softer than the evidence before it is not a
-  reveal, and the ask moved into the hero.
-- **"The Lit Cockpit Over a Turning Earth"** (superseded): one slate `rgb(15 23 42)`, one amber accent,
-  Archivo throughout. Its material argument survives in glass over the map; its colour and type
-  strategy did not.
-- **"Overcast"** (superseded): full-bleed globe with steel-blue translucent cards. The steel-blue
-  register never resolved and legibility over a moving map was inconsistent.
-- **"Roamly"** (superseded): a true split layout with warm cream/teal solid surfaces beside a boxed-in
-  globe pane. Warm cream on cool slate read as two design systems, and the split pane surrendered the
-  globe as the thing that carries the product.
+"Polar Interior" is the current identity. It replaced an earlier warm near-black system with jade, gold and coral roles and different typefaces, and before that a steel-blue glass treatment and a cream/teal split-pane layout. The four-layer shell, glass over the map, the route pool, the focus-ring and blur rules and the export's own world carried over.

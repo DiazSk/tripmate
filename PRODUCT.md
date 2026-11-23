@@ -10,7 +10,7 @@ web
 
 This file describes the repo root, which is the web client; the native apps live in `mobile/` and carry the same identity (see Brand Commitments). Next.js (App Router, TypeScript) + Tailwind v4 for the web client and the server every client shares. **SQLite via `libsql`** — a single local `tripmate.db` by default, or a hosted Turso database by setting `TURSO_DATABASE_URL`; the API stayed synchronous through that swap, which is why it was a constructor change rather than a port. **Accounts are Clerk** (email and password with a code, Google, and Apple on the phone); an `accounts` row maps each Clerk user to a UUID owner, so nothing below the request's owner knows Clerk exists. Accounts switch off entirely without the Clerk keys and the app runs signed out. Until someone signs in, identity is an owner id in a cookie, and signing in moves that owner's trips, places and profile onto the account.
 
-**A React Native client (`mobile/`, Expo SDK 57 + expo-router) targets iOS and Android from one codebase** and talks to the same REST routes unchanged. It ships the plan wizard end to end, SSE generation with stops appearing as they stream, Keep, a trip screen with map/chat/spend, a memories wall and a profile tab. An earlier SwiftUI app was the reference the Expo client was ported from; it has since been removed.
+**A React Native client (`mobile/`, Expo SDK 57 + expo-router) targets iOS and Android from one codebase** and talks to the same REST routes unchanged. It ships the plan wizard end to end, SSE generation with stops appearing as they stream, Keep, a trip screen with map/chat/spend, a memories wall and a profile tab.
 
 Model calls go through one chokepoint with **two interchangeable transports**: the local `claude` CLI (the default — free under an existing subscription, no key) or the Anthropic API (`LLM_TRANSPORT=api`, used where there is no CLI, i.e. the deployed container). Model choice differs by transport and lives in one file.
 
@@ -32,7 +32,7 @@ Most trip planners either hand back generic top-10 lists or ignore the budget en
 
 Behind that sits a governing rule set — a single ordered precedence for what wins when constraints collide — plus deterministic checks in code that run over the finished plan and hand what they find to a review pass. **Arithmetic is code's job and judgment is the model's:** whether a plan suits this traveler is a model question; whether 13:30 + 90min + 28min reaches a 15:15 reservation is not.
 
-A trip is one scene rather than a dashboard: a full-bleed, live 3D map that flies to your destination and to each place you tap, with the plan — real times, durations, per-day budget — laid out beside it on paper, and the plan writing itself over the night map while it is generated. Tapping a stop swaps in a guidebook-style entry instead of a one-line description. It is also the only one of its kind that can route generation through the user's own Claude CLI session instead of a paid LLM API.
+A trip is one scene rather than a dashboard: a full-bleed, live 3D map that flies to your destination and to each place you tap, with the plan — real times, durations, per-day budget — laid out beside it on paper, and the plan writing itself over the night map while it is generated. Tapping a stop swaps in a guidebook-style entry instead of a one-line description. Model calls run through either the local Claude CLI (free for development) or the Anthropic API.
 
 ## Operating Context
 
@@ -61,6 +61,7 @@ A plan is persisted the moment it is generated, as a `draft`, so a back press or
 - A review pass runs over the finished plan and can rewrite days it finds wanting. Deterministic checks — travel-time feasibility, overlapping stops, over-long days, budget ceiling, duplicate stops, booked commitments, named must-sees — run in code and are handed to that pass as fact.
 - A traveller can also bring their own plan: it is read into days and saved as an imported draft, and the model only copies it and fills cost, duration, category and description — it may not add, drop or reorder a stop.
 - A benchmark harness scores generations against frozen fixtures on route efficiency, constraint adherence, weather/feasibility, meal and vibe fit, and coverage/grounding, with an optional blinded model judge. `docs/itinerary-quality.md` records the measured before/after of the current rule set, including the one axis that regressed.
+- Meri answers travel questions only from facts TripMate fetched for that question (climate, OSM tags, place search, the plan itself), with sources. Places, months and sources shown are rendered from those evidence records, and one id the evidence does not hold replaces the whole answer with an honest "nothing checked" line.
 
 **Known limits**
 - Generation depends on a reachable model transport; there is no fallback provider.
@@ -78,8 +79,7 @@ stop — set beside an uppercase condensed TRIPMATE wordmark in the nav. It is t
 Meridian app icon (masters in `mobile/assets/brand/`). On screen the character that mark stands for
 is "your TripMate".
 
-The visual identity is **"Polar Interior"**, shipped 2026-10-13 from an approved MagicPath redesign
-and documented in DESIGN.md: night (`#090b10`) under frosted glass wherever the map or a photograph is
+The visual identity is **"Polar Interior"**, an approved redesign documented in DESIGN.md: night (`#090b10`) under frosted glass wherever the map or a photograph is
 behind, ice and paper where it is not, and **one action colour — signal orange — for acting and
 nothing else**; money has no hue of its own. Edges are nearly square: hairline radii on what you
 press, a slightly softer corner on cards and sheets.
@@ -93,39 +93,15 @@ keeps its own earlier faces on purpose (DESIGN.md § The Trip Line).
 platforms). The phone sets display in Cormorant and most text in Inter Tight; the system face remains
 for the text that must follow Dynamic Type and Android font scaling.
 
-**Standing preference, recorded because it governs future design work: the arrangement is
-conventional on purpose.** Offered a choice between four distinct visual worlds and the category
-standard played straight, the user chose the standard. So this product competes on execution rather
-than on concept: a photo hero, a marketing scroll page, the plan's first question at the close. Do
-not "differentiate" the arrangement on a later pass — sharpen the execution instead. **That
-instruction stands. The bar it is measured against has moved.**
+**The arrangement is conventional on purpose:** a photo hero, a marketing scroll page, the plan's first question at the close. The product competes on execution rather than on concept.
 
-**The craft bar is now Aman, Belmond, Loro Piana and Aesop — not Airbnb and Vercel.** Changed
-2026-09-09 at the user's direction, and the distinction is the whole point: Airbnb and Vercel are a
-bar for *competence*, and the build cleared it while still reading as well-made SaaS. The luxury
-references are a bar for *restraint* — fewer weights, more space, a figure treated as the subject
-rather than as metadata.
+**The craft reference is restraint, not price** — Aman, Belmond, Loro Piana and Aesop: fewer weights, more space, a figure treated as the subject rather than as metadata. The product's thesis is budget realism ("a trip that costs what you said it would"), so the target is *considered* rather than luxurious.
 
-**One tension, stated once so nobody resolves it by accident.** This product's thesis is budget
-realism — "a trip that costs what you said it would", with a $900 Jaipur plan on the landing.
-Luxury *language* on a budget-honest product reads as a mismatch, and chasing expensive would be the
-wrong move. The target is **considered**: precision, restraint, material quality. Every reference
-above is on the list for restraint, not for price.
-
-**The MagicPath designs are the visual reference.** Project `460590324033662976` holds the approved
-canvas for every Polar screen; where the build and the latest revision disagree, the design wins
-unless code or docs record a deliberate deviation.
-
-Polar superseded "Kiln" (a warm near-black with jade, gold and coral roles), which had superseded a
-steel-blue glass treatment, a warm cream/teal split-pane system and "The Lit Cockpit Over a Turning
-Earth". `docs/design-history.md` records each.
-
-Treat DESIGN.md, not this section, as the source of truth for anything visual; this section exists
-only to record that the identity is settled, not in progress.
+The approved designs are the visual reference for every Polar screen. DESIGN.md is the source of truth for anything visual.
 
 ## Evidence on Hand
 
-No real users, testimonials, or case studies. All itinerary content shown during development is live
+Pre-launch; no usage data yet. All itinerary content shown during development is live
 model output, not fixture data to preserve.
 
 What does exist is **measured internal evidence**: a frozen seven-fixture benchmark with a recorded
