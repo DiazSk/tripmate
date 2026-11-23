@@ -93,6 +93,11 @@ Trace-*.json
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
 
-
 # Layout gate screenshots (scripts/layout-matrix.mjs)
 .layout-matrix/
+
+# Codex CLI workspace state, local to whoever ran it.
+.codex/
+
+# Local video-prompt drafts for the launch films; never published.
+/VIDEO-PROMPTS.md
