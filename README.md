@@ -177,8 +177,8 @@ a lookup.
 
 [`DECISIONS.md`](DECISIONS.md) records the calls that shaped TripMate, why each was made and what it
 cost. [`CLAUDE.md`](CLAUDE.md) holds the architecture notes and the gotchas worth reading before
-changing anything; several decisions in it look like mistakes until you know why they're there.
-[`docs/project-crux.md`](docs/project-crux.md) indexes the feature trackers.
+changing anything. [`docs/`](docs/) holds the measurements behind it: the cost of each map engine,
+a 29-criterion audit of plan quality, and model speed and cost.
 
 ## Credits
 

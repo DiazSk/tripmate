@@ -1,21 +1,10 @@
 @import "tailwindcss";
 
-/* **Markdown is documentation, not markup — stop scanning it for classes.**
-
-   Tailwind v4 auto-detects sources across the whole project, and it does not care that a file is
-   prose: any token shaped like a utility becomes a real rule in the shipped stylesheet. This repo's
-   docs convention makes that a standing leak, because `docs/frontend.md` logs every fixed bug in
-   detail and those entries *quote the classes involved* — including the broken ones that were
-   removed. Two dead rules were shipping from that log alone: `[&:nth-child(2)]:border-t-0`, an
-   override that never applied and was deleted from `FeaturedPlans` months of work ago, and a
-   superseded `max-aspect-ratio` z-index variant from the hero. Neither is on any element. Both were
-   emitted because a bug report described them accurately.
-
-   Excluding markdown rather than rewording each mention is the fix that holds: rewording is a
-   guard at every call site, and there is no reason a future entry would remember. Nothing here is
-   MDX and no `.md` renders into the app, so the only candidates this drops are ones that exist
-   *only* in prose — precisely the dead set. Anything an element actually carries still comes from
-   its own `className`. */
+/* **Markdown is documentation, not markup: stop scanning it for classes.** Tailwind v4 detects
+   sources across the whole project, and any utility-shaped token in prose becomes a real rule in the
+   shipped stylesheet, so docs that quote class names would ship dead rules. Nothing here is MDX and
+   no `.md` renders into the app, so excluding markdown only drops classes that exist in prose alone.
+   Anything an element actually carries still comes from its own `className`. */
 @source not "../../**/*.md";
 
 /* The one measurement everything else hangs off. Tailwind's whole scale is rem, so moving

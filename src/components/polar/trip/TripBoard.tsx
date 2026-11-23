@@ -77,7 +77,7 @@ const subscribeColumn = (onChange: () => void) => {
 /**
  * Tell the map how much of the screen is the plan's. The board along the foot is a bottom inset
  * (`setViewPadding`, honoured by MapLibre; Cesium centres in the full view and draws the day
- * partly behind the board, see docs/frontend.md). A drawer, and the board when it is the column
+ * partly behind the board). A drawer, and the board when it is the column
  * at 961px and wider, are found by the camera itself through their `.docked-panel` class
  * (`panelLeftEdgePx`), so the column is no bottom inset at all. The same two numbers move the map's
  * own controls clear of all three, through `--trip-board-h` and `--trip-drawer-w` (globals.css,

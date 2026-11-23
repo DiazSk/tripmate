@@ -258,7 +258,7 @@ async function handle(
       };
       // The generate wait (60-150s) and critique wait (10-30s) are otherwise silent on the
       // wire, which a platform proxy's idle-connection timeout (nginx ~60s, an ALB ~60s,
-      // Cloudflare ~100s — see docs/backend.md) would kill mid-wait. A `:`-prefixed line is a
+      // Cloudflare ~100s) would kill mid-wait. A `:`-prefixed line is a
       // comment frame the client (eventStream.ts) already skips unconditionally, so this needs
       // no client change.
       keepalive = setInterval(() => {

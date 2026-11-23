@@ -7,10 +7,8 @@ import DestinationMap from "./DestinationMap";
 import SiteFooter from "@/components/SiteFooter";
 
 /**
- * **Not mounted since 2026-10-13.** `HomeView` renders the Polar landing (`components/polar/`)
- * instead. This file and the pieces only it mounts are kept pending a decision on retiring them —
- * see the "Pending decision" row in docs/frontend.md's Enhancements table before deleting or
- * reviving any of it.
+ * **Not mounted.** `HomeView` renders the Polar landing (`components/polar/`) instead. This file
+ * and the pieces only it mounts are the previous landing, kept for reference.
  *
  * The Blue Hour Expedition landing sequence. Owns composition only — trip-form state stays in
  * HomeView.

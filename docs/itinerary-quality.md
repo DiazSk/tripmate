@@ -1,9 +1,8 @@
 # Itinerary quality — audit and remediation
 
 A rubric audit of what the generated itinerary actually accounts for, and the work done against
-it. Distinct from the other trackers: `llm.md` records *how* the model is called, this records
-*whether the plan it produces is any good*, which is a different question with a different
-failure mode — nothing errors, the trip is just worse than it should be.
+it: *whether the plan the model produces is any good*, which fails differently from a broken
+request — nothing errors, the trip is just worse than it should be.
 
 The rubric is 29 criteria across seven groups: timing/pacing, route/transit, food/dining, venue
 feasibility, personalization, budget/logistics, and accessibility/safety.
@@ -37,7 +36,7 @@ Two findings shaped everything after it:
    Everything with no data behind it scored Partial at best — which is why several gaps could not
    be closed by writing rules.
 
-## Work done — 2026-08-19 (Claude)
+## Work done — 2026-08-19
 
 ### Skill rules
 
@@ -164,7 +163,7 @@ ops, restraint intact, a 3-point composite gap — but shipping it should wait o
 sweep confirming the weatherFeasibility gap is real, or accepting that gap explicitly as a known
 tradeoff. It is not, on this data, a fix for perceived slowness.
 
-## Constraint-system rewrite — A/B against the pre-change baseline (2026-09-23, Claude)
+## Constraint-system rewrite — A/B against the pre-change baseline (2026-09-23)
 
 Twenty-six commits rewrote the planner's constraint rules: a precedence order (§0), a budget that
 is a ceiling rather than a quota (§5), two separate arrival and departure buffers (§4c-bis), a
@@ -405,7 +404,7 @@ instead. Anyone re-running `AB_PATH=legacy` will hit this whenever the route exc
   one generation per fixture. The aggregate rate may still be partly a denominator effect on the
   other six fixtures, which shed 11 stops between them.
 
-## Legacy-path baseline — partial, 3 fixtures × 3 runs (2026-09-25, Claude)
+## Legacy-path baseline — partial, 3 fixtures × 3 runs (2026-09-25)
 
 The first measurement of the path travellers actually get (`POST /api/itinerary`, critique
 included), repeated rather than run once. `scripts/skill-ab.mjs` gained `AB_RUNS`, a `node:http`
@@ -414,7 +413,7 @@ transport (the route answered in 302-574s; `fetch` dies at 300s), a hard-failure
 (`legacy-baseline-2026-09-25.json`, kept locally) is re-scored at report time like every arm.
 
 **Partial by decision.** The plan was 7 fixtures × 3. It was stopped after 9 runs because the CLI
-transport, though free per call, spends the developer's Claude subscription — ~7 minutes and several
+transport, though free per call, uses a local CLI session — ~7 minutes and several
 model calls per run. Rome, Reykjavík, Bangkok and Queenstown were not run; the report reads a
 partial arm, so the sweep can be finished later into the same file.
 
@@ -468,7 +467,7 @@ partial arm, so the sweep can be finished later into the same file.
 - **Staged vs legacy is not like-for-like on the headline.** `travel_leg` needs typed stops and
   runs on the legacy arm only; `--compare` says so when the paths differ.
 
-### Addendum — two weather runs, and why the hours failures are data, not rules (2026-09-26, Claude)
+### Addendum — two weather runs, and why the hours failures are data, not rules (2026-09-26)
 
 Two more legacy runs (`legacy-baseline-2026-09-26.json`, `AB_RUNS=1`, Kyoto and Rome), the first
 with weather — `legacyDestination()` now sends "City, Country", and the route received 4 and 5
@@ -500,7 +499,7 @@ Next: look anchor
 hours up **before** generation, by any OSM name tag, and write them beside each anchor — and score
 the legacy arm's hours checks against the hours the route actually had, the way weather already is.
 
-#### After: anchor hours in the prompt (2026-09-26, Claude)
+#### After: anchor hours in the prompt (2026-09-26)
 
 The legacy
 route now looks each anchor's OSM hours up before generating (`src/lib/anchorHours.ts`, a 20s race
@@ -545,7 +544,7 @@ every anchor inside its real hours. One run; and the no-hours run before it also
 anchors right from memory, so this shows the mechanism working end to end rather than proving the
 hours are what fixed it. Repeats would settle that.
 
-## The review pass was reaching nobody on the phone (2026-09-27, Claude)
+## The review pass was reaching nobody on the phone (2026-09-27)
 
 Not a rubric change. A measurement of the existing review pass, and the discovery that most of
 its output was being discarded before anyone read it.

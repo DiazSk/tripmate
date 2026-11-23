@@ -198,7 +198,7 @@ export function sketchModel(): string {
  * The plan's second opinion.
  *
  * **Cheap tier, and this is the app's single largest cost lever rather than a tidy-up.** Measured
- * off the token counts in `docs/product-readiness.md` re-priced at today's rates, `critique` was
+ * off real generations' token counts re-priced at today's rates, `critique` was
  * $0.125 of a $0.243 generation — 51% of the bill, on the most expensive model, for a pass whose
  * marginal contribution to quality has never been measured. `generationRunner.ts:210` already
  * records a 35% failure rate for it, and 5 of the 8 timeouts in that data are critique giving up.
