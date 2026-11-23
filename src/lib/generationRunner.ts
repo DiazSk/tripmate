@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
-import { getWeatherForDates, DayWeather } from "./weather";
+import { getWeatherForDates, type DayWeather } from "./weather";
 import { fetchBikeshare } from "./bikeshare";
 import type { BikeshareSystem } from "./bikeshare";
 import { geocodeDestinationCached } from "./serverFetchCached";
@@ -32,12 +32,12 @@ import { sketchModel, llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
 import { buildSketchPrompt, formatSketchForGenerate, parseSketch, type SketchDay } from "./sketch";
 import { carryOverDaySummaries, normalizeDays } from "./itinerary";
-import { tripDays, TierId } from "./tiers";
+import { tripDays, type TierId } from "./tiers";
 import { deriveFlags, partyBudget, sanitizeLogistics } from "./userAnswers";
 import { geocodeAnchors } from "./anchorGeocode";
 import { normalizeAnchors, readUnplaced } from "./anchors";
 import { fetchAnchorHours } from "./anchorHours";
-import {
+import type {
   Anchor,
   CritiqueResult,
   Itinerary,
@@ -46,7 +46,7 @@ import {
   TripLogistics,
   UserAnswers,
 } from "./types";
-import { StageEvent } from "./generationStages";
+import { type StageEvent } from "./generationStages";
 import type { DietaryNeeds } from "./travelerProfile";
 import { StreamingItineraryParser, type StreamedStop } from "./streamingItinerary";
 import { fixTypoCoords } from "./stopCoords";
