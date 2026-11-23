@@ -101,3 +101,9 @@ Trace-*.json
 
 # Local video-prompt drafts for the launch films; never published.
 /VIDEO-PROMPTS.md
+
+# Researched-but-deferred integration notes; kept local.
+/FUTURE-INTEGRATION.md
+
+# Personal Claude Code instructions, not shared.
+CLAUDE.local.md

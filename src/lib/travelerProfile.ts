@@ -9,8 +9,7 @@ import type {
 } from "./types";
 import { DISCOVERIES, PACES } from "./userAnswers";
 
-/** The single implicit local user. Replaced by a real auth subject id if and when
- *  authentication lands — see FUTURE-INTEGRATION.md. */
+/** The single implicit local user, the owner of rows written before owner ids existed. */
 export const LOCAL_OWNER = "local";
 
 /** Dietary restrictions that hold across every trip. `tags` are the fixed chips the

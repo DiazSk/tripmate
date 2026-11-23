@@ -201,7 +201,7 @@ db.exec(`
 // exist is a data migration plus every query that reads them. It is written from
 // the LOCAL_OWNER constant rather than a column DEFAULT, since a primary key that
 // is always supplied explicitly would never fire the default — the column is the
-// insurance, not the default. See FUTURE-INTEGRATION.md.
+// insurance, not the default.
 db.exec(`
   CREATE TABLE IF NOT EXISTS traveler_profile (
     owner_id TEXT PRIMARY KEY,

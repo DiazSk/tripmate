@@ -22,7 +22,7 @@ const LlmTraceWidgetContext = createContext<LlmTraceWidgetApi | null>(null);
 
 /** Lets any "View LLM pipeline for this call →" link open the FAB panel
  *  pre-focused on that run, instead of navigating to a page that no longer
- *  exists — see .claude/skills/dev-analytics-fab/SKILL.md. */
+ *  exists. */
 export function useLlmTraceWidget(): LlmTraceWidgetApi {
   const ctx = useContext(LlmTraceWidgetContext);
   if (!ctx) throw new Error("useLlmTraceWidget must be used within <LlmTraceFabProvider>");
