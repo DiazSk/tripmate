@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How TripMate fits together</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400&family=Inter+Tight:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter Tight', system-ui, sans-serif; background: #f3f1ec; color: #1f2a44; min-height: 100vh;
+  display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+.frame { max-width: 1200px; width: 100%; }
+.diagram-container { width: 100%; overflow-x: auto; }
+.eyebrow { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em;
+  text-transform: uppercase; color: #535353; margin-bottom: 0.5rem; }
+h1 { font-family: 'Cormorant Garamond', 'Noto Serif', serif; font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 500;
+  letter-spacing: -0.01em; line-height: 1.15; color: #1f2a44; margin-bottom: 1.5rem; }
+svg { width: 100%; min-width: 960px; display: block; }
+@media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style>
+</head>
+<body>
+<div class="frame">
+<p class="eyebrow">Architecture · TripMate</p>
+<h1>How TripMate fits together</h1>
+<div class="diagram-container">
+<svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="architecture-title architecture-desc">
+<title id="architecture-title">How TripMate fits together</title>
+<desc id="architecture-desc">TripMate's web and iPhone clients call Next.js API routes, which use shared fact fetchers, plan checks and one runClaude() choke point that calls Claude and records every call in SQLite.</desc>
+<defs>
+<marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#535353"/></marker>
+<marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a64c09"/></marker>
+<marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#0e6670"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#f3f1ec"/>
+<rect x="40" y="40" width="168" height="464" rx="8" fill="rgba(31,42,68,0.02)" stroke="rgba(31,42,68,0.1)" stroke-width="0.8"/>
+<rect x="96.0" y="44" width="56" height="12" rx="2" fill="#f3f1ec"/>
+<text x="124.0" y="53" fill="#6e6c66" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">CLIENTS</text>
+<rect x="256" y="40" width="400" height="464" rx="8" fill="rgba(31,42,68,0.02)" stroke="rgba(31,42,68,0.1)" stroke-width="0.8"/>
+<rect x="410.0" y="44" width="92" height="12" rx="2" fill="#f3f1ec"/>
+<text x="456.0" y="53" fill="#6e6c66" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">NEXT.JS SERVER</text>
+<rect x="704" y="40" width="216" height="464" rx="8" fill="rgba(31,42,68,0.02)" stroke="rgba(31,42,68,0.1)" stroke-width="0.8"/>
+<rect x="774.0" y="44" width="76" height="12" rx="2" fill="#f3f1ec"/>
+<text x="812.0" y="53" fill="#6e6c66" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">THIRD PARTY</text>
+<path d="M196,104 H272" fill="none" stroke="#535353" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M196,280 H272" fill="none" stroke="#535353" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M124,136 V160" fill="none" stroke="#535353" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<path d="M432,104 H716" fill="none" stroke="#0e6670" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+<path d="M432,192 H480" fill="none" stroke="#535353" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M432,280 H480" fill="none" stroke="#535353" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M432,368 H480" fill="none" stroke="#535353" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M640,192 H716" fill="none" stroke="#0e6670" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+<path d="M640,368 H716" fill="none" stroke="#a64c09" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+<path d="M600,400 V436 Q600,444 608,444 H716" fill="none" stroke="#535353" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<path d="M352,400 V460 Q352,468 360,468 H716" fill="none" stroke="#535353" stroke-width="1.2" marker-end="url(#arrow)"/>
+<rect x="204" y="84" width="60" height="12" rx="2" fill="#f3f1ec"/>
+<text x="234.0" y="93" fill="#6e6c66" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">REST + SSE</text>
+<rect x="660" y="172" width="40" height="12" rx="2" fill="#f3f1ec"/>
+<text x="680.0" y="181" fill="#6e6c66" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">FETCH</text>
+<rect x="658" y="348" width="44" height="12" rx="2" fill="#f3f1ec"/>
+<text x="680.0" y="357" fill="#6e6c66" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">PROMPT</text>
+<rect x="610" y="412" width="60" height="12" rx="2" fill="#f3f1ec"/>
+<text x="640.0" y="421" fill="#6e6c66" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">EVERY CALL</text>
+<rect x="452" y="448" width="40" height="12" rx="2" fill="#f3f1ec"/>
+<text x="472.0" y="457" fill="#6e6c66" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">TRIPS</text>
+<rect x="52" y="72" width="144" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="52" y="72" width="144" height="64" rx="6" fill="rgba(83,83,83,0.1)" stroke="#6e6c66" stroke-width="1"/>
+<rect x="60" y="78" width="48" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="84.0" y="87" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">NEXT.JS</text>
+<text x="124.0" y="112" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Web app</text>
+<rect x="52" y="160" width="144" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="52" y="160" width="144" height="64" rx="6" fill="rgba(83,83,83,0.1)" stroke="#6e6c66" stroke-width="1"/>
+<rect x="60" y="166" width="36" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="78.0" y="175" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">WEBGL</text>
+<text x="124.0" y="200" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Maps and voice</text>
+<rect x="52" y="248" width="144" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="52" y="248" width="144" height="64" rx="6" fill="rgba(83,83,83,0.1)" stroke="#6e6c66" stroke-width="1"/>
+<rect x="60" y="254" width="32" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="76.0" y="263" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">EXPO</text>
+<text x="124.0" y="288" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">iPhone app</text>
+<rect x="272" y="72" width="160" height="328" rx="6" fill="#f3f1ec"/>
+<rect x="272" y="72" width="160" height="328" rx="6" fill="#ffffff" stroke="#1f2a44" stroke-width="1"/>
+<rect x="280" y="78" width="28" height="12" rx="2" fill="none" stroke="rgba(31,42,68,0.4)" stroke-width="0.8"/>
+<text x="294.0" y="87" fill="#1f2a44" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+<text x="352.0" y="112" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">API routes</text>
+<line x1="288" y1="132" x2="416" y2="132" stroke="rgba(31,42,68,0.12)" stroke-width="0.8"/>
+<text x="288" y="148" fill="#1f2a44" font-size="11" font-weight="500" font-family="'Inter Tight', system-ui, sans-serif">Planning</text>
+<text x="288" y="163" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">/api/itinerary, staged</text>
+<line x1="288" y1="200" x2="416" y2="200" stroke="rgba(31,42,68,0.12)" stroke-width="0.8"/>
+<text x="288" y="216" fill="#1f2a44" font-size="11" font-weight="500" font-family="'Inter Tight', system-ui, sans-serif">Edits and questions</text>
+<text x="288" y="231" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">trip-edit · read-idea</text>
+<line x1="288" y1="268" x2="416" y2="268" stroke="rgba(31,42,68,0.12)" stroke-width="0.8"/>
+<text x="288" y="284" fill="#1f2a44" font-size="11" font-weight="500" font-family="'Inter Tight', system-ui, sans-serif">Trips and places</text>
+<text x="288" y="299" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">share · export · route</text>
+<line x1="288" y1="336" x2="416" y2="336" stroke="rgba(31,42,68,0.12)" stroke-width="0.8"/>
+<text x="288" y="352" fill="#1f2a44" font-size="11" font-weight="500" font-family="'Inter Tight', system-ui, sans-serif">Accounts</text>
+<text x="288" y="367" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace">claim · profile · clerk</text>
+<rect x="480" y="160" width="160" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="480" y="160" width="160" height="64" rx="6" fill="#ffffff" stroke="#1f2a44" stroke-width="1"/>
+<rect x="488" y="166" width="28" height="12" rx="2" fill="none" stroke="rgba(31,42,68,0.4)" stroke-width="0.8"/>
+<text x="502.0" y="175" fill="#1f2a44" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">LIB</text>
+<text x="560.0" y="200" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Fact fetchers</text>
+<rect x="480" y="248" width="160" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="480" y="248" width="160" height="64" rx="6" fill="#ffffff" stroke="#1f2a44" stroke-width="1"/>
+<rect x="488" y="254" width="36" height="12" rx="2" fill="none" stroke="rgba(31,42,68,0.4)" stroke-width="0.8"/>
+<text x="506.0" y="263" fill="#1f2a44" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">GUARD</text>
+<text x="560.0" y="288" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Plan checks</text>
+<rect x="480" y="336" width="160" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="480" y="336" width="160" height="64" rx="6" fill="rgba(255,126,21,0.12)" stroke="#a64c09" stroke-width="1"/>
+<rect x="488" y="342" width="28" height="12" rx="2" fill="none" stroke="rgba(166,76,9,0.4)" stroke-width="0.8"/>
+<text x="502.0" y="351" fill="#a64c09" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">LLM</text>
+<text x="560.0" y="373" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">runClaude()</text>
+<text x="560.0" y="387" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">traces every call</text>
+<rect x="716" y="72" width="192" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="716" y="72" width="192" height="64" rx="6" fill="rgba(31,42,68,0.03)" stroke="rgba(31,42,68,0.3)" stroke-width="1"/>
+<rect x="724" y="78" width="32" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="740.0" y="87" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">SAAS</text>
+<text x="812.0" y="112" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Clerk · Sanity · PostHog</text>
+<rect x="716" y="160" width="192" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="716" y="160" width="192" height="64" rx="6" fill="rgba(31,42,68,0.03)" stroke="rgba(31,42,68,0.3)" stroke-width="1"/>
+<rect x="724" y="166" width="56" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="752.0" y="175" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">OPEN DATA</text>
+<text x="812.0" y="194" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Travel facts</text>
+<text x="812.0" y="208" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">Open-Meteo · Nager.Date</text>
+<text x="812.0" y="218" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">OSM · GDELT · Brave</text>
+<rect x="716" y="336" width="192" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="716" y="336" width="192" height="64" rx="6" fill="rgba(31,42,68,0.03)" stroke="rgba(31,42,68,0.3)" stroke-width="1"/>
+<rect x="724" y="342" width="36" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="742.0" y="351" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">MODEL</text>
+<text x="812.0" y="376" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">Claude CLI or API</text>
+<rect x="716" y="424" width="192" height="64" rx="6" fill="#f3f1ec"/>
+<rect x="716" y="424" width="192" height="64" rx="6" fill="rgba(31,42,68,0.05)" stroke="#535353" stroke-width="1"/>
+<rect x="724" y="430" width="20" height="12" rx="2" fill="none" stroke="rgba(83,83,83,0.4)" stroke-width="0.8"/>
+<text x="734.0" y="439" fill="#535353" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+<text x="812.0" y="461" fill="#1f2a44" font-size="12" font-weight="600" font-family="'Inter Tight', system-ui, sans-serif" text-anchor="middle">SQLite / Turso</text>
+<text x="812.0" y="475" fill="#535353" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">libsql · trips · traces</text>
+<line x1="40" y1="544" x2="920" y2="544" stroke="rgba(31,42,68,0.1)" stroke-width="0.8"/>
+<text x="40" y="564" fill="#535353" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+<path d="M104,561 H124" stroke="#535353" stroke-width="1.2" fill="none" marker-end="url(#arrow)"/>
+<text x="130" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">REQUEST</text>
+<path d="M194,561 H214" stroke="#0e6670" stroke-width="1.2" fill="none" marker-end="url(#arrow-link)"/>
+<text x="220" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">OUTSIDE CALL</text>
+<path d="M310,561 H330" stroke="#a64c09" stroke-width="1.2" fill="none" marker-end="url(#arrow-accent)"/>
+<text x="336" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">MODEL CALL</text>
+<path d="M416,561 H436" stroke="#535353" stroke-width="1.2" stroke-dasharray="5,4" fill="none" marker-end="url(#arrow)"/>
+<text x="442" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">PASSIVE</text>
+<rect x="506" y="556" width="16" height="10" rx="2" fill="#f3f1ec"/>
+<rect x="506" y="556" width="16" height="10" rx="2" fill="rgba(83,83,83,0.1)" stroke="#6e6c66" stroke-width="1"/>
+<text x="528" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">CLIENT</text>
+<rect x="587" y="556" width="16" height="10" rx="2" fill="#f3f1ec"/>
+<rect x="587" y="556" width="16" height="10" rx="2" fill="#ffffff" stroke="#1f2a44" stroke-width="1"/>
+<text x="609" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">SERVER</text>
+<rect x="668" y="556" width="16" height="10" rx="2" fill="#f3f1ec"/>
+<rect x="668" y="556" width="16" height="10" rx="2" fill="rgba(31,42,68,0.05)" stroke="#535353" stroke-width="1"/>
+<text x="690" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">STORE</text>
+<rect x="744" y="556" width="16" height="10" rx="2" fill="#f3f1ec"/>
+<rect x="744" y="556" width="16" height="10" rx="2" fill="rgba(31,42,68,0.03)" stroke="rgba(31,42,68,0.3)" stroke-width="1"/>
+<text x="766" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">THIRD PARTY</text>
+<rect x="851" y="556" width="16" height="10" rx="2" fill="#f3f1ec"/>
+<rect x="851" y="556" width="16" height="10" rx="2" fill="rgba(255,126,21,0.12)" stroke="#a64c09" stroke-width="1"/>
+<text x="873" y="564" fill="#535353" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">FOCAL</text>
+</svg>
+</div>
+</div>
+</body>
+</html>

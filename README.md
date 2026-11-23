@@ -1,36 +1,129 @@
 # TripMate
 
-**Tell it where and when you're going, and it plans the actual days.** Not a list of things to see —
-a day-by-day itinerary with times, costs, and a reason each stop is there for *you*, checked against
-the weather, opening hours and public holidays for the dates you're actually travelling.
+**Tell it where and when you're going, and it plans the actual days.**
 
-## The problem it's trying to solve
+TripMate is an AI trip planner for the web and iPhone. Instead of a list of things to see, it gives a
+day-by-day plan with times, costs, walking times, and a reason each stop is there. It checks the plan
+against the real forecast, opening hours and public holidays for the dates you're travelling.
 
-Planning a trip yourself means twenty browser tabs, and the plan that comes out of them is a list of
-places with no times on it. Asking an LLM directly gets you a plausible-sounding itinerary that
-doesn't know the museum is shut on Tuesdays, that it'll be 34°C at 2pm, or that two of its stops are
-an hour apart in opposite directions.
+[![Watch the TripMate film (2:06): a wall of TripMate's real screens under the line "Every day. Every detail."](docs/media/film-poster.jpg)](docs/media/tripmate-showreel.mp4)
 
-TripMate's bet is that the useful part isn't the prose — it's the constraints. So the generation runs
-against real fetched data (forecast and daylight for those exact dates, public holidays, OSM opening
-hours and `wheelchair` tags, candidate POIs) and against a stated traveler profile: pace, mobility,
-dietary needs, who you're travelling with, whether lodging is already booked.
+## Why it exists
 
-## Honest status
+Ask a chatbot for an itinerary and you get something that sounds right but doesn't know the museum is
+shut on Tuesdays, that it will be 34°C at 2 pm, or that two of the stops are an hour apart in
+opposite directions. TripMate's bet is that the useful part of a plan isn't the prose but the
+constraints. So the model plans against data fetched for those exact dates (forecast and daylight,
+public holidays, OpenStreetMap opening hours and accessibility tags, candidate places) and against a
+stated traveller profile: pace, mobility, diet, who you're travelling with, and your budget.
 
-**This is a working prototype, not a shipped product.** It runs locally, single-user, on a SQLite
-file. There's no auth, no hosted deployment, and no payments. As of 2026-08-22 nobody outside the
-two-person team has ever reviewed an itinerary it produced — which is the single biggest open
-question about it, tracked in [`docs/product-readiness.md`](docs/product-readiness.md).
+## What it does
 
-Output quality is measured rather than asserted: [`docs/itinerary-quality.md`](docs/itinerary-quality.md)
-holds a 29-criterion rubric audit and real model-comparison sweeps, including the parts that score
-badly and the gaps that are blocked on data nobody publishes for free.
+**Plans from one sentence.** Type "A week in Lisbon, 22 to 28 October", or go step by step through
+where, who, pace and budget.
 
-## Running it
+![TripMate's landing page: a sentence typed to the planner over a photo of Petra](docs/media/web-landing.jpg)
 
-Node ≥ 22 is mandatory — `better-sqlite3`'s native binding silently kills the dev server on Node 20
-the moment any database route is hit.
+**Checks the plan while it writes it.** Before a word is written, the forecast, public holidays and
+opening hours for your dates go in first, and you see the facts it is planning around as it works.
+
+<p align="center">
+  <img src="docs/media/web-review.jpg" alt="The last step before planning: every choice for the Lisbon trip, each one editable" width="49%">
+  <img src="docs/media/web-writing.jpg" alt="The plan being written over a map of Lisbon: Day 2 carries a 63% chance of rain, so it's worth an indoor morning" width="49%">
+</p>
+
+**Lays the days out on a 3D map.** Each stop has a time, a duration, a cost and the walk to the next
+one, and every stop opens to photos, why it's in your plan, and what comes after it.
+
+![A Lisbon day on the trip board: four stops with times, costs and walking times, and the route drawn on a 3D map](docs/media/web-trip-board.jpg)
+
+**Story mode narrates a day.** Press Play and the camera flies to each stop while a voice reads a
+short script and the subtitle lights word by word. The voice runs in the browser
+([Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) on WebGPU), with the platform voice as a fallback.
+
+<p align="center">
+  <img src="docs/media/web-stop-detail.jpg" alt="São Jorge Castle opened from the plan: photos, a 3 PM two-hour entry, why it's in the plan, and the next two stops" width="49%">
+  <img src="docs/media/web-story-mode.jpg" alt="Story mode: the camera arrives at São Jorge Castle while the narration plays as a subtitle" width="49%">
+</p>
+
+**Answers travel questions from checked facts.** Meri, the planner's assistant, answers questions like
+"best time to visit Petra?" only from facts fetched for that question, with where each fact came from.
+If the model names a place or source the evidence doesn't hold, the whole answer is replaced with an
+honest "nothing checked".
+
+**Lets you change the plan in plain words.** Chat edits the plan as small patches, the day board can
+be reordered by hand, and conflicts (a closed day, a stop too far away) are flagged with fixes.
+
+**Imports a plan you already have.** Paste your own itinerary and TripMate fills in costs, durations
+and descriptions without adding, dropping or reordering a single stop.
+
+**Comes with you on the iPhone.** The Expo app plans a trip while you wait, keeps the budget against
+what's planned, catches a leg that doesn't fit before you're standing at the tram stop, and lets you
+ask for a change in plain words.
+
+![On the iPhone: a Jaipur plan being written, the Lisbon budget at $1,551 of $1,800, a Lisbon day flagging a tram that takes 27 minutes when only 15 are left, and the day on a map with "Ask for a change"](docs/media/phone-plan.jpg)
+
+On the trip it opens a shared plan, plays the same story mode, keeps the next stop in the Dynamic
+Island as a Live Activity, and still opens your saved trips with no signal.
+
+![On the iPhone: a trip shared with you, story mode at São Jorge Castle, the next stop and a Directions button in the Dynamic Island, and the offline screen with the saved Jaipur trip](docs/media/phone-trip.jpg)
+
+Saved trips also export as one self-contained HTML file that works offline, and as a printable
+version numbered "Day N · Stop M" for sending to someone to review.
+
+## Engineering highlights
+
+- **A build check for a bug no other tool could see.** `next build` reported success for months while
+  shipping a map chunk no browser could parse: the minifier re-encoded a WASM decoder embedded as a
+  string, and a NUL byte followed by a digit became an illegal escape. Production rendered the whole
+  app with no globe and no error. [`shims/spz-loader-core.ts`](shims/spz-loader-core.ts) fixes it, and
+  [`scripts/verify-build.mjs`](scripts/verify-build.mjs) now fails the build if any emitted chunk
+  won't parse.
+- **Answers that can't make up places.** Places, months and sources shown to a traveller are rendered
+  from the evidence records the model's ids point at, never from its prose
+  ([`src/lib/meriAnswer.ts`](src/lib/meriAnswer.ts)). The check is the guarantee, not the prompt.
+- **Two map engines behind one interface.** MapLibre (the default) and Cesium with Google Photorealistic
+  3D Tiles both implement [`src/lib/mapRenderer.ts`](src/lib/mapRenderer.ts), in metres, degrees and
+  pixels. Switching keeps the camera where it was. Day routes on MapLibre are a custom WebGL layer
+  ([`src/lib/maplibreArcLayer.ts`](src/lib/maplibreArcLayer.ts)), because MapLibre has no elevated-line
+  primitive.
+- **Story mode measured, not guessed.** The narration beat is the clock for the camera, the voice and
+  the subtitle ([`src/lib/storyMode.tsx`](src/lib/storyMode.tsx)). The neural voice shares the GPU with
+  the map, so it synthesises during the camera's holds. That took a film from 45 dropped frames over
+  32 ms to 7. The model runs in a Blob worker, which kept the main thread's worst stall under a second
+  instead of 17.
+- **One choke point for every model call.** [`runClaude()`](src/lib/claude.ts) logs a trace row on
+  every outcome and serves two transports with the same contract: the `claude` CLI for free local
+  development, and the Anthropic API in production, with per-task model routing in
+  [`src/lib/llmConfig.ts`](src/lib/llmConfig.ts).
+- **Plans survive the app being closed.** iOS suspends an app that's left mid-generation, so the server
+  saves the draft the moment the plan exists, and the phone recovers a dropped stream from a run-status
+  endpoint instead of starting again.
+- **Failures degrade instead of throwing.** Every external fetch returns `null` for "failed" and `[]`
+  for "found nothing", so the UI can tell an outage from an empty neighbourhood. Partial-failure rules
+  live in one place, [`src/lib/reconcile.ts`](src/lib/reconcile.ts).
+
+## How it fits together
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/architecture/architecture-dark.png">
+  <img src="docs/media/architecture/architecture.png" alt="How TripMate fits together: the web app (with its in-browser maps and voice) and the iPhone app call Next.js API routes over REST and SSE. The routes use fact fetchers, which call open travel data, plan checks, and runClaude(), the one choke point that sends prompts to Claude through the CLI or the API and records every call in SQLite or Turso, where trips are also stored. The routes also call Clerk, Sanity and PostHog.">
+</picture>
+
+<sub>Editable source: <a href="docs/media/architecture/"><code>docs/media/architecture/</code></a></sub>
+
+| Layer | Built with |
+|---|---|
+| Web | Next.js 16 (App Router), React 19, Tailwind CSS 4, TypeScript |
+| Maps | MapLibre GL JS with OpenFreeMap tiles and terrain; CesiumJS with Google Photorealistic 3D Tiles |
+| Mobile | Expo 57, React Native 0.86, Expo Router, react-native-maps, Live Activities through `expo-widgets` |
+| AI | Claude, through the `claude` CLI or `@anthropic-ai/sdk`; Kokoro-82M text-to-speech in the browser |
+| Data | SQLite through `libsql` (local file or Turso), Sanity for the ready-made trips |
+| Accounts and analytics | Clerk; PostHog, loaded only after consent |
+
+## Running it locally
+
+You need Node 22 or later (`.nvmrc` pins it).
 
 ```bash
 nvm use
@@ -38,104 +131,58 @@ npm install
 npm run dev
 ```
 
-Model calls spawn the [`claude` CLI](https://claude.com/claude-code) as a subprocess rather than
-using an HTTP SDK, so that needs to be installed and authenticated.
+By default model calls go through the [`claude` CLI](https://claude.com/claude-code), which must be
+installed and signed in. To use the Anthropic API instead, set `LLM_TRANSPORT=api` and
+`ANTHROPIC_API_KEY` in `.env.local`.
 
-`.env.local` is optional and everything degrades soft without it:
+Everything else is optional and degrades softly. Weather, geocoding, public holidays and OpenStreetMap
+need no key. [`.env.local.example`](.env.local.example) lists the optional keys (OpenTripMap, Brave,
+Cesium ion, Sanity, Clerk, PostHog) and what each one turns on. Without Clerk keys the app runs signed
+out, and an account is never required: trips made signed out move to your account when you sign in.
 
-| Variable | Effect if absent |
-|---|---|
-| `OPENTRIPMAP_API_KEY` | No POI suggestions. Generation still works |
-| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Globe falls back to free OpenStreetMap raster tiles |
-| `BRAVE_API_KEY` | No destination festival/event suggestions. Generation still works |
-
-Weather, geocoding, public holidays and OSM data need no key.
-
-### Accounts
-
-Sign-up and sign-in run on [Clerk](https://clerk.com): email and password with email verification,
-an email code, and Apple and Google. Clerk holds the credentials; TripMate keeps only a mapping from
-the Clerk user to the anonymous-style owner id that owns the trips (`accounts` in `src/lib/db.ts`).
-
-| Variable | Effect if absent |
-|---|---|
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | With the secret key, switches accounts on. **Baked in at build**, so it is a Docker build arg, not a runtime variable. Without it `/signin` says accounts aren't set up |
-| `CLERK_SECRET_KEY` | Accounts stay off. Runtime-only secret; keep it out of the image |
-| `CLERK_WEBHOOK_SIGNING_SECRET` | The `user.deleted` webhook (`/api/webhooks/clerk`) is rejected, so deleting a Clerk user leaves their trips behind |
-
-The mobile app reads `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the `EXPO_PUBLIC_CLERK_GOOGLE_*`
-client ids (web, iOS, Android, plus the iOS URL scheme) from `mobile/.env`.
-
-Without keys, everything works signed out and offline. Signing in locally needs Clerk **development**
-keys (the Development instance in the Clerk dashboard) and a network. **Set both Clerk keys or
-neither:** with the publishable key alone the sign-in UI mounts while the server stays anonymous,
-and the claim after sign-in returns 401. With dev keys set, Clerk's middleware sends a browser's
-first document request through a dev-browser handshake with Clerk's servers, so pages cannot load
-offline and `verify-hero` and `browser-matrix` need network; curl and the perf scripts are
-unaffected. In a development instance a
-`+clerk_test` email (for example `you+clerk_test@example.com`) takes the code `424242`, so no real
-inbox is involved.
-
-The Swift app in `ios/TripMateKit` is not ported to Clerk; the React Native app in `mobile/` is the
-mobile client.
-
-**An account is never required.** You can plan, generate and keep a trip without one — those land
-under an anonymous owner cookie, and signing in afterwards moves them, your saved places and your
-traveller profile onto the account (`claimAnonymousOwner` in `src/lib/db.ts`). That is why there is
-no login wall anywhere in the app.
-
-### Two integrations deliberately not used
-
-`YELP_API_KEY` and `GOOGLE_PLACES_API_KEY` are both read by the code and neither will be set. Both
-are paid, and this is a student project — the decision (2026-09-06, Zaid) is to run without them
-rather than bill them personally. They are documented here rather than deleted because the code
-paths are written, tested and correct; setting either key turns the feature on with no other work.
-
-Each costs something real, and the second one costs more than it looks:
-
-- **Yelp** (`dietaryVenues.ts`) supplied *verified* venue examples matching a dietary need. Without
-  it the plan still answers a dietary constraint, but the specific restaurant names in a stop's
-  notes are **written by the model rather than looked up** — they are plausible and frequently
-  real, and they are not checked against anything. Treat a named venue as a suggestion to verify,
-  not as a fetched fact, and say so if anyone asks during a demo.
-- **Google Places** (`placeSearch.ts`) was the alternative provider for the map's search box.
-  Without it every search goes to Overpass — the free community OSM service, which rate-limits
-  exactly the bursty traffic a search box generates and is the least reliable upstream this app
-  has. See `src/lib/overpass.ts` for what that costs and how the failover handles it.
-
-## Sharing a plan for review
-
-Any saved trip has a printable, all-days version at `/trip/<id>/print` — plain black-on-white, every
-stop labelled `Day N · Stop M`, with a fixed set of review questions at the end. Print to PDF and
-send it to someone. The numbering exists so a reviewer can say "day 2, stop 3 is wrong" instead of
-"the afternoons felt off".
-
-## Taking a plan with you
-
-A saved trip also has a Download control (`/api/trips/<id>/export`) that produces one self-contained
-`.html` file, drawn as a transit line rather than a list — meant for the traveler, not a reviewer, and
-built to render identically offline. Photos and the Archivo font subset are inlined as base64 data
-URIs; `public/fonts/archivo-latin-var.woff2` (the latin subset of Archivo Variable, taken from Google
-Fonts, OFL) is committed for exactly this — the app itself loads Archivo through `next/font/google`,
-which leaves nothing readable on disk for the export to reuse.
-
-## Commands
+The iPhone app talks to the same server:
 
 ```bash
-npm run dev      # next dev (Turbopack)
-npm run build    # next build, then verify-build.mjs — fails if any emitted chunk can't be parsed
-npm run lint
-npm test         # node --test, ~266 tests over pure logic only
-npx tsc --noEmit -p tsconfig.json
+cd mobile
+npm install
+npx expo run:ios
 ```
 
-Note that a passing test suite proves less here than usual: it covers only deterministic logic, and
-nothing renders, no route boots, no database opens. Verifying a change means exercising routes
-against a running dev server too.
+Set `EXPO_PUBLIC_API_BASE_URL` in `mobile/.env` to reach the server from a physical device. See
+[`mobile/README.md`](mobile/README.md).
 
+## Tests and checks
+
+| | |
+|---|---|
+| `npm test` | 1,876 tests over the web app's logic (Node's built-in test runner, no framework) |
+| `cd mobile && npm test` | 632 Jest tests for the iPhone app |
+| `npx tsc --noEmit -p tsconfig.json` and `npm run lint` | Typecheck and lint |
+| `npm run build` | Builds, then fails if any emitted chunk can't be parsed |
+| `npm run verify-layout` | Checks the layout at 10 viewports against a running production server |
+
+The suites cover deterministic logic, much of it logic that has broken once. Nothing renders and no
+route boots in them, so changes are also checked against a running server.
+
+## Status
+
+TripMate works end to end locally and in iOS simulator and device builds. It isn't deployed publicly:
+generating a plan calls the Claude API, and a public demo would bill every visitor's plan.
+
+Two paid integrations are written and tested but switched off on purpose: Yelp (verified restaurants
+for a dietary need) and Google Places (the map's search box). Without them, search runs on the free
+OpenStreetMap Overpass service, and restaurant names in a stop's notes come from the model rather than
+a lookup.
 ## Docs
 
-[`docs/project-crux.md`](docs/project-crux.md) is the index and the rolled-up timeline.
-[`CLAUDE.md`](CLAUDE.md) carries the architecture notes and the gotchas worth reading before
-changing anything — several of them are load-bearing decisions that look like mistakes until you
-know why they're there.
+[`DECISIONS.md`](DECISIONS.md) records the calls that shaped TripMate, why each was made and what it
+cost. [`CLAUDE.md`](CLAUDE.md) holds the architecture notes and the gotchas worth reading before
+changing anything; several decisions in it look like mistakes until you know why they're there.
+[`docs/project-crux.md`](docs/project-crux.md) indexes the feature trackers.
+
+## Credits
+
+Built by [Zaid Shaikh](https://github.com/DiazSk) and [Aryan Singh](https://github.com/iamaryansingh).
+
+Copyright © 2026 Zaid Shaikh and Aryan Singh. All rights reserved. The source is public to read; no
+license is granted to copy, modify or redistribute it.
