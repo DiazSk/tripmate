@@ -6,7 +6,7 @@ TripMate is an AI trip planner for the web and iPhone. Instead of a list of thin
 day-by-day plan with times, costs, walking times, and a reason each stop is there. It checks the plan
 against the real forecast, opening hours and public holidays for the dates you're travelling.
 
-[![A 14-second loop from the TripMate film: planning Lisbon, the week's sunset times, the trip on a 3D map, the day's walk on the phone, a wall of TripMate's screens, and the title](docs/media/film-preview.gif)](https://cdn.jsdelivr.net/gh/DiazSk/tripmate@main/docs/media/tripmate-showreel.mp4)
+<a href="https://cdn.jsdelivr.net/gh/DiazSk/tripmate@main/docs/media/tripmate-showreel.mp4"><img src="docs/media/film-preview.webp" width="100%" alt="A 14-second loop from the TripMate film: planning Lisbon, the week's sunset times, the trip on a 3D map, the day's walk on the phone, a wall of TripMate's screens, and the title"></a>
 
 <p align="center"><a href="https://cdn.jsdelivr.net/gh/DiazSk/tripmate@main/docs/media/tripmate-showreel.mp4"><b>▶ Watch the full film</b></a> (2:06, with sound)</p>
 
